@@ -1,6 +1,7 @@
 import formidable from "formidable";
 import fs from "fs";
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { analyzeIpa } from "../../../lib/ipaAnalyzer";
 
 export const config = {
   api: { bodyParser: false },
@@ -51,26 +52,55 @@ export default async function handler(req, res) {
   let filePath = null;
 
   const uploaded = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
+  const providedFilePath = get("filePath");
 
   if (platform !== "web") {
-    if (!uploaded) {
+    if (uploaded) {
+      const buffer = fs.readFileSync(uploaded.filepath);
+      filePath = `${projectId}/${Date.now()}-${uploaded.originalFilename}`;
+
+      const { error: uploadError } = await service.storage
+        .from("builds")
+        .upload(filePath, buffer, {
+          contentType: "application/octet-stream",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        res.status(500).json({ error: "Upload failed: " + uploadError.message });
+        return;
+      }
+    } else if (providedFilePath) {
+      filePath = providedFilePath;
+    } else {
       res.status(400).json({ error: "Build file is required for iOS/Android releases" });
       return;
     }
-    const buffer = fs.readFileSync(uploaded.filepath);
-    const ext = platform === "ios" ? "ipa" : uploaded.originalFilename.split(".").pop();
-    filePath = `${projectId}/${Date.now()}-${uploaded.originalFilename}`;
+  }
 
-    const { error: uploadError } = await service.storage
-      .from("builds")
-      .upload(filePath, buffer, {
-        contentType: "application/octet-stream",
-        upsert: false,
-      });
-
-    if (uploadError) {
-      res.status(500).json({ error: "Upload failed: " + uploadError.message });
-      return;
+  let otaReady = null;
+  let provisioningInfo = null;
+  if (platform === "ios" && filePath) {
+    try {
+      let ipaBuffer = null;
+      if (uploaded) {
+        ipaBuffer = fs.readFileSync(uploaded.filepath);
+      } else {
+        const { data, error: downloadError } = await service.storage
+          .from("builds")
+          .download(filePath);
+        if (!downloadError && data) {
+          ipaBuffer = Buffer.from(await data.arrayBuffer());
+        }
+      }
+      if (ipaBuffer) {
+        const analysis = analyzeIpa(ipaBuffer);
+        otaReady = analysis.otaReady;
+        provisioningInfo = analysis.provisioning;
+      }
+    } catch (e) {
+      provisioningInfo = { error: e.message };
+      otaReady = false;
     }
   }
 
@@ -85,6 +115,8 @@ export default async function handler(req, res) {
       notes,
       file_path: filePath,
       web_url: platform === "web" ? webUrl : null,
+      ota_ready: otaReady,
+      provisioning_info: provisioningInfo,
       status: "published",
       created_by: user.id,
     })

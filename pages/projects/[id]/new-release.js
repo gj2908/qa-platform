@@ -27,25 +27,47 @@ export default function NewRelease({ project }) {
     setSubmitting(true);
     setError("");
 
-    const formData = new FormData();
-    formData.append("projectId", project.id);
-    formData.append("platform", platform);
-    formData.append("version", version);
-    formData.append("buildNumber", buildNumber);
-    formData.append("bundleId", bundleId);
-    formData.append("notes", notes);
-    if (platform === "web") formData.append("webUrl", webUrl);
-    if (file) formData.append("file", file);
+    try {
+      let filePath = null;
 
-    const res = await fetch("/api/releases/create", { method: "POST", body: formData });
-    const data = await res.json();
-    setSubmitting(false);
+      if (platform !== "web") {
+        if (!file) {
+          throw new Error("Please choose a build file");
+        }
+        const signRes = await fetch("/api/releases/sign-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: project.id, platform, filename: file.name }),
+        });
+        const signData = await signRes.json();
+        if (!signRes.ok) throw new Error(signData.error || "Could not start upload");
 
-    if (!res.ok) {
-      setError(data.error || "Something went wrong");
-      return;
+        const putRes = await fetch(signData.uploadUrl, { method: "PUT", body: file });
+        if (!putRes.ok) throw new Error("Upload to storage failed");
+
+        filePath = signData.filePath;
+      }
+
+      const formData = new FormData();
+      formData.append("projectId", project.id);
+      formData.append("platform", platform);
+      formData.append("version", version);
+      formData.append("buildNumber", buildNumber);
+      formData.append("bundleId", bundleId);
+      formData.append("notes", notes);
+      if (platform === "web") formData.append("webUrl", webUrl);
+      if (filePath) formData.append("filePath", filePath);
+
+      const res = await fetch("/api/releases/create", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+
+      router.push(`/distribute/${data.releaseId}`);
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setSubmitting(false);
     }
-    router.push(`/distribute/${data.releaseId}`);
   }
 
   return (

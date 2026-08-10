@@ -39,6 +39,22 @@ export default function Changelog({ project, releases }) {
               {new Date(r.created_at).toLocaleDateString()}
             </span>
           </div>
+          {r.platform === "ios" && r.ota_ready === false && (
+            <div
+              style={{
+                display: "inline-block",
+                marginTop: 8,
+                padding: "3px 10px",
+                background: "#fdecec",
+                border: "1px solid #f5c2c2",
+                color: "#a33",
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            >
+              OTA install blocked — signed with a {r.provisioning_info?.type === "Development" ? "Development" : "non-distribution"} profile
+            </div>
+          )}
           {r.notes && <p style={{ whiteSpace: "pre-wrap", margin: "8px 0" }}>{r.notes}</p>}
           <Link
             href={`/distribute/${r.id}`}

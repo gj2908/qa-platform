@@ -74,6 +74,19 @@ export default function SharePage({ release, itmsLink, androidUrl }) {
         </div>
       )}
 
+      {/* IPA signed with a Development provisioning profile — iOS will refuse OTA installs */}
+      {release.platform === "ios" && release.ota_ready === false && (
+        <div style={{ background: "#fdecec", border: "1px solid #f5c2c2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
+          <strong>This build can&apos;t be installed over the air</strong>
+          <p style={{ margin: "8px 0 0" }}>
+            The uploaded IPA is signed with a {release.provisioning_info?.type?.toLowerCase?.() === "development" ? "Development" : "non-distribution"} profile
+            {release.provisioning_info?.name ? ` (${release.provisioning_info.name})` : ""}. iOS only allows OTA installs for{" "}
+            <strong>Ad&nbsp;Hoc</strong> or <strong>Enterprise</strong> signed builds. Rebuild with Xcode →{" "}
+            <strong>Distribute → Ad&nbsp;Hoc</strong> and upload the new IPA.
+          </p>
+        </div>
+      )}
+
       {/* iPad in "Request Desktop Website" mode — same page, just steer them
           back to mobile mode since desktop mode can interfere with the
           install handoff. */}
