@@ -25,10 +25,8 @@ export async function getServerSideProps({ params, req, res }) {
   }
 
   if (release.platform === "android" && release.file_path) {
-    const { data: signed } = await service.storage
-      .from("builds")
-      .createSignedUrl(release.file_path, 3600); // 1 hour, plenty for a manual download
-    androidUrl = signed?.signedUrl || null;
+    const { data: publicFile } = service.storage.from("builds").getPublicUrl(release.file_path);
+    androidUrl = publicFile.publicUrl || null;
   }
 
   return { props: { release, itmsLink, androidUrl } };
@@ -60,18 +58,41 @@ export default function Distribute({ release, itmsLink, androidUrl }) {
         {release.build_number ? ` (${release.build_number})` : ""}
       </p>
 
-      {/* IPA signed with a Development provisioning profile — iOS will refuse OTA installs */}
-      {release.platform === "ios" && release.ota_ready === false && (
-        <div style={{ background: "#fdecec", border: "1px solid #f5c2c2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
-          <strong>This build can&apos;t be installed over the air</strong>
+      {/* IPA signing status — explains what OTA install depends on */}
+      {release.platform === "ios" && release.provisioning_info?.type === "Enterprise" && (
+        <div style={{ background: "#eef7ee", border: "1px solid #bcdcc2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
+          <strong>Enterprise-signed — installs on any iPhone</strong>
           <p style={{ margin: "8px 0 0" }}>
-            The uploaded IPA is signed with a {release.provisioning_info?.type?.toLowerCase?.() === "development" ? "Development" : "non-distribution"} profile
-            {release.provisioning_info?.name ? ` (${release.provisioning_info.name})` : ""}. iOS only allows OTA installs for{" "}
-            <strong>Ad&nbsp;Hoc</strong> or <strong>Enterprise</strong> signed builds. Rebuild with Xcode →{" "}
-            <strong>Distribute → Ad&nbsp;Hoc</strong> and upload the new IPA.
+            This build is signed for in-house distribution, so no UDID registration is needed. Just tap Install.
           </p>
         </div>
       )}
+      {release.platform === "ios" &&
+        (release.provisioning_info?.type === "Development" || release.provisioning_info?.type === "Ad Hoc") && (
+          <div style={{ background: "#fff8e1", border: "1px solid #f0dfa8", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
+            <strong>Signed for registered devices only</strong>
+            <p style={{ margin: "8px 0 0" }}>
+              This build uses a {release.provisioning_info.type} profile{" "}
+              {release.provisioning_info.name ? `(${release.provisioning_info.name})` : ""} with{" "}
+              {release.provisioning_info.deviceCount} registered device
+              {release.provisioning_info.deviceCount === 1 ? "" : "s"}. It will only install on an iPhone whose
+              UDID is in that profile — if a tester gets &quot;Unable to Download App&quot;, that device isn&apos;t
+              registered yet.
+            </p>
+          </div>
+        )}
+      {release.platform === "ios" &&
+        !release.provisioning_info?.type &&
+        release.ota_ready === false && (
+          <div style={{ background: "#fdecec", border: "1px solid #f5c2c2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
+            <strong>Signing couldn&apos;t be verified for OTA install</strong>
+            <p style={{ margin: "8px 0 0" }}>
+              iOS could not be verified to accept this build over the air
+              {release.provisioning_info?.error ? ` (${release.provisioning_info.error})` : ""}. Rebuild with an
+              Ad&nbsp;Hoc or Enterprise profile in Xcode and re-upload.
+            </p>
+          </div>
+        )}
 
       <div style={{ margin: "28px 0" }}>
         {release.platform === "ios" && (

@@ -2,8 +2,10 @@ import { createServiceClient } from "../../lib/supabase/server";
 
 // Intentionally NOT behind the login gate (see middleware.js) — Apple's
 // itms-services installer fetches this directly from the device, without
-// browser auth cookies. The releaseId is an unguessable UUID, and the
-// signed file URL it embeds expires in 5 minutes.
+// browser auth cookies. The releaseId is an unguessable UUID. The bucket is
+// public so the software-package URL has NO query-string token — iOS OTA
+// installs are unreliable when the .ipa URL carries query parameters
+// (Supabase signed URLs / AWS presigned URLs trigger "Unable to Download App").
 export default async function handler(req, res) {
   const { releaseId } = req.query;
   if (!releaseId) {
@@ -23,14 +25,11 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { data: signed, error: signError } = await supabase.storage
+  const { data: publicFile } = supabase.storage
     .from("builds")
-    .createSignedUrl(release.file_path, 300); // 5 minutes
+    .getPublicUrl(release.file_path);
 
-  if (signError) {
-    res.status(500).send("Could not sign file URL: " + signError.message);
-    return;
-  }
+  const fileUrl = publicFile.publicUrl;
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -45,7 +44,7 @@ export default async function handler(req, res) {
           <key>kind</key>
           <string>software-package</string>
           <key>url</key>
-          <string>${signed.signedUrl}</string>
+          <string>${fileUrl}</string>
         </dict>
       </array>
       <key>metadata</key>

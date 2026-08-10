@@ -39,11 +39,48 @@ export default function Changelog({ project, releases }) {
               {new Date(r.created_at).toLocaleDateString()}
             </span>
           </div>
-          {r.platform === "ios" && r.ota_ready === false && (
+          {r.platform === "ios" && r.provisioning_info?.type === "Enterprise" && (
             <div
               style={{
                 display: "inline-block",
                 marginTop: 8,
+                marginRight: 8,
+                padding: "3px 10px",
+                background: "#eef7ee",
+                border: "1px solid #bcdcc2",
+                color: "#285a2c",
+                borderRadius: 6,
+                fontSize: 12,
+              }}
+            >
+              Enterprise — installs on any device
+            </div>
+          )}
+          {r.platform === "ios" &&
+            (r.provisioning_info?.type === "Development" || r.provisioning_info?.type === "Ad Hoc") && (
+              <div
+                style={{
+                  display: "inline-block",
+                  marginTop: 8,
+                  marginRight: 8,
+                  padding: "3px 10px",
+                  background: "#fff8e1",
+                  border: "1px solid #f0dfa8",
+                  color: "#7a5b00",
+                  borderRadius: 6,
+                  fontSize: 12,
+                }}
+              >
+                {r.provisioning_info.type} — {r.provisioning_info.deviceCount} registered device
+                {r.provisioning_info.deviceCount === 1 ? "" : "s"}
+              </div>
+            )}
+          {r.platform === "ios" && !r.provisioning_info?.type && r.ota_ready === false && (
+            <div
+              style={{
+                display: "inline-block",
+                marginTop: 8,
+                marginRight: 8,
                 padding: "3px 10px",
                 background: "#fdecec",
                 border: "1px solid #f5c2c2",
@@ -52,7 +89,7 @@ export default function Changelog({ project, releases }) {
                 fontSize: 12,
               }}
             >
-              OTA install blocked — signed with a {r.provisioning_info?.type === "Development" ? "Development" : "non-distribution"} profile
+              Signing couldn&apos;t be verified for OTA
             </div>
           )}
           {r.notes && <p style={{ whiteSpace: "pre-wrap", margin: "8px 0" }}>{r.notes}</p>}
