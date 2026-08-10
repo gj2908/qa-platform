@@ -29,8 +29,12 @@ export async function middleware(req) {
     req.nextUrl.pathname.startsWith("/login") ||
     req.nextUrl.pathname.startsWith("/forgot-password");
   const isPublicShare = req.nextUrl.pathname.startsWith("/share/");
+  // /reset-password is reached by clicking the email link, which creates the
+  // session in the browser after the page loads — so anonymous visitors must
+  // be allowed through and signed-in visitors must not be bounced away.
+  const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
 
-  if (isPublicShare) return res;
+  if (isPublicShare || isResetPassword) return res;
 
   if (!user && !isAuthPage) {
     const url = req.nextUrl.clone();

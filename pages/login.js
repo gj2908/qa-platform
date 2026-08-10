@@ -2,6 +2,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
+import AuthLayout from "../components/layout/AuthLayout";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import { CircleAlert, CircleCheck } from "lucide-react";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -47,75 +51,92 @@ export default function Login() {
     }
   }
 
-  const inputStyle = {
-    width: "100%",
-    padding: 10,
-    marginBottom: 12,
-    borderRadius: 6,
-    border: "1px solid #ccc",
-    boxSizing: "border-box",
-  };
-
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 380, margin: "100px auto", textAlign: "center" }}>
-      <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
-      <form onSubmit={handleSubmit}>
-        <input
+    <AuthLayout>
+      <div className="mb-6 text-center">
+        <h1 className="text-lg font-semibold text-ink-primary">
+          {mode === "signin" ? "Sign in" : "Create your account"}
+        </h1>
+        <p className="mt-1 text-sm text-ink-tertiary">
+          {mode === "signin" ? "Welcome back to QA Platform" : "Set up access to QA Platform"}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <Input
           type="email"
           required
           placeholder="you@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={inputStyle}
+          autoFocus
         />
-        <input
+        <Input
           type="password"
           required
           minLength={6}
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          style={inputStyle}
         />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 6,
-            background: "#111",
-            color: "#fff",
-            border: "none",
-            cursor: loading ? "default" : "pointer",
-          }}
-        >
-          {loading ? "…" : mode === "signin" ? "Sign in" : "Create account"}
-        </button>
-        {message && <p style={{ color: "seagreen", marginTop: 12 }}>{message}</p>}
-        {error && <p style={{ color: "crimson", marginTop: 12 }}>{error}</p>}
+
+        {message && (
+          <p className="flex items-center gap-1.5 text-sm text-success">
+            <CircleCheck size={14} />
+            {message}
+          </p>
+        )}
+        {error && (
+          <p className="flex items-center gap-1.5 text-sm text-danger">
+            <CircleAlert size={14} />
+            {error}
+          </p>
+        )}
+
+        <Button type="submit" loading={loading} className="mt-1 w-full">
+          {mode === "signin" ? "Sign in" : "Create account"}
+        </Button>
       </form>
-      <p style={{ fontSize: 13, marginTop: 16 }}>
+
+      <p className="mt-5 text-center text-sm text-ink-tertiary">
         {mode === "signin" ? (
           <>
             No account yet?{" "}
-            <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setError(""); setMessage(""); }} style={{ color: "#111" }}>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setMode("signup");
+                setError("");
+                setMessage("");
+              }}
+              className="font-medium text-accent hover:text-accent-hover"
+            >
               Create one
             </a>
             {" · "}
-            <Link href="/forgot-password" style={{ color: "#111" }}>
+            <Link href="/forgot-password" className="font-medium text-accent hover:text-accent-hover">
               Forgot password?
             </Link>
           </>
         ) : (
           <>
             Already have an account?{" "}
-            <a href="#" onClick={(e) => { e.preventDefault(); setMode("signin"); setError(""); setMessage(""); }} style={{ color: "#111" }}>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setMode("signin");
+                setError("");
+                setMessage("");
+              }}
+              className="font-medium text-accent hover:text-accent-hover"
+            >
               Sign in
             </a>
           </>
         )}
       </p>
-    </div>
+    </AuthLayout>
   );
 }

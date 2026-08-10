@@ -1,12 +1,16 @@
-import Link from "next/link";
 import { useState } from "react";
 import { createServerSupabase, createServiceClient } from "../../lib/supabase/server";
+import AppShell from "../../components/layout/AppShell";
+import Card from "../../components/ui/Card";
+import Button from "../../components/ui/Button";
+import PlatformBadge from "../../components/ui/PlatformBadge";
+import { Check, CircleAlert, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res); // enforces login via middleware already
   const { data: release } = await supabase
     .from("releases")
-    .select("*, projects(name)")
+    .select("*, projects(id, name)")
     .eq("id", params.id)
     .single();
 
@@ -32,7 +36,54 @@ export async function getServerSideProps({ params, req, res }) {
   return { props: { release, itmsLink, androidUrl } };
 }
 
-const PLATFORM_LABEL = { ios: "iOS", android: "Android", web: "Web" };
+function SigningNotice({ release }) {
+  if (release.platform !== "ios") return null;
+  const info = release.provisioning_info;
+
+  if (info?.type === "Enterprise") {
+    return (
+      <div className="flex gap-2.5 rounded-md bg-success-subtle px-3.5 py-3 text-sm text-success-subtle-fg">
+        <ShieldCheck size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="font-medium">Enterprise-signed — installs on any iPhone</p>
+          <p className="mt-0.5 text-ink-secondary">
+            No UDID registration needed. Just tap Install.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (info?.type === "Development" || info?.type === "Ad Hoc") {
+    return (
+      <div className="flex gap-2.5 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
+        <TriangleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="font-medium">Signed for registered devices only</p>
+          <p className="mt-0.5 text-ink-secondary">
+            This build uses a {info.type} profile {info.name ? `(${info.name})` : ""} with{" "}
+            {info.deviceCount} registered device{info.deviceCount === 1 ? "" : "s"}. If a tester
+            gets &quot;Unable to Download App&quot;, that device isn&apos;t registered yet.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (!info?.type && release.ota_ready === false) {
+    return (
+      <div className="flex gap-2.5 rounded-md bg-danger-subtle px-3.5 py-3 text-sm text-danger-subtle-fg">
+        <CircleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+        <div>
+          <p className="font-medium">Signing couldn&apos;t be verified for OTA install</p>
+          <p className="mt-0.5 text-ink-secondary">
+            {info?.error ? `${info.error}. ` : ""}Rebuild with an Ad Hoc or Enterprise profile in
+            Xcode and re-upload.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
 export default function Distribute({ release, itmsLink, androidUrl }) {
   const [copied, setCopied] = useState(false);
@@ -45,113 +96,84 @@ export default function Distribute({ release, itmsLink, androidUrl }) {
   }
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 460, margin: "60px auto", textAlign: "center", padding: "0 20px" }}>
-      <div style={{ textAlign: "left", marginBottom: 24 }}>
-        <Link href={`/projects/${release.project_id}/changelog`} style={{ fontSize: 14 }}>
-          ← {release.projects?.name} changelog
-        </Link>
-      </div>
+    <AppShell
+      project={release.projects}
+      breadcrumbs={[
+        { label: "Projects", href: "/" },
+        { label: release.projects?.name, href: `/projects/${release.project_id}/changelog` },
+        { label: "Distribute" },
+      ]}
+    >
+      <div className="mx-auto flex max-w-md flex-col gap-5">
+        <Card className="flex flex-col gap-5 p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-ink-primary">{release.projects?.name}</h1>
+              <p className="mt-0.5 text-sm text-ink-tertiary">
+                v{release.version}
+                {release.build_number ? ` (${release.build_number})` : ""}
+              </p>
+            </div>
+            <PlatformBadge platform={release.platform} />
+          </div>
 
-      <h1 style={{ marginBottom: 4 }}>{release.projects?.name}</h1>
-      <p style={{ color: "#666", marginTop: 0 }}>
-        {PLATFORM_LABEL[release.platform]} · v{release.version}
-        {release.build_number ? ` (${release.build_number})` : ""}
-      </p>
+          <SigningNotice release={release} />
 
-      {/* IPA signing status — explains what OTA install depends on */}
-      {release.platform === "ios" && release.provisioning_info?.type === "Enterprise" && (
-        <div style={{ background: "#eef7ee", border: "1px solid #bcdcc2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
-          <strong>Enterprise-signed — installs on any iPhone</strong>
-          <p style={{ margin: "8px 0 0" }}>
-            This build is signed for in-house distribution, so no UDID registration is needed. Just tap Install.
-          </p>
-        </div>
-      )}
-      {release.platform === "ios" &&
-        (release.provisioning_info?.type === "Development" || release.provisioning_info?.type === "Ad Hoc") && (
-          <div style={{ background: "#fff8e1", border: "1px solid #f0dfa8", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
-            <strong>Signed for registered devices only</strong>
-            <p style={{ margin: "8px 0 0" }}>
-              This build uses a {release.provisioning_info.type} profile{" "}
-              {release.provisioning_info.name ? `(${release.provisioning_info.name})` : ""} with{" "}
-              {release.provisioning_info.deviceCount} registered device
-              {release.provisioning_info.deviceCount === 1 ? "" : "s"}. It will only install on an iPhone whose
-              UDID is in that profile — if a tester gets &quot;Unable to Download App&quot;, that device isn&apos;t
-              registered yet.
+          <div>
+            {release.platform === "ios" && (
+              <a href={itmsLink} className="block">
+                <Button className="w-full" size="md">
+                  <Download size={15} strokeWidth={2.25} />
+                  Install
+                </Button>
+              </a>
+            )}
+            {release.platform === "android" && androidUrl && (
+              <a href={androidUrl} className="block">
+                <Button className="w-full" size="md">
+                  <Download size={15} strokeWidth={2.25} />
+                  Install
+                </Button>
+              </a>
+            )}
+            {release.platform === "web" && release.web_url && (
+              <a href={release.web_url} target="_blank" rel="noreferrer" className="block">
+                <Button className="w-full" size="md">
+                  Open app
+                </Button>
+              </a>
+            )}
+            <p className="mt-2 text-center text-xs text-ink-tertiary">
+              {release.platform === "ios" &&
+                "Requires this device's UDID to be registered in the app's provisioning profile."}
+              {release.platform === "android" &&
+                "Downloads the APK — you may need to allow installs from unknown sources."}
             </p>
           </div>
-        )}
-      {release.platform === "ios" &&
-        !release.provisioning_info?.type &&
-        release.ota_ready === false && (
-          <div style={{ background: "#fdecec", border: "1px solid #f5c2c2", borderRadius: 10, padding: 16, margin: "20px 0", fontSize: 14, textAlign: "left" }}>
-            <strong>Signing couldn&apos;t be verified for OTA install</strong>
-            <p style={{ margin: "8px 0 0" }}>
-              iOS could not be verified to accept this build over the air
-              {release.provisioning_info?.error ? ` (${release.provisioning_info.error})` : ""}. Rebuild with an
-              Ad&nbsp;Hoc or Enterprise profile in Xcode and re-upload.
+
+          {release.notes && (
+            <div className="border-t border-border pt-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">
+                Release notes
+              </h3>
+              <p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{release.notes}</p>
+            </div>
+          )}
+        </Card>
+
+        <Card className="flex items-center justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-ink-primary">Public share link</p>
+            <p className="mt-0.5 truncate text-xs text-ink-tertiary">
+              Anyone with this link can view and install — no login required.
             </p>
           </div>
-        )}
-
-      <div style={{ margin: "28px 0" }}>
-        {release.platform === "ios" && (
-          <a
-            href={itmsLink}
-            style={{ display: "inline-block", padding: "14px 28px", background: "#111", color: "#fff", borderRadius: 10, textDecoration: "none", fontWeight: 600 }}
-          >
-            Install
-          </a>
-        )}
-        {release.platform === "android" && androidUrl && (
-          <a
-            href={androidUrl}
-            style={{ display: "inline-block", padding: "14px 28px", background: "#3ddc84", color: "#111", borderRadius: 10, textDecoration: "none", fontWeight: 600 }}
-          >
-            Install
-          </a>
-        )}
-        {release.platform === "web" && release.web_url && (
-          <a
-            href={release.web_url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ display: "inline-block", padding: "14px 28px", background: "#111", color: "#fff", borderRadius: 10, textDecoration: "none", fontWeight: 600 }}
-          >
-            Open app
-          </a>
-        )}
+          <Button variant="secondary" size="sm" onClick={copyLink} className="shrink-0">
+            {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </Card>
       </div>
-
-      {release.platform === "ios" && (
-        <p style={{ fontSize: 12, color: "#999" }}>
-          Requires this device's UDID to be registered in the app's provisioning profile.
-        </p>
-      )}
-      {release.platform === "android" && (
-        <p style={{ fontSize: 12, color: "#999" }}>
-          Downloads the APK — you may need to allow installs from unknown sources.
-        </p>
-      )}
-
-      {release.notes && (
-        <div style={{ textAlign: "left", marginTop: 32, borderTop: "1px solid #eee", paddingTop: 20 }}>
-          <h3 style={{ fontSize: 14, color: "#555" }}>Release notes</h3>
-          <p style={{ whiteSpace: "pre-wrap", fontSize: 14 }}>{release.notes}</p>
-        </div>
-      )}
-
-      <div style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 20 }}>
-        <p style={{ fontSize: 13, color: "#999", marginBottom: 8 }}>
-          Public link — anyone with it can view and install, no login required.
-        </p>
-        <button
-          onClick={copyLink}
-          style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #ccc", background: "#fafafa", fontSize: 13 }}
-        >
-          {copied ? "Copied!" : "Copy public share link"}
-        </button>
-      </div>
-    </div>
+    </AppShell>
   );
 }

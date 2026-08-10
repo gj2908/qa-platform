@@ -1,0 +1,113 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: "class",
+  content: [
+    "./pages/**/*.{js,jsx}",
+    "./components/**/*.{js,jsx}",
+  ],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+      },
+      fontSize: {
+        xs: ["12px", { lineHeight: "16px" }],
+        sm: ["13px", { lineHeight: "18px" }],
+        base: ["14px", { lineHeight: "20px" }],
+        md: ["16px", { lineHeight: "24px" }],
+        lg: ["20px", { lineHeight: "28px" }],
+        xl: ["24px", { lineHeight: "32px" }],
+        "2xl": ["28px", { lineHeight: "36px" }],
+      },
+      borderRadius: {
+        sm: "6px",
+        DEFAULT: "8px",
+        md: "8px",
+        lg: "10px",
+        xl: "14px",
+      },
+      colors: {
+        canvas: "var(--bg-canvas)",
+        surface: "var(--bg-surface)",
+        "surface-raised": "var(--bg-surface-raised)",
+        subtle: "var(--bg-subtle)",
+        hover: "var(--bg-hover)",
+        border: {
+          DEFAULT: "var(--border)",
+          strong: "var(--border-strong)",
+        },
+        ink: {
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          tertiary: "var(--text-tertiary)",
+          disabled: "var(--text-disabled)",
+        },
+        accent: {
+          DEFAULT: "var(--accent)",
+          hover: "var(--accent-hover)",
+          active: "var(--accent-active)",
+          fg: "var(--accent-fg)",
+          subtle: "var(--accent-subtle)",
+          "subtle-fg": "var(--accent-subtle-fg)",
+        },
+        success: {
+          DEFAULT: "var(--success)",
+          subtle: "var(--success-bg)",
+          "subtle-fg": "var(--success-fg)",
+        },
+        warning: {
+          DEFAULT: "var(--warning)",
+          subtle: "var(--warning-bg)",
+          "subtle-fg": "var(--warning-fg)",
+        },
+        danger: {
+          DEFAULT: "var(--danger)",
+          hover: "var(--danger-hover)",
+          fg: "var(--danger-fg-on)",
+          subtle: "var(--danger-bg)",
+          "subtle-fg": "var(--danger-fg)",
+        },
+        status: {
+          backlog: "var(--status-backlog)",
+          "backlog-bg": "var(--status-backlog-bg)",
+          "backlog-fg": "var(--status-backlog-fg)",
+          todo: "var(--status-todo)",
+          "todo-bg": "var(--status-todo-bg)",
+          "todo-fg": "var(--status-todo-fg)",
+          inprogress: "var(--status-inprogress)",
+          "inprogress-bg": "var(--status-inprogress-bg)",
+          "inprogress-fg": "var(--status-inprogress-fg)",
+          review: "var(--status-review)",
+          "review-bg": "var(--status-review-bg)",
+          "review-fg": "var(--status-review-fg)",
+          done: "var(--status-done)",
+          "done-bg": "var(--status-done-bg)",
+          "done-fg": "var(--status-done-fg)",
+        },
+        platform: {
+          ios: "var(--platform-ios)",
+          "ios-bg": "var(--platform-ios-bg)",
+          "ios-fg": "var(--platform-ios-fg)",
+          android: "var(--platform-android)",
+          "android-bg": "var(--platform-android-bg)",
+          "android-fg": "var(--platform-android-fg)",
+          web: "var(--platform-web)",
+          "web-bg": "var(--platform-web-bg)",
+          "web-fg": "var(--platform-web-fg)",
+        },
+      },
+      boxShadow: {
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
+      },
+      keyframes: {
+        pulse: {
+          "0%, 100%": { opacity: 1 },
+          "50%": { opacity: 0.5 },
+        },
+      },
+    },
+  },
+  plugins: [],
+};

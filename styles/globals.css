@@ -1,9 +1,256 @@
-* { box-sizing: border-box; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────
+   Semantic CSS variables consumed by tailwind.config.js. Components
+   should never reference raw hex values — only these tokens (via
+   Tailwind classes like bg-surface, text-ink-secondary, etc). */
+
+:root {
+  /* neutral scale — light */
+  --neutral-0: #ffffff;
+  --neutral-50: #fafafa;
+  --neutral-100: #f4f4f5;
+  --neutral-200: #e8e8ea;
+  --neutral-300: #d4d4d8;
+  --neutral-400: #a1a1aa;
+  --neutral-500: #71717a;
+  --neutral-600: #52525b;
+  --neutral-700: #3f3f46;
+  --neutral-800: #27272a;
+  --neutral-900: #18181b;
+  --neutral-950: #09090b;
+
+  /* surfaces */
+  --bg-canvas: var(--neutral-50);
+  --bg-surface: var(--neutral-0);
+  --bg-surface-raised: var(--neutral-0);
+  --bg-subtle: var(--neutral-100);
+  --bg-hover: var(--neutral-100);
+
+  /* borders */
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+
+  /* text */
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-tertiary: var(--neutral-500);
+  --text-disabled: var(--neutral-400);
+
+  /* accent (blue — primary actions, active nav, links) */
+  --accent: #3358d4;
+  --accent-hover: #2b49b3;
+  --accent-active: #233c93;
+  --accent-fg: #ffffff;
+  --accent-subtle: #eaefff;
+  --accent-subtle-fg: #2b49b3;
+
+  /* status colors */
+  --success: #17824e;
+  --success-bg: #e6f6ed;
+  --success-fg: #146341;
+
+  --warning: #96660a;
+  --warning-bg: #fdf3d9;
+  --warning-fg: #7a5300;
+
+  --danger: #c22f2f;
+  --danger-hover: #a72727;
+  --danger-fg-on: #ffffff;
+  --danger-bg: #fbeaea;
+  --danger-fg: #a3302e;
+
+  /* kanban column status — differentiated by hue AND label, not hue alone */
+  --status-backlog: #71717a;
+  --status-backlog-bg: #f0f0f2;
+  --status-backlog-fg: #52525b;
+
+  --status-todo: #2f6fdb;
+  --status-todo-bg: #eaf1fd;
+  --status-todo-fg: #2559b3;
+
+  --status-inprogress: #b5720a;
+  --status-inprogress-bg: #fdf1da;
+  --status-inprogress-fg: #925c08;
+
+  --status-review: #0f8a7a;
+  --status-review-bg: #e2f5f2;
+  --status-review-fg: #0c6e61;
+
+  --status-done: #17824e;
+  --status-done-bg: #e6f6ed;
+  --status-done-fg: #146341;
+
+  /* release platform badges */
+  --platform-ios: #3f3f46;
+  --platform-ios-bg: #f0f0f2;
+  --platform-ios-fg: #3f3f46;
+
+  --platform-android: #1a9450;
+  --platform-android-bg: #e7f7ee;
+  --platform-android-fg: #157a41;
+
+  --platform-web: #2f6fdb;
+  --platform-web-bg: #eaf1fd;
+  --platform-web-fg: #2559b3;
+
+  /* elevation */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
+  --shadow-md: 0 4px 12px rgba(24, 24, 27, 0.08), 0 1px 2px rgba(24, 24, 27, 0.06);
+  --shadow-lg: 0 12px 32px rgba(24, 24, 27, 0.12), 0 2px 6px rgba(24, 24, 27, 0.06);
+}
+
+/* Device mode: follow OS preference when no explicit choice is stored. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.dark) {
+    color-scheme: dark;
+  }
+}
+
+/* Dark theme — its own neutral scale (real depth, not inverted B/W),
+   applied either via explicit .dark class or device-preference above. */
+.dark {
+  --neutral-0: #0a0a0b;
+  --neutral-50: #101012;
+  --neutral-100: #17171a;
+  --neutral-200: #1f1f23;
+  --neutral-300: #2b2b30;
+  --neutral-400: #48484f;
+  --neutral-500: #6d6d76;
+  --neutral-600: #8d8d97;
+  --neutral-700: #ababb5;
+  --neutral-800: #cbcbd2;
+  --neutral-900: #ececef;
+  --neutral-950: #fafafb;
+
+  --bg-canvas: var(--neutral-0);
+  --bg-surface: var(--neutral-50);
+  --bg-surface-raised: #1c1c20;
+  --bg-subtle: var(--neutral-100);
+  --bg-hover: var(--neutral-200);
+
+  --border: var(--neutral-200);
+  --border-strong: var(--neutral-300);
+
+  --text-primary: var(--neutral-900);
+  --text-secondary: var(--neutral-700);
+  --text-tertiary: var(--neutral-600);
+  --text-disabled: var(--neutral-400);
+
+  --accent: #7191ff;
+  --accent-hover: #90a8ff;
+  --accent-active: #5b7eff;
+  --accent-fg: #0a1230;
+  --accent-subtle: rgba(113, 145, 255, 0.14);
+  --accent-subtle-fg: #b0c1ff;
+
+  --success: #3ecf8e;
+  --success-bg: rgba(62, 207, 142, 0.12);
+  --success-fg: #7fe0b3;
+
+  --warning: #f0b23d;
+  --warning-bg: rgba(240, 178, 61, 0.13);
+  --warning-fg: #f5cb76;
+
+  --danger: #f0605d;
+  --danger-hover: #f47f7c;
+  --danger-fg-on: #2a0b0b;
+  --danger-bg: rgba(240, 96, 93, 0.14);
+  --danger-fg: #f6928f;
+
+  --status-backlog: #8d8d97;
+  --status-backlog-bg: #1c1c21;
+  --status-backlog-fg: #ababb5;
+
+  --status-todo: #7ea1ff;
+  --status-todo-bg: rgba(126, 161, 255, 0.14);
+  --status-todo-fg: #a9c1ff;
+
+  --status-inprogress: #f0b23d;
+  --status-inprogress-bg: rgba(240, 178, 61, 0.13);
+  --status-inprogress-fg: #f5cb76;
+
+  --status-review: #2dd4bf;
+  --status-review-bg: rgba(45, 212, 191, 0.13);
+  --status-review-fg: #7fe4d8;
+
+  --status-done: #3ecf8e;
+  --status-done-bg: rgba(62, 207, 142, 0.12);
+  --status-done-fg: #7fe0b3;
+
+  --platform-ios: #cbcbd2;
+  --platform-ios-bg: #1c1c21;
+  --platform-ios-fg: #cbcbd2;
+
+  --platform-android: #3ecf8e;
+  --platform-android-bg: rgba(62, 207, 142, 0.12);
+  --platform-android-fg: #7fe0b3;
+
+  --platform-web: #7ea1ff;
+  --platform-web-bg: rgba(126, 161, 255, 0.14);
+  --platform-web-fg: #a9c1ff;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
-  background: #fafafa;
-  color: #111;
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
 }
-a { color: inherit; }
-button { cursor: pointer; font-family: inherit; }
+
+a {
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--accent-subtle-fg);
+}
+
+/* Scrollbar styling for kanban column internal scroll */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+
+.animate-pulse {
+  animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

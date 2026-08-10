@@ -1,186 +1,99 @@
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
+import AuthLayout from "../components/layout/AuthLayout";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import { CircleAlert, MailCheck } from "lucide-react";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [step, setStep] = useState("email");
-  const [message, setMessage] = useState("");
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
-  async function requestCode(e) {
+  async function sendResetLink(e) {
     e.preventDefault();
     setError("");
-    setMessage("");
     setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/reset-password`,
+      },
     });
     setLoading(false);
     if (error) {
       setError(error.message);
       return;
     }
-    setStep("code");
-    setMessage("Check your email for a 6-digit code.");
+    setSent(true);
   }
-
-  async function resetPassword(e) {
-    e.preventDefault();
-    setError("");
-    setMessage("");
-    if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords don't match.");
-      return;
-    }
-    setLoading(true);
-    const supabase = createClient();
-    const { error: verifyError } = await supabase.auth.verifyOtp({
-      email,
-      token: code.trim(),
-      type: "email",
-    });
-    if (verifyError) {
-      setError(verifyError.message);
-      setLoading(false);
-      return;
-    }
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword,
-    });
-    setLoading(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-    setMessage("Password updated. Redirecting to sign in…");
-    setTimeout(() => router.push("/login"), 1200);
-  }
-
-  const inputStyle = {
-    width: "100%",
-    padding: 10,
-    marginBottom: 12,
-    borderRadius: 6,
-    border: "1px solid #ccc",
-    boxSizing: "border-box",
-  };
 
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 380, margin: "100px auto", textAlign: "center" }}>
-      <h1>Reset password</h1>
-      {step === "email" ? (
-        <form onSubmit={requestCode}>
-          <input
+    <AuthLayout>
+      <div className="mb-6 text-center">
+        <h1 className="text-lg font-semibold text-ink-primary">Reset password</h1>
+        <p className="mt-1 text-sm text-ink-tertiary">
+          {sent ? "Check your inbox for next steps" : "We'll email you a link to reset it"}
+        </p>
+      </div>
+
+      {sent ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-surface px-5 py-6 text-center">
+          <span className="flex h-10 w-10 items-center justify-center rounded-md bg-success-subtle text-success-subtle-fg">
+            <MailCheck size={18} strokeWidth={1.75} />
+          </span>
+          <p className="text-sm text-ink-secondary">
+            Check your email for a link to reset your password.
+          </p>
+          <p className="text-xs text-ink-tertiary">
+            No email? Double-check the address or{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setSent(false);
+              }}
+              className="font-medium text-accent hover:text-accent-hover"
+            >
+              try again
+            </a>
+            .
+          </p>
+        </div>
+      ) : (
+        <form onSubmit={sendResetLink} className="flex flex-col gap-3">
+          <Input
             type="email"
             required
             placeholder="you@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
+            autoFocus
           />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 6,
-              background: "#111",
-              color: "#fff",
-              border: "none",
-              cursor: loading ? "default" : "pointer",
-            }}
-          >
-            {loading ? "…" : "Send code"}
-          </button>
-          {message && <p style={{ color: "seagreen", marginTop: 12 }}>{message}</p>}
-          {error && <p style={{ color: "crimson", marginTop: 12 }}>{error}</p>}
-          <p style={{ fontSize: 13, color: "#888", marginTop: 12 }}>
-            We'll email you a 6-digit code to reset your password.
-          </p>
-        </form>
-      ) : (
-        <form onSubmit={resetPassword}>
-          <input
-            type="text"
-            required
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="6-digit code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            style={inputStyle}
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            placeholder="New password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            style={inputStyle}
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            placeholder="Confirm new password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            style={inputStyle}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 6,
-              background: "#111",
-              color: "#fff",
-              border: "none",
-              cursor: loading ? "default" : "pointer",
-            }}
-          >
-            {loading ? "…" : "Reset password"}
-          </button>
-          {message && <p style={{ color: "seagreen", marginTop: 12 }}>{message}</p>}
-          {error && <p style={{ color: "crimson", marginTop: 12 }}>{error}</p>}
-          <p style={{ fontSize: 13, marginTop: 12 }}>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setError("");
-                setMessage("");
-                setStep("email");
-              }}
-              style={{ color: "#111" }}
-            >
-              Resend code
-            </a>
-          </p>
+
+          {error && (
+            <p className="flex items-center gap-1.5 text-sm text-danger">
+              <CircleAlert size={14} />
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" loading={loading} className="w-full">
+            Send reset link
+          </Button>
         </form>
       )}
-      <p style={{ fontSize: 13, marginTop: 16 }}>
+
+      <p className="mt-5 text-center text-sm text-ink-tertiary">
         Remembered your password?{" "}
-        <Link href="/login" style={{ color: "#111" }}>
+        <Link href="/login" className="font-medium text-accent hover:text-accent-hover">
           Sign in
         </Link>
       </p>
-    </div>
+    </AuthLayout>
   );
 }

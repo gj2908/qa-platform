@@ -1,6 +1,11 @@
 import { useState } from "react";
-import Link from "next/link";
 import { createClient } from "../lib/supabase/client";
+import AppShell from "../components/layout/AppShell";
+import FormField from "../components/ui/FormField";
+import Input from "../components/ui/Input";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import { CircleAlert, CircleCheck } from "lucide-react";
 
 export default function Settings() {
   const [oldPassword, setOldPassword] = useState("");
@@ -53,69 +58,76 @@ export default function Settings() {
     setMessage("Password updated.");
   }
 
-  const inputStyle = {
-    width: "100%",
-    padding: 10,
-    marginBottom: 12,
-    borderRadius: 6,
-    border: "1px solid #ccc",
-    boxSizing: "border-box",
-  };
-
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", maxWidth: 380, margin: "80px auto", padding: "0 20px" }}>
-      <div style={{ marginBottom: 16 }}>
-        <Link href="/" style={{ fontSize: 14 }}>
-          ← All projects
-        </Link>
-      </div>
-      <h1 style={{ marginTop: 0 }}>Settings</h1>
+    <AppShell title="Settings" breadcrumbs={[{ label: "Projects", href: "/" }, { label: "Settings" }]}>
+      <div className="mx-auto flex max-w-xl flex-col gap-6">
+        <div>
+          <h1 className="text-xl font-semibold text-ink-primary">Settings</h1>
+          <p className="mt-1 text-sm text-ink-tertiary">Manage your account security.</p>
+        </div>
 
-      <form onSubmit={changePassword}>
-        <input
-          type="password"
-          required
-          placeholder="Current password"
-          value={oldPassword}
-          onChange={(e) => setOldPassword(e.target.value)}
-          style={inputStyle}
-        />
-        <input
-          type="password"
-          required
-          minLength={6}
-          placeholder="New password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          style={inputStyle}
-        />
-        <input
-          type="password"
-          required
-          minLength={6}
-          placeholder="Confirm new password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          style={inputStyle}
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 6,
-            background: "#111",
-            color: "#fff",
-            border: "none",
-            cursor: loading ? "default" : "pointer",
-          }}
-        >
-          {loading ? "…" : "Change password"}
-        </button>
-        {message && <p style={{ color: "seagreen", marginTop: 12 }}>{message}</p>}
-        {error && <p style={{ color: "crimson", marginTop: 12 }}>{error}</p>}
-      </form>
-    </div>
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-ink-primary">Change password</h2>
+          <p className="mt-1 text-sm text-ink-tertiary">
+            You'll need to confirm your current password first.
+          </p>
+
+          <form onSubmit={changePassword} className="mt-5 flex flex-col gap-4">
+            <FormField label="Current password" htmlFor="oldPassword" required>
+              <Input
+                id="oldPassword"
+                type="password"
+                required
+                placeholder="••••••••"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+            </FormField>
+            <FormField label="New password" htmlFor="newPassword" required hint="At least 6 characters.">
+              <Input
+                id="newPassword"
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </FormField>
+            <FormField label="Confirm new password" htmlFor="confirmPassword" required>
+              <Input
+                id="confirmPassword"
+                type="password"
+                required
+                minLength={6}
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                error={!!error}
+              />
+            </FormField>
+
+            {message && (
+              <p className="flex items-center gap-1.5 text-sm text-success">
+                <CircleCheck size={14} />
+                {message}
+              </p>
+            )}
+            {error && (
+              <p className="flex items-center gap-1.5 text-sm text-danger">
+                <CircleAlert size={14} />
+                {error}
+              </p>
+            )}
+
+            <div>
+              <Button type="submit" loading={loading}>
+                Update password
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+    </AppShell>
   );
 }

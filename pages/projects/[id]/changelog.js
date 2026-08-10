@@ -1,5 +1,12 @@
+import { useState } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../../../lib/supabase/server";
+import AppShell from "../../../components/layout/AppShell";
+import Button from "../../../components/ui/Button";
+import Badge from "../../../components/ui/Badge";
+import EmptyState from "../../../components/ui/EmptyState";
+import PlatformBadge from "../../../components/ui/PlatformBadge";
+import { ClipboardList, ExternalLink, Rocket, ShieldCheck, TriangleAlert, CircleAlert } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -15,102 +22,134 @@ export async function getServerSideProps({ params, req, res }) {
   return { props: { project, releases: releases || [] } };
 }
 
-const PLATFORM_LABEL = { ios: "iOS", android: "Android", web: "Web" };
+function relativeTime(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function SigningBadge({ release }) {
+  if (release.platform !== "ios") return null;
+  const info = release.provisioning_info;
+  if (info?.type === "Enterprise") {
+    return (
+      <Badge tone="success" icon={ShieldCheck}>
+        Enterprise — installs on any device
+      </Badge>
+    );
+  }
+  if (info?.type === "Development" || info?.type === "Ad Hoc") {
+    return (
+      <Badge tone="warning" icon={TriangleAlert}>
+        {info.type} — {info.deviceCount} registered device{info.deviceCount === 1 ? "" : "s"}
+      </Badge>
+    );
+  }
+  if (!info?.type && release.ota_ready === false) {
+    return (
+      <Badge tone="danger" icon={CircleAlert}>
+        Signing couldn&apos;t be verified for OTA
+      </Badge>
+    );
+  }
+  return null;
+}
+
+function ChangelogRow({ release }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = release.notes && release.notes.length > 180;
+
+  return (
+    <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <PlatformBadge platform={release.platform} />
+          <span className="text-sm font-semibold text-ink-primary">
+            v{release.version}
+            {release.build_number ? ` (${release.build_number})` : ""}
+          </span>
+          <span className="text-xs text-ink-tertiary">{relativeTime(release.created_at)}</span>
+        </div>
+        <Link href={`/distribute/${release.id}`}>
+          <Button size="sm" variant="secondary">
+            <ExternalLink size={13} strokeWidth={2.25} />
+            Install page
+          </Button>
+        </Link>
+      </div>
+
+      <SigningBadge release={release} />
+
+      {release.notes && (
+        <div>
+          <p
+            className={`whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary ${
+              !expanded && isLong ? "line-clamp-2" : ""
+            }`}
+          >
+            {release.notes}
+          </p>
+          {isLong && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-1 text-xs font-medium text-accent hover:text-accent-hover"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Changelog({ project, releases }) {
   return (
-    <div style={{ maxWidth: 720, margin: "40px auto", padding: "0 20px" }}>
-      <div style={{ marginBottom: 16 }}>
-        <Link href="/">← All projects</Link>
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ margin: 0 }}>{project.name} — Changelog</h1>
-        <Link href={`/projects/${project.id}/new-release`}>New release</Link>
-      </div>
-
-      {releases.map((r) => (
-        <div key={r.id} style={{ border: "1px solid #eee", borderRadius: 8, padding: 16, marginBottom: 12, background: "#fff" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <strong>
-              {PLATFORM_LABEL[r.platform]} · v{r.version}
-              {r.build_number ? ` (${r.build_number})` : ""}
-            </strong>
-            <span style={{ fontSize: 12, color: "#999" }}>
-              {new Date(r.created_at).toLocaleDateString()}
-            </span>
+    <AppShell
+      project={project}
+      breadcrumbs={[{ label: "Projects", href: "/" }, { label: project.name }, { label: "Changelog" }]}
+    >
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-ink-primary">Changelog</h1>
+            <p className="mt-1 text-sm text-ink-tertiary">Published releases for {project.name}.</p>
           </div>
-          {r.platform === "ios" && r.provisioning_info?.type === "Enterprise" && (
-            <div
-              style={{
-                display: "inline-block",
-                marginTop: 8,
-                marginRight: 8,
-                padding: "3px 10px",
-                background: "#eef7ee",
-                border: "1px solid #bcdcc2",
-                color: "#285a2c",
-                borderRadius: 6,
-                fontSize: 12,
-              }}
-            >
-              Enterprise — installs on any device
-            </div>
-          )}
-          {r.platform === "ios" &&
-            (r.provisioning_info?.type === "Development" || r.provisioning_info?.type === "Ad Hoc") && (
-              <div
-                style={{
-                  display: "inline-block",
-                  marginTop: 8,
-                  marginRight: 8,
-                  padding: "3px 10px",
-                  background: "#fff8e1",
-                  border: "1px solid #f0dfa8",
-                  color: "#7a5b00",
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-              >
-                {r.provisioning_info.type} — {r.provisioning_info.deviceCount} registered device
-                {r.provisioning_info.deviceCount === 1 ? "" : "s"}
-              </div>
-            )}
-          {r.platform === "ios" && !r.provisioning_info?.type && r.ota_ready === false && (
-            <div
-              style={{
-                display: "inline-block",
-                marginTop: 8,
-                marginRight: 8,
-                padding: "3px 10px",
-                background: "#fdecec",
-                border: "1px solid #f5c2c2",
-                color: "#a33",
-                borderRadius: 6,
-                fontSize: 12,
-              }}
-            >
-              Signing couldn&apos;t be verified for OTA
-            </div>
-          )}
-          {r.notes && <p style={{ whiteSpace: "pre-wrap", margin: "8px 0" }}>{r.notes}</p>}
-          <Link
-            href={`/distribute/${r.id}`}
-            style={{
-              display: "inline-block",
-              marginTop: 8,
-              padding: "6px 14px",
-              background: "#111",
-              color: "#fff",
-              borderRadius: 6,
-              fontSize: 13,
-              textDecoration: "none",
-            }}
-          >
-            Open install page
+          <Link href={`/projects/${project.id}/new-release`}>
+            <Button>
+              <Rocket size={15} strokeWidth={2.25} />
+              New release
+            </Button>
           </Link>
         </div>
-      ))}
-      {releases.length === 0 && <p style={{ color: "#999" }}>No releases yet.</p>}
-    </div>
+
+        {releases.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="No releases yet"
+            description="Publish your first build to see it show up here."
+            action={
+              <Link href={`/projects/${project.id}/new-release`}>
+                <Button>
+                  <Rocket size={15} strokeWidth={2.25} />
+                  New release
+                </Button>
+              </Link>
+            }
+          />
+        ) : (
+          <div className="divide-y divide-border rounded-lg border border-border bg-surface">
+            {releases.map((r) => (
+              <ChangelogRow key={r.id} release={r} />
+            ))}
+          </div>
+        )}
+      </div>
+    </AppShell>
   );
 }
