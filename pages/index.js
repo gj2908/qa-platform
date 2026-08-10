@@ -37,9 +37,14 @@ export default function Dashboard({ projects }) {
     <div style={{ maxWidth: 720, margin: "60px auto", padding: "0 20px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1>Projects</h1>
-        <button onClick={signOut} style={{ background: "none", border: "1px solid #ccc", borderRadius: 6, padding: "6px 12px" }}>
-          Sign out
-        </button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <Link href="/settings" style={{ fontSize: 14 }}>
+            Settings
+          </Link>
+          <button onClick={signOut} style={{ background: "none", border: "1px solid #ccc", borderRadius: 6, padding: "6px 12px" }}>
+            Sign out
+          </button>
+        </div>
       </div>
 
       <form onSubmit={createProject} style={{ display: "flex", gap: 8, margin: "20px 0" }}>

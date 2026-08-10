@@ -25,7 +25,9 @@ export async function middleware(req) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthPage = req.nextUrl.pathname.startsWith("/login");
+  const isAuthPage =
+    req.nextUrl.pathname.startsWith("/login") ||
+    req.nextUrl.pathname.startsWith("/forgot-password");
   const isPublicShare = req.nextUrl.pathname.startsWith("/share/");
 
   if (isPublicShare) return res;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
 
@@ -101,6 +102,10 @@ export default function Login() {
             <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setError(""); setMessage(""); }} style={{ color: "#111" }}>
               Create one
             </a>
+            {" · "}
+            <Link href="/forgot-password" style={{ color: "#111" }}>
+              Forgot password?
+            </Link>
           </>
         ) : (
           <>
