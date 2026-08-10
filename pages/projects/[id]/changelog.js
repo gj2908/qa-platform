@@ -7,6 +7,7 @@ import Badge from "../../../components/ui/Badge";
 import EmptyState from "../../../components/ui/EmptyState";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import { ClipboardList, ExternalLink, Rocket, ShieldCheck, TriangleAlert, CircleAlert } from "lucide-react";
+import { relativeTime } from "../../../lib/format";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -20,17 +21,6 @@ export async function getServerSideProps({ params, req, res }) {
 
   if (!project) return { notFound: true };
   return { props: { project, releases: releases || [] } };
-}
-
-function relativeTime(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
 }
 
 function SigningBadge({ release }) {

@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Kanban, ClipboardList, Rocket, LayoutGrid, LogOut, X } from "lucide-react";
+import { Kanban, ClipboardList, Rocket, LayoutGrid, X } from "lucide-react";
 import Logo from "./Logo";
 import ProjectSwitcher from "./ProjectSwitcher";
-import { createClient } from "../../lib/supabase/client";
-import { useCurrentUserEmail } from "../../lib/useCurrentUserEmail";
 
 export default function Sidebar({ project, mobileOpen, onClose }) {
   const router = useRouter();
-  const email = useCurrentUserEmail();
 
   const navItems = project
     ? [
@@ -17,12 +14,6 @@ export default function Sidebar({ project, mobileOpen, onClose }) {
         { href: `/projects/${project.id}/new-release`, label: "New release", icon: Rocket },
       ]
     : [{ href: "/", label: "Projects", icon: LayoutGrid }];
-
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  }
 
   return (
     <>
@@ -76,27 +67,6 @@ export default function Sidebar({ project, mobileOpen, onClose }) {
             })}
           </ul>
         </nav>
-
-        <div className="flex items-center gap-2.5 border-t border-border p-3">
-          <Link
-            href="/settings"
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-hover"
-          >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg">
-              {email ? email[0].toUpperCase() : "?"}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-xs text-ink-secondary">
-              {email || "Loading…"}
-            </span>
-          </Link>
-          <button
-            onClick={signOut}
-            title="Sign out"
-            className="shrink-0 rounded-md p-1.5 text-ink-tertiary hover:bg-danger-subtle hover:text-danger"
-          >
-            <LogOut size={15} strokeWidth={2} />
-          </button>
-        </div>
       </aside>
     </>
   );

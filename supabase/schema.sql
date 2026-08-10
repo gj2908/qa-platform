@@ -37,6 +37,10 @@ create table releases (
   notes text,               -- release notes, markdown
   file_path text,           -- storage path, for ios/android
   web_url text,             -- direct link, for web platform
+  app_name text,             -- extracted from the ipa/apk, or user-entered fallback
+  app_icon text,             -- base64 data URI, extracted from the ipa/apk
+  min_os_version text,       -- extracted from the ipa/apk
+  file_size_bytes bigint,    -- extracted from the ipa/apk
   status text not null default 'published'
     check (status in ('draft', 'published')),
   created_by uuid references auth.users(id),

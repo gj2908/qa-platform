@@ -4,6 +4,9 @@ import AppShell from "../../components/layout/AppShell";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PlatformBadge from "../../components/ui/PlatformBadge";
+import AppIcon from "../../components/release/AppIcon";
+import AppDetailsCard from "../../components/release/AppDetailsCard";
+import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import { Check, CircleAlert, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -15,6 +18,15 @@ export async function getServerSideProps({ params, req, res }) {
     .single();
 
   if (!release) return { notFound: true };
+
+  const { data: otherVersions } = await supabase
+    .from("releases")
+    .select("id, platform, version, build_number, created_at")
+    .eq("project_id", release.project_id)
+    .eq("status", "published")
+    .neq("id", release.id)
+    .order("created_at", { ascending: false })
+    .limit(10);
 
   const service = createServiceClient();
   const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -33,7 +45,7 @@ export async function getServerSideProps({ params, req, res }) {
     androidUrl = publicFile.publicUrl || null;
   }
 
-  return { props: { release, itmsLink, androidUrl } };
+  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
 }
 
 function SigningNotice({ release }) {
@@ -85,9 +97,10 @@ function SigningNotice({ release }) {
   return null;
 }
 
-export default function Distribute({ release, itmsLink, androidUrl }) {
+export default function Distribute({ release, itmsLink, androidUrl, otherVersions }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
+  const appName = release.app_name || release.projects?.name;
 
   function copyLink() {
     navigator.clipboard.writeText(shareUrl);
@@ -106,15 +119,18 @@ export default function Distribute({ release, itmsLink, androidUrl }) {
     >
       <div className="mx-auto flex max-w-md flex-col gap-5">
         <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-semibold text-ink-primary">{release.projects?.name}</h1>
-              <p className="mt-0.5 text-sm text-ink-tertiary">
-                v{release.version}
-                {release.build_number ? ` (${release.build_number})` : ""}
-              </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <AppIcon src={release.app_icon} fallbackLabel={appName} />
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-semibold text-ink-primary">{appName}</h1>
+                <p className="mt-0.5 text-sm text-ink-tertiary">
+                  v{release.version}
+                  {release.build_number ? ` (${release.build_number})` : ""}
+                </p>
+              </div>
             </div>
-            <PlatformBadge platform={release.platform} />
+            <PlatformBadge platform={release.platform} className="shrink-0" />
           </div>
 
           <SigningNotice release={release} />
@@ -173,6 +189,9 @@ export default function Distribute({ release, itmsLink, androidUrl }) {
             {copied ? "Copied" : "Copy"}
           </Button>
         </Card>
+
+        <AppDetailsCard release={release} />
+        <OtherVersionsCard releases={otherVersions} basePath="/distribute" />
       </div>
     </AppShell>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../lib/supabase/server";
 import { createClient } from "../lib/supabase/client";
@@ -7,7 +7,19 @@ import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import EmptyState from "../components/ui/EmptyState";
-import { FolderKanban, Kanban, ClipboardList, Rocket, Plus, ListTodo, PackageCheck } from "lucide-react";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import {
+  FolderKanban,
+  Kanban,
+  ClipboardList,
+  Rocket,
+  Plus,
+  ListTodo,
+  PackageCheck,
+  Ellipsis,
+  Trash2,
+} from "lucide-react";
+import { relativeTime } from "../lib/format";
 
 export async function getServerSideProps({ req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -41,21 +53,13 @@ export async function getServerSideProps({ req, res }) {
   };
 }
 
-function relativeTime(dateStr) {
-  if (!dateStr) return "—";
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diffMs / 86400000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
 export default function Dashboard({ projects, stats }) {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   async function createProject(e) {
     e.preventDefault();
@@ -67,6 +71,25 @@ export default function Dashboard({ projects, stats }) {
     } = await supabase.auth.getUser();
     await supabase.from("projects").insert({ name, created_by: user.id });
     window.location.reload();
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await fetch("/api/projects/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: deleteTarget.id }),
+    });
+    setDeleting(false);
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error || "Couldn't delete this project.");
+      setDeleteTarget(null);
+    }
   }
 
   return (
@@ -84,6 +107,12 @@ export default function Dashboard({ projects, stats }) {
             New project
           </Button>
         </div>
+
+        {deleteError && (
+          <p className="rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
+            {deleteError}
+          </p>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatTile
@@ -141,29 +170,78 @@ export default function Dashboard({ projects, stats }) {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((p) => (
-              <Card key={p.id} className="flex flex-col gap-4 p-4 transition-colors hover:border-border-strong">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
-                    <FolderKanban size={17} strokeWidth={2} />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
-                    <p className="mt-0.5 text-xs text-ink-tertiary">
-                      Created {new Date(p.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 border-t border-border pt-3">
-                  <ProjectLink href={`/projects/${p.id}/board`} icon={Kanban} label="Board" />
-                  <ProjectLink href={`/projects/${p.id}/changelog`} icon={ClipboardList} label="Changelog" />
-                  <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
-                </div>
-              </Card>
+              <ProjectCard key={p.id} project={p} onDelete={() => setDeleteTarget(p)} />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`Delete "${deleteTarget?.name}"?`}
+        description="This permanently deletes the project, its board, and every release — including uploaded build files. This can't be undone."
+        confirmLabel="Delete project"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </AppShell>
+  );
+}
+
+function ProjectCard({ project: p, onDelete }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  return (
+    <Card className="flex flex-col gap-4 p-4 transition-colors hover:border-border-strong">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
+          <FolderKanban size={17} strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
+          <p className="mt-0.5 text-xs text-ink-tertiary">
+            Created {new Date(p.created_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div ref={menuRef} className="relative shrink-0">
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
+          >
+            <Ellipsis size={16} strokeWidth={2} />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete();
+                }}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
+              >
+                <Trash2 size={13} strokeWidth={2.25} />
+                Delete project
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1 border-t border-border pt-3">
+        <ProjectLink href={`/projects/${p.id}/board`} icon={Kanban} label="Board" />
+        <ProjectLink href={`/projects/${p.id}/changelog`} icon={ClipboardList} label="Changelog" />
+        <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
+      </div>
+    </Card>
   );
 }
 

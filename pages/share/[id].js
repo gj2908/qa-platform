@@ -6,6 +6,9 @@ import ThemeToggle from "../../components/ThemeToggle";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PlatformBadge from "../../components/ui/PlatformBadge";
+import AppIcon from "../../components/release/AppIcon";
+import AppDetailsCard from "../../components/release/AppDetailsCard";
+import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import {
   CircleAlert,
   Compass,
@@ -26,6 +29,15 @@ export async function getServerSideProps({ params, req }) {
 
   if (!release) return { notFound: true };
 
+  const { data: otherVersions } = await supabase
+    .from("releases")
+    .select("id, platform, version, build_number, created_at")
+    .eq("project_id", release.project_id)
+    .eq("status", "published")
+    .neq("id", release.id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host;
 
@@ -42,11 +54,12 @@ export async function getServerSideProps({ params, req }) {
     androidUrl = publicFile.publicUrl || null;
   }
 
-  return { props: { release, itmsLink, androidUrl } };
+  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
 }
 
-export default function SharePage({ release, itmsLink, androidUrl }) {
+export default function SharePage({ release, itmsLink, androidUrl, otherVersions }) {
   const [env, setEnv] = useState(null);
+  const appName = release.app_name || release.projects?.name;
 
   useEffect(() => {
     setEnv(detectEnv());
@@ -66,14 +79,15 @@ export default function SharePage({ release, itmsLink, androidUrl }) {
         <div className="w-full max-w-[420px]">
           <Card className="flex flex-col gap-5 p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold text-ink-primary">
-                  {release.projects?.name}
-                </h1>
-                <p className="mt-0.5 text-sm text-ink-tertiary">
-                  v{release.version}
-                  {release.build_number ? ` (${release.build_number})` : ""}
-                </p>
+              <div className="flex min-w-0 items-center gap-3">
+                <AppIcon src={release.app_icon} fallbackLabel={appName} />
+                <div className="min-w-0">
+                  <h1 className="truncate text-lg font-semibold text-ink-primary">{appName}</h1>
+                  <p className="mt-0.5 text-sm text-ink-tertiary">
+                    v{release.version}
+                    {release.build_number ? ` (${release.build_number})` : ""}
+                  </p>
+                </div>
               </div>
               <PlatformBadge platform={release.platform} className="shrink-0" />
             </div>
@@ -199,6 +213,11 @@ export default function SharePage({ release, itmsLink, androidUrl }) {
               </div>
             )}
           </Card>
+
+          <div className="mt-5 flex flex-col gap-5">
+            <AppDetailsCard release={release} />
+            <OtherVersionsCard releases={otherVersions} basePath="/share" />
+          </div>
         </div>
       </div>
     </div>

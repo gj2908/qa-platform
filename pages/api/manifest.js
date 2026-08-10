@@ -1,5 +1,11 @@
 import { createServiceClient } from "../../lib/supabase/server";
 
+function escapeXml(str) {
+  return String(str).replace(/[&<>'"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&apos;", '"': "&quot;" }[c])
+  );
+}
+
 // Intentionally NOT behind the login gate (see middleware.js) — Apple's
 // itms-services installer fetches this directly from the device, without
 // browser auth cookies. The releaseId is an unguessable UUID. The bucket is
@@ -50,13 +56,15 @@ export default async function handler(req, res) {
       <key>metadata</key>
       <dict>
         <key>bundle-identifier</key>
-        <string>${release.bundle_id}</string>
+        <string>${escapeXml(release.bundle_id)}</string>
         <key>bundle-version</key>
-        <string>${release.version}</string>
+        <string>${escapeXml(release.version)}</string>
         <key>kind</key>
         <string>software</string>
         <key>title</key>
-        <string>${release.notes ? release.notes.split("\n")[0].slice(0, 60) : "App"}</string>
+        <string>${escapeXml(
+          release.app_name || (release.notes ? release.notes.split("\n")[0].slice(0, 60) : "App")
+        )}</string>
       </dict>
     </dict>
   </array>

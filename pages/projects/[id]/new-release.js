@@ -17,6 +17,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
+import { formatBytes } from "../../../lib/format";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -31,16 +32,10 @@ const PLATFORMS = [
   { key: "web", label: "Web app", hint: "link", icon: Globe },
 ];
 
-function formatBytes(bytes) {
-  if (!bytes) return "0 KB";
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
-}
-
 export default function NewRelease({ project }) {
   const router = useRouter();
   const [platform, setPlatform] = useState("ios");
+  const [appName, setAppName] = useState("");
   const [version, setVersion] = useState("");
   const [buildNumber, setBuildNumber] = useState("");
   const [bundleId, setBundleId] = useState("");
@@ -50,6 +45,8 @@ export default function NewRelease({ project }) {
   const [phase, setPhase] = useState("idle"); // idle | uploading | publishing
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
+  const [duplicate, setDuplicate] = useState(null);
+  const [duplicateChecking, setDuplicateChecking] = useState(false);
 
   const submitting = phase !== "idle";
 
@@ -58,6 +55,8 @@ export default function NewRelease({ project }) {
     if (!version.trim()) next.version = "Version is required.";
     if (platform === "ios" && !bundleId.trim()) next.bundleId = "Bundle ID is required for iOS install.";
     if (platform === "web" && !webUrl.trim()) next.webUrl = "App URL is required.";
+    if (platform === "web" && !appName.trim())
+      next.appName = "App name is required — there's no build file to detect it from.";
     if (platform !== "web" && !file) next.file = "Choose a build file to upload.";
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -65,10 +64,38 @@ export default function NewRelease({ project }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    await publish(false);
+  }
+
+  async function publish(replace) {
     setError("");
     if (!validate()) return;
 
     try {
+      // Before uploading anything, check whether the exact same app (same
+      // specifications) was already published to this project.
+      if (!replace) {
+        setDuplicateChecking(true);
+        const checkRes = await fetch("/api/releases/check-duplicate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: project.id,
+            platform,
+            version,
+            buildNumber,
+            bundleId,
+            webUrl,
+          }),
+        });
+        setDuplicateChecking(false);
+        const checkData = await checkRes.json();
+        if (checkRes.ok && checkData.duplicate) {
+          setDuplicate(checkData.release);
+          return;
+        }
+      }
+
       let filePath = null;
 
       if (platform !== "web") {
@@ -94,7 +121,9 @@ export default function NewRelease({ project }) {
       formData.append("version", version);
       formData.append("buildNumber", buildNumber);
       formData.append("bundleId", bundleId);
+      formData.append("appName", appName);
       formData.append("notes", notes);
+      formData.append("replace", replace ? "true" : "false");
       if (platform === "web") formData.append("webUrl", webUrl);
       if (filePath) formData.append("filePath", filePath);
 
@@ -152,6 +181,26 @@ export default function NewRelease({ project }) {
                   </button>
                 ))}
               </div>
+            </FormField>
+
+            <FormField
+              label="App name"
+              htmlFor="appName"
+              required={platform === "web"}
+              error={errors.appName}
+              hint={
+                platform === "web"
+                  ? "Shown as the install page title."
+                  : "Optional — leave blank to detect it from the build file automatically."
+              }
+            >
+              <Input
+                id="appName"
+                value={appName}
+                onChange={(e) => setAppName(e.target.value)}
+                placeholder={platform === "web" ? "My App" : "Auto-detected from the build if left blank"}
+                error={!!errors.appName}
+              />
             </FormField>
 
             <div className="grid grid-cols-2 gap-3">
@@ -270,9 +319,55 @@ export default function NewRelease({ project }) {
             </p>
           )}
 
-          <Button type="submit" loading={submitting} size="md" className="self-start px-6">
-            {phase === "uploading" ? "Uploading build…" : phase === "publishing" ? "Publishing…" : "Publish release"}
-          </Button>
+          {duplicate && (
+            <Card className="flex flex-col gap-4 border-warning/40 p-5">
+              <div className="flex gap-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-warning-subtle text-warning-subtle-fg">
+                  <CircleAlert size={16} strokeWidth={2} />
+                </span>
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-sm font-semibold text-ink-primary">
+                    This build already exists in this project
+                  </h2>
+                  <p className="text-sm text-ink-secondary">
+                    {duplicate.appName ? `${duplicate.appName} · ` : ""}
+                    {duplicate.version}
+                    {duplicate.buildNumber ? ` (build ${duplicate.buildNumber})` : ""}{" "}
+                    for {PLATFORMS.find((p) => p.key === platform)?.label} was uploaded on{" "}
+                    {new Date(duplicate.createdAt).toLocaleDateString()}.
+                  </p>
+                  <p className="text-xs text-ink-tertiary">
+                    Publishing it again will replace that release with this upload.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={() => publish(true)}>
+                  Replace existing
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setDuplicate(null)}>
+                  Keep both
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {!duplicate && (
+            <Button
+              type="submit"
+              loading={submitting || duplicateChecking}
+              size="md"
+              className="self-start px-6"
+            >
+              {duplicateChecking
+                ? "Checking…"
+                : phase === "uploading"
+                  ? "Uploading build…"
+                  : phase === "publishing"
+                    ? "Publishing…"
+                    : "Publish release"}
+            </Button>
+          )}
         </form>
       </div>
     </AppShell>
