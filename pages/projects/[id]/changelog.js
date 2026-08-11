@@ -10,11 +10,13 @@ import PlatformBadge from "../../../components/ui/PlatformBadge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
+import Input from "../../../components/ui/Input";
 import {
   CalendarClock,
   ClipboardList,
   ExternalLink,
   Rocket,
+  Search,
   ShieldCheck,
   TriangleAlert,
   CircleAlert,
@@ -190,6 +192,19 @@ export default function Changelog({ project, role, releases }) {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [platformFilter, setPlatformFilter] = useState(null);
+
+  const filteredReleases = releases.filter((r) => {
+    if (platformFilter && r.platform !== platformFilter) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      (r.app_name || "").toLowerCase().includes(q) ||
+      r.version.toLowerCase().includes(q) ||
+      (r.notes || "").toLowerCase().includes(q)
+    );
+  });
 
   // Deep-link support (e.g. the dashboard's "Release" quick link) — opens
   // the New release dialog right away instead of requiring an extra click.
@@ -238,6 +253,41 @@ export default function Changelog({ project, role, releases }) {
           </p>
         )}
 
+        {releases.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search size={14} strokeWidth={2.25} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-tertiary" />
+              <Input
+                placeholder="Search version, notes…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPlatformFilter(null)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                  !platformFilter ? "bg-accent-subtle text-accent-subtle-fg" : "text-ink-tertiary hover:bg-hover"
+                }`}
+              >
+                All
+              </button>
+              {PLATFORM_ORDER.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPlatformFilter(p)}
+                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium capitalize transition-colors ${
+                    platformFilter === p ? "bg-accent-subtle text-accent-subtle-fg" : "text-ink-tertiary hover:bg-hover"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {releases.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
@@ -256,9 +306,11 @@ export default function Changelog({ project, role, releases }) {
               )
             }
           />
+        ) : filteredReleases.length === 0 ? (
+          <EmptyState icon={Search} title="No matches" description="Try a different search or filter." />
         ) : (
           <div className="flex flex-col gap-6">
-            {groupReleasesByPlatform(releases).map(({ platform, releases: group }) => {
+            {groupReleasesByPlatform(filteredReleases).map(({ platform, releases: group }) => {
               const meta = PLATFORM_META[platform];
               const Icon = meta.icon;
               return (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import QRCode from "qrcode";
-import { createServerSupabase, createServiceClient } from "../../lib/supabase/server";
+import { createServerSupabase } from "../../lib/supabase/server";
 import ProjectShell from "../../components/layout/ProjectShell";
 import TopNav from "../../components/layout/TopNav";
 import Card from "../../components/ui/Card";
@@ -60,21 +60,14 @@ export async function getServerSideProps({ params, req, res }) {
     otherVersions = data || [];
   }
 
-  const service = createServiceClient();
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host;
 
   let itmsLink = null;
-  let androidUrl = null;
 
   if (release.platform === "ios") {
     const manifestUrl = `${protocol}://${host}/api/manifest?releaseId=${release.id}`;
     itmsLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
-  }
-
-  if (release.platform === "android" && release.file_path) {
-    const { data: publicFile } = service.storage.from("builds").getPublicUrl(release.file_path);
-    androidUrl = publicFile.publicUrl || null;
   }
 
   const shareUrl = `${protocol}://${host}/share/${release.id}`;
@@ -85,7 +78,7 @@ export async function getServerSideProps({ params, req, res }) {
   });
   const qrSvg = rawQrSvg.replace('fill="#000000"', 'fill="currentColor"');
 
-  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [], qrSvg } };
+  return { props: { release, itmsLink, otherVersions: otherVersions || [], qrSvg } };
 }
 
 function SigningNotice({ release }) {
@@ -164,7 +157,7 @@ function ExpiryNotice({ release }) {
   );
 }
 
-export default function Distribute({ release, itmsLink, androidUrl, otherVersions, qrSvg }) {
+export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -211,8 +204,8 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
                 </Button>
               </a>
             )}
-            {release.platform === "android" && androidUrl && (
-              <a href={androidUrl} className="block">
+            {release.platform === "android" && release.file_path && (
+              <a href={`/api/download/${release.id}`} className="block">
                 <Button className="w-full" size="md">
                   <Download size={15} strokeWidth={2.25} />
                   Install
@@ -220,7 +213,7 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
               </a>
             )}
             {release.platform === "web" && release.web_url && (
-              <a href={release.web_url} target="_blank" rel="noreferrer" className="block">
+              <a href={`/api/download/${release.id}`} target="_blank" rel="noreferrer" className="block">
                 <Button className="w-full" size="md">
                   Open app
                 </Button>

@@ -51,22 +51,16 @@ export async function getServerSideProps({ params, req }) {
   const host = req.headers.host;
 
   let itmsLink = null;
-  let androidUrl = null;
 
   if (release.platform === "ios") {
     const manifestUrl = `${protocol}://${host}/api/manifest?releaseId=${release.id}`;
     itmsLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
   }
 
-  if (release.platform === "android" && release.file_path) {
-    const { data: publicFile } = supabase.storage.from("builds").getPublicUrl(release.file_path);
-    androidUrl = publicFile.publicUrl || null;
-  }
-
-  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
+  return { props: { release, itmsLink, otherVersions: otherVersions || [] } };
 }
 
-export default function SharePage({ release, itmsLink, androidUrl, otherVersions }) {
+export default function SharePage({ release, itmsLink, otherVersions }) {
   const [env, setEnv] = useState(null);
   const appName = release.app_name || release.projects?.name || "Untitled build";
 
@@ -215,8 +209,8 @@ export default function SharePage({ release, itmsLink, androidUrl, otherVersions
                   </Button>
                 </a>
               )}
-              {release.platform === "android" && androidUrl && (
-                <a href={androidUrl} className="block">
+              {release.platform === "android" && release.file_path && (
+                <a href={`/api/download/${release.id}`} className="block">
                   <Button className="w-full" size="md">
                     <Download size={15} strokeWidth={2.25} />
                     Install
@@ -224,7 +218,7 @@ export default function SharePage({ release, itmsLink, androidUrl, otherVersions
                 </a>
               )}
               {release.platform === "web" && release.web_url && (
-                <a href={release.web_url} target="_blank" rel="noreferrer" className="block">
+                <a href={`/api/download/${release.id}`} target="_blank" rel="noreferrer" className="block">
                   <Button className="w-full" size="md">
                     Open app
                   </Button>

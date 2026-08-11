@@ -37,6 +37,13 @@ export default async function handler(req, res) {
 
   const fileUrl = publicFile.publicUrl;
 
+  // Counts an install attempt (button tap → manifest fetch), not a
+  // confirmed install — best-effort, never blocks the manifest response.
+  supabase.rpc("increment_install_count", { p_release_id: releaseId }).then(
+    () => {},
+    () => {}
+  );
+
   // Shown on iOS's native "Install App" confirmation popup alongside the
   // title below — without these, that system dialog falls back to a
   // generic gray icon.

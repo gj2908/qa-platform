@@ -38,6 +38,7 @@ create table tasks (
     check (status in ('backlog', 'todo', 'in_progress', 'review', 'done')),
   position int default 0,
   assignee_email text,
+  due_date date,
   created_by uuid references auth.users(id),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -60,6 +61,7 @@ create table releases (
   file_size_bytes bigint,    -- extracted from the ipa/apk
   device_family text,        -- extracted from the ipa (e.g. "iPhone, iPad")
   uploader_email text,       -- set for releases from the public, no-login upload landing page
+  install_count integer not null default 0, -- incremented server-side (manifest.js / api/download)
   status text not null default 'published'
     check (status in ('draft', 'published')),
   created_by uuid references auth.users(id),
@@ -109,6 +111,50 @@ create table project_activity (
   detail text,             -- human-readable one-liner, e.g. "v1.2 (34) for iOS"
   created_at timestamptz default now()
 );
+
+-- ── Notification read state ─────────────────────────────────
+-- Tracks the last time each user "read" their notification bell, so the
+-- bell can compute an unread count against project_activity without a
+-- separate read/unread flag per activity row.
+create table notification_read_state (
+  email text primary key,
+  last_read_at timestamptz not null default now()
+);
+
+-- ── API tokens (CI/CD publishing) ───────────────────────────
+-- Project-scoped tokens for non-interactive release publishing
+-- (Authorization: Bearer <token>). Only a hash is ever stored — the raw
+-- token is shown once at creation and never persisted or retrievable.
+create table api_tokens (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  token_hash text not null unique,
+  token_prefix text not null,  -- first 8 chars, shown in the UI for identification
+  label text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now(),
+  last_used_at timestamptz
+);
+
+-- ── Project favorites ───────────────────────────────────────
+-- Per-user starred projects, pinned to the top of the dashboard.
+create table project_favorites (
+  email text not null,
+  project_id uuid not null references projects(id) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (email, project_id)
+);
+
+-- Atomic install counter increment (Supabase-js can't do `col = col + 1`
+-- from the client directly).
+create or replace function increment_install_count(p_release_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update releases set install_count = install_count + 1 where id = p_release_id;
+$$;
 
 -- ── Role lookup helper ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
@@ -197,6 +243,23 @@ alter table releases enable row level security;
 alter table project_collaborators enable row level security;
 alter table profiles enable row level security;
 alter table project_activity enable row level security;
+alter table notification_read_state enable row level security;
+alter table api_tokens enable row level security;
+alter table project_favorites enable row level security;
+
+create policy "self read own read-state" on notification_read_state
+  for select using (auth.jwt() ->> 'email' = email);
+create policy "self upsert own read-state" on notification_read_state
+  for all using (auth.jwt() ->> 'email' = email)
+  with check (auth.jwt() ->> 'email' = email);
+
+create policy "owner manages tokens" on api_tokens
+  for all using (project_role(project_id) = 'owner')
+  with check (project_role(project_id) = 'owner');
+
+create policy "self manage favorites" on project_favorites
+  for all using (auth.jwt() ->> 'email' = email)
+  with check (auth.jwt() ->> 'email' = email);
 
 create policy "members read activity" on project_activity
   for select using (project_role(project_id) is not null);

@@ -34,12 +34,15 @@ export async function middleware(req) {
   // published, the release ID being an unguessable UUID).
   const isPublicLanding = req.nextUrl.pathname === "/";
   const isPublicUploadApi = req.nextUrl.pathname.startsWith("/api/public/");
+  // CI/CD publishing is authenticated via its own Authorization: Bearer
+  // <api token> header, not a session cookie — see pages/api/ci/releases/create.js.
+  const isCiApi = req.nextUrl.pathname.startsWith("/api/ci/");
   // /reset-password is reached by clicking the email link, which creates the
   // session in the browser after the page loads — so anonymous visitors must
   // be allowed through and signed-in visitors must not be bounced away.
   const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
 
-  if (isPublicShare || isResetPassword || isPublicUploadApi) return res;
+  if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi) return res;
 
   if (isPublicLanding) {
     // Signed-in users have no need for the anonymous landing — send them
@@ -77,6 +80,6 @@ export async function middleware(req) {
 // without signing in.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/manifest|api/release-icon|share/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/manifest|api/release-icon|api/download|share/).*)",
   ],
 };

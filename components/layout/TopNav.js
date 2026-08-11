@@ -2,6 +2,7 @@ import Link from "next/link";
 import { House } from "lucide-react";
 import ThemeToggle from "../ThemeToggle";
 import UserMenu from "./UserMenu";
+import NotificationBell from "./NotificationBell";
 
 // The single shared header for the whole app now that there's no sidebar
 // anywhere: a Home button back to the dashboard on the left, a centered
@@ -37,6 +38,7 @@ export default function TopNav({ crumb, center }) {
 
       <div className="flex flex-1 shrink-0 items-center justify-end gap-3">
         <ThemeToggle />
+        <NotificationBell />
         <div className="h-5 w-px bg-border" />
         <UserMenu />
       </div>

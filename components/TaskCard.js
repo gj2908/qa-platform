@@ -1,9 +1,21 @@
-import { ChevronLeft, ChevronRight, GripVertical, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Trash2 } from "lucide-react";
 import { STATUS_META, STATUS_ORDER } from "./ui/status";
+import { getAvatarColor } from "../lib/avatarColor";
 
-export default function TaskCard({ task, onMove, onDelete, editable = true }) {
+function dueDateStatus(dueDate) {
+  if (!dueDate) return null;
+  const daysLeft = Math.ceil((new Date(dueDate + "T00:00:00").getTime() - Date.now()) / 86_400_000);
+  if (daysLeft < 0) return "overdue";
+  if (daysLeft <= 1) return "soon";
+  return "normal";
+}
+
+export default function TaskCard({ task, assigneeName, onMove, onDelete, onOpen, editable = true, draggableProps = {} }) {
   const idx = STATUS_ORDER.indexOf(task.status);
   const meta = STATUS_META[task.status];
+  const dueStatus = dueDateStatus(task.due_date);
+  const assigneeColor = task.assignee_email ? getAvatarColor(task.assignee_email) : null;
+  const assigneeDisplay = assigneeName || task.assignee_email;
 
   function handleDragStart(e) {
     e.dataTransfer.setData("text/plain", task.id);
@@ -14,9 +26,9 @@ export default function TaskCard({ task, onMove, onDelete, editable = true }) {
     <div
       draggable={editable}
       onDragStart={editable ? handleDragStart : undefined}
-      className={`group flex flex-col gap-2 rounded-md border border-l-[3px] border-border bg-surface p-3 shadow-sm transition-shadow hover:shadow-md ${
-        editable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${meta.accent}`}
+      onClick={() => onOpen?.(task)}
+      className={`group flex cursor-pointer flex-col gap-2 rounded-md border border-l-[3px] border-border bg-surface p-3 shadow-sm transition-shadow hover:shadow-md ${meta.accent}`}
+      {...draggableProps}
     >
       <div className="flex items-start gap-1.5">
         <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-ink-primary">
@@ -25,7 +37,7 @@ export default function TaskCard({ task, onMove, onDelete, editable = true }) {
         {editable && (
           <GripVertical
             size={14}
-            className="mt-0.5 shrink-0 text-ink-disabled opacity-0 transition-opacity group-hover:opacity-100"
+            className="mt-0.5 shrink-0 cursor-grab text-ink-disabled opacity-0 transition-opacity group-hover:opacity-100"
           />
         )}
       </div>
@@ -34,12 +46,32 @@ export default function TaskCard({ task, onMove, onDelete, editable = true }) {
         <p className="line-clamp-2 text-xs leading-relaxed text-ink-tertiary">{task.description}</p>
       )}
 
-      {task.assignee_email && (
-        <div className="flex items-center gap-1.5">
-          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-subtle text-[9px] font-semibold text-ink-tertiary">
-            {task.assignee_email[0].toUpperCase()}
-          </span>
-          <span className="truncate text-xs text-ink-tertiary">{task.assignee_email}</span>
+      {(task.assignee_email || dueStatus) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {task.assignee_email && (
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold ${assigneeColor.bg} ${assigneeColor.text}`}
+              >
+                {assigneeDisplay[0].toUpperCase()}
+              </span>
+              <span className="truncate text-xs text-ink-tertiary">{assigneeDisplay}</span>
+            </div>
+          )}
+          {dueStatus && (
+            <span
+              className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                dueStatus === "overdue"
+                  ? "bg-danger-subtle text-danger-subtle-fg"
+                  : dueStatus === "soon"
+                    ? "bg-warning-subtle text-warning-subtle-fg"
+                    : "bg-subtle text-ink-tertiary"
+              }`}
+            >
+              <CalendarClock size={10} strokeWidth={2.25} />
+              {new Date(task.due_date + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+            </span>
+          )}
         </div>
       )}
 
@@ -47,20 +79,29 @@ export default function TaskCard({ task, onMove, onDelete, editable = true }) {
         <div className="flex items-center gap-0.5 border-t border-border pt-2">
           <button
             disabled={idx <= 0}
-            onClick={() => onMove(task, STATUS_ORDER[idx - 1])}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMove(task, STATUS_ORDER[idx - 1]);
+            }}
             className="rounded p-1 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary disabled:pointer-events-none disabled:opacity-0"
           >
             <ChevronLeft size={13} strokeWidth={2.25} />
           </button>
           <button
             disabled={idx >= STATUS_ORDER.length - 1}
-            onClick={() => onMove(task, STATUS_ORDER[idx + 1])}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMove(task, STATUS_ORDER[idx + 1]);
+            }}
             className="rounded p-1 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary disabled:pointer-events-none disabled:opacity-0"
           >
             <ChevronRight size={13} strokeWidth={2.25} />
           </button>
           <button
-            onClick={() => onDelete(task)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(task);
+            }}
             className="ml-auto rounded p-1 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
           >
             <Trash2 size={13} strokeWidth={2.25} />

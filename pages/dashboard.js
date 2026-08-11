@@ -21,9 +21,13 @@ import {
   Trash2,
   ExternalLink,
   UploadCloud,
+  Star,
+  Clock,
 } from "lucide-react";
 import { relativeTime } from "../lib/format";
 import { ROLE_META, canManageReleases } from "../components/ui/role";
+import { createClient } from "../lib/supabase/client";
+import { getRecentlyViewed } from "../lib/recentlyViewed";
 
 export async function getServerSideProps({ req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -40,7 +44,18 @@ export async function getServerSideProps({ req, res }) {
     ? await supabase.from("project_collaborators").select("project_id, role").eq("email", user.email)
     : { data: [] };
   const roleByProject = Object.fromEntries((myRoles || []).map((r) => [r.project_id, r.role]));
-  const projects = (projectsRaw || []).map((p) => ({ ...p, role: roleByProject[p.id] || null }));
+
+  const { data: favoritesRaw } = user?.email
+    ? await supabase.from("project_favorites").select("project_id").eq("email", user.email)
+    : { data: [] };
+  const favoriteIds = new Set((favoritesRaw || []).map((f) => f.project_id));
+
+  const projects = (projectsRaw || [])
+    .map((p) => ({ ...p, role: roleByProject[p.id] || null, isFavorite: favoriteIds.has(p.id) }))
+    .sort((a, b) => {
+      if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
 
   const { count: openTasksCount } = await supabase
     .from("tasks")
@@ -88,6 +103,16 @@ export default function Dashboard({ projects, myUploads, stats }) {
   const [deleteKind, setDeleteKind] = useState("project"); // "project" | "release"
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [recentlyViewed, setRecentlyViewed] = useState([]);
+
+  useEffect(() => {
+    const recentIds = new Set(projects.map((p) => p.id));
+    setRecentlyViewed(
+      getRecentlyViewed()
+        .filter((r) => recentIds.has(r.id))
+        .map((r) => projects.find((p) => p.id === r.id))
+    );
+  }, [projects]);
 
   function askDeleteProject(project) {
     setDeleteKind("project");
@@ -156,6 +181,27 @@ export default function Dashboard({ projects, myUploads, stats }) {
             value={relativeTime(stats.lastReleaseAt)}
           />
         </div>
+
+        {recentlyViewed.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center gap-2 px-1">
+              <Clock size={14} strokeWidth={2.25} className="text-ink-tertiary" />
+              <h2 className="text-sm font-semibold text-ink-primary">Recently viewed</h2>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 thin-scrollbar">
+              {recentlyViewed.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/projects/${p.id}`}
+                  className="flex shrink-0 items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
+                >
+                  <FolderKanban size={13} strokeWidth={2.25} className="text-ink-tertiary" />
+                  {p.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {projects.length === 0 ? (
           <EmptyState
@@ -247,6 +293,8 @@ export default function Dashboard({ projects, myUploads, stats }) {
 
 function ProjectCard({ project: p, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [favorite, setFavorite] = useState(p.isFavorite);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
   const menuRef = useRef(null);
   const isOwner = p.role === "owner";
   const roleMeta = ROLE_META[p.role];
@@ -259,6 +307,23 @@ function ProjectCard({ project: p, onDelete }) {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  async function toggleFavorite(e) {
+    e.preventDefault();
+    if (favoriteBusy) return;
+    setFavoriteBusy(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (favorite) {
+      await supabase.from("project_favorites").delete().eq("project_id", p.id).eq("email", user.email);
+    } else {
+      await supabase.from("project_favorites").insert({ project_id: p.id, email: user.email });
+    }
+    setFavorite(!favorite);
+    setFavoriteBusy(false);
+  }
 
   return (
     <Card className="flex flex-col gap-4 p-4 transition-colors hover:border-border-strong">
@@ -284,6 +349,15 @@ function ProjectCard({ project: p, onDelete }) {
             </div>
           </div>
         </Link>
+        <button
+          onClick={toggleFavorite}
+          title={favorite ? "Remove from favorites" : "Add to favorites"}
+          className={`shrink-0 rounded-md p-1 transition-colors hover:bg-hover ${
+            favorite ? "text-warning" : "text-ink-tertiary hover:text-ink-primary"
+          }`}
+        >
+          <Star size={16} strokeWidth={2} fill={favorite ? "currentColor" : "none"} />
+        </button>
         {isOwner && (
           <div ref={menuRef} className="relative shrink-0">
             <button

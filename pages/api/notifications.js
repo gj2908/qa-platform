@@ -1,0 +1,83 @@
+import { createServerSupabase } from "../../lib/supabase/server";
+
+// Powers the top-bar notification bell — recent activity across every
+// project the caller belongs to. RLS-respecting client: "members read
+// activity" already scopes project_activity to projects the caller is on,
+// and reading their own project_collaborators rows is always allowed.
+export default async function handler(req, res) {
+  const supabase = createServerSupabase(req, res);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    res.status(401).json({ error: "Not signed in" });
+    return;
+  }
+
+  if (req.method === "POST") {
+    const { error } = await supabase
+      .from("notification_read_state")
+      .upsert({ email: user.email, last_read_at: new Date().toISOString() }, { onConflict: "email" });
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  if (req.method !== "GET") {
+    res.status(405).end();
+    return;
+  }
+
+  const { data: readState } = await supabase
+    .from("notification_read_state")
+    .select("last_read_at")
+    .eq("email", user.email)
+    .maybeSingle();
+  const lastReadAt = readState?.last_read_at || null;
+
+  const { data: myProjects } = await supabase
+    .from("project_collaborators")
+    .select("project_id")
+    .eq("email", user.email);
+  const projectIds = [...new Set((myProjects || []).map((p) => p.project_id))];
+
+  if (projectIds.length === 0) {
+    res.status(200).json({ items: [], unreadCount: 0 });
+    return;
+  }
+
+  const { data: activity } = await supabase
+    .from("project_activity")
+    .select("id, project_id, actor_email, action, detail, created_at, projects(name)")
+    .in("project_id", projectIds)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const items = activity || [];
+
+  const emails = [...new Set(items.map((a) => a.actor_email))];
+  let nameByEmail = {};
+  if (emails.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("email, full_name").in("email", emails);
+    nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
+  }
+
+  const enriched = items.map((a) => ({
+    id: a.id,
+    projectId: a.project_id,
+    projectName: a.projects?.name || "Project",
+    actorEmail: a.actor_email,
+    actorName: nameByEmail[a.actor_email] || null,
+    action: a.action,
+    detail: a.detail,
+    createdAt: a.created_at,
+  }));
+
+  const unreadCount = lastReadAt
+    ? enriched.filter((a) => new Date(a.createdAt) > new Date(lastReadAt)).length
+    : enriched.length;
+
+  res.status(200).json({ items: enriched, unreadCount });
+}

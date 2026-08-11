@@ -12,31 +12,10 @@ import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import { ROLE_META, canManageReleases, isOwner } from "../../../components/ui/role";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
 import { relativeTime } from "../../../lib/format";
-import {
-  Kanban,
-  ClipboardList,
-  ListTodo,
-  PackageCheck,
-  Plus,
-  Rocket,
-  Trash2,
-  UserPlus,
-  UserMinus,
-  ArrowLeftRight,
-  Users,
-  Webhook,
-  Clock,
-} from "lucide-react";
+import { Kanban, ClipboardList, ListTodo, PackageCheck, Plus, Rocket, Users, Webhook, Clock } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
-
-const ACTIVITY_META = {
-  release_published: { icon: Rocket, label: "published a release" },
-  release_deleted: { icon: Trash2, label: "deleted a release" },
-  collaborator_added: { icon: UserPlus, label: "added a collaborator" },
-  collaborator_removed: { icon: UserMinus, label: "removed a collaborator" },
-  ownership_transferred: { icon: ArrowLeftRight, label: "transferred ownership" },
-  webhook_updated: { icon: Webhook, label: "updated release notifications" },
-};
+import { activityMetaFor } from "../../../lib/activityMeta";
+import { getAvatarColor } from "../../../lib/avatarColor";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -203,9 +182,12 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
               {collaborators.map((c) => {
                 const meta = ROLE_META[c.role];
                 const displayName = c.full_name || c.email;
+                const color = getAvatarColor(c.email);
                 return (
                   <div key={c.email} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg">
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color.bg} ${color.text}`}
+                    >
                       {displayName[0].toUpperCase()}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -253,7 +235,7 @@ function ActivityCard({ activity }) {
       </div>
       <div className="mt-4 flex flex-col gap-3.5">
         {activity.map((a) => {
-          const meta = ACTIVITY_META[a.action] || { icon: Clock, label: a.action };
+          const meta = activityMetaFor(a.action);
           const Icon = meta.icon;
           const displayName = a.actor_name || a.actor_email;
           return (

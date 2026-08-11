@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LogOut, Settings } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
+import { getAvatarColor } from "../../lib/avatarColor";
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
@@ -27,13 +28,14 @@ export default function UserMenu() {
   }
 
   const initial = displayName ? displayName[0].toUpperCase() : "?";
+  const color = getAvatarColor(email);
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg transition-opacity hover:opacity-80"
+        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-opacity hover:opacity-80 ${color.bg} ${color.text}`}
         title={displayName}
       >
         {initial}

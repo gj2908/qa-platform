@@ -58,6 +58,7 @@ export default function AppDetailsCard({ release }) {
           { label: "Minimum OS", value: release.min_os_version },
           { label: "Device family", value: release.device_family },
           { label: "Size", value: formatBytes(release.file_size_bytes) },
+          { label: "Installs", value: String(release.install_count ?? 0) },
           { label: "Uploaded", value: formatUploaded(release.created_at) },
           { label: "Release ID", value: <span className="font-mono text-xs">{release.id.slice(0, 8)}</span> },
         ]}

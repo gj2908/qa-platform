@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
@@ -9,7 +9,17 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { ROLE_META, ASSIGNABLE_ROLES } from "../../../components/ui/role";
-import { UserPlus, Trash2, ArrowLeftRight, CircleAlert } from "lucide-react";
+import { getAvatarColor } from "../../../lib/avatarColor";
+import { useToast } from "../../../components/ui/ToastProvider";
+import {
+  UserPlus,
+  Trash2,
+  ArrowLeftRight,
+  CircleAlert,
+  KeyRound,
+  Copy,
+  Check,
+} from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -34,12 +44,20 @@ export async function getServerSideProps({ params, req, res }) {
     collaborators = collaborators.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
   }
 
-  return { props: { project, role, collaborators } };
+  // Empty for non-owners — RLS's "owner manages tokens" policy already
+  // restricts this to zero rows for anyone else, no extra check needed.
+  const { data: tokens } = await supabase
+    .from("api_tokens")
+    .select("id, token_prefix, label, created_at, last_used_at")
+    .eq("project_id", params.id)
+    .order("created_at", { ascending: false });
+
+  return { props: { project, role, collaborators, tokens: tokens || [] } };
 }
 
 const ROLE_ORDER = { owner: 0, editor: 1, commenter: 2, viewer: 3 };
 
-export default function Collaborators({ project, role: myRole, collaborators: initial }) {
+export default function Collaborators({ project, role: myRole, collaborators: initial, tokens }) {
   const [collaborators, setCollaborators] = useState(
     [...initial].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
   );
@@ -179,10 +197,13 @@ export default function Collaborators({ project, role: myRole, collaborators: in
             const meta = ROLE_META[c.role];
             const Icon = meta.icon;
             const displayName = c.full_name || c.email;
+            const color = getAvatarColor(c.email);
             return (
               <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg">
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color.bg} ${color.text}`}
+                  >
                     {displayName[0].toUpperCase()}
                   </span>
                   <div className="min-w-0">
@@ -217,6 +238,8 @@ export default function Collaborators({ project, role: myRole, collaborators: in
             );
           })}
         </Card>
+
+        {isOwner && <TokensCard project={project} tokens={tokens} />}
       </div>
 
       <ConfirmDialog
@@ -239,5 +262,150 @@ export default function Collaborators({ project, role: myRole, collaborators: in
         onCancel={() => setTransferTarget(null)}
       />
     </ProjectShell>
+  );
+}
+
+function TokensCard({ project, tokens: initial }) {
+  const toast = useToast();
+  const [tokens, setTokens] = useState(initial);
+  const [label, setLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState(null);
+  const [revoking, setRevoking] = useState(false);
+  // Set only after mount to avoid a server/client hydration mismatch —
+  // window.location isn't available during SSR.
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  async function createToken(e) {
+    e.preventDefault();
+    setCreating(true);
+    const res = await fetch("/api/projects/tokens/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, label: label.trim() }),
+    });
+    setCreating(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setNewToken(data.token);
+      setTokens((t) => [{ id: data.id, token_prefix: data.token_prefix, label: data.label, created_at: data.created_at, last_used_at: null }, ...t]);
+      setLabel("");
+    } else {
+      toast.error(data.error || "Couldn't create a token.");
+    }
+  }
+
+  function copyToken() {
+    navigator.clipboard.writeText(newToken);
+    setCopied(true);
+    toast.success("Token copied.");
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function confirmRevoke() {
+    if (!revokeTarget) return;
+    setRevoking(true);
+    const res = await fetch("/api/projects/tokens/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, tokenId: revokeTarget.id }),
+    });
+    setRevoking(false);
+    if (res.ok) {
+      setTokens((t) => t.filter((tok) => tok.id !== revokeTarget.id));
+      setRevokeTarget(null);
+      toast.success("Token revoked.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't revoke that token.");
+      setRevokeTarget(null);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <KeyRound size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">API tokens</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Publish releases from a CI pipeline without signing in — see the snippet below.
+      </p>
+
+      {newToken && (
+        <div className="mt-4 flex flex-col gap-2 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
+          <p className="font-medium">Copy this token now — it won&apos;t be shown again.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded bg-surface px-2.5 py-1.5 font-mono text-xs text-ink-primary">
+              {newToken}
+            </code>
+            <Button size="sm" variant="secondary" onClick={copyToken}>
+              {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={createToken} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <FormField label="Label" hint="e.g. GitHub Actions, Fastlane">
+            <Input placeholder="ios-release-pipeline" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </FormField>
+        </div>
+        <Button type="submit" loading={creating}>
+          <KeyRound size={14} strokeWidth={2.25} />
+          Generate token
+        </Button>
+      </form>
+
+      {tokens.length > 0 && (
+        <div className="mt-4 divide-y divide-border border-t border-border">
+          {tokens.map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-ink-primary">{t.label || "Untitled token"}</p>
+                <p className="font-mono text-xs text-ink-tertiary">
+                  {t.token_prefix}… · {t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleDateString()}` : "never used"}
+                </p>
+              </div>
+              <button
+                onClick={() => setRevokeTarget(t)}
+                title="Revoke token"
+                className="shrink-0 rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+              >
+                <Trash2 size={14} strokeWidth={2.25} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 rounded-md bg-subtle px-3.5 py-3">
+        <p className="text-xs font-medium text-ink-secondary">Example: publish from CI</p>
+        <pre className="mt-1.5 overflow-x-auto text-xs text-ink-tertiary">
+{`curl -X POST ${origin}/api/ci/releases/create \\
+  -H "Authorization: Bearer qap_..." \\
+  -F platform=ios -F version=1.2.0 -F bundleId=com.company.app \\
+  -F file=@app.ipa`}
+        </pre>
+      </div>
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        title={`Revoke "${revokeTarget?.label || "this token"}"?`}
+        description="Any CI pipeline using this token will immediately be unable to publish releases. This can't be undone."
+        confirmLabel="Revoke"
+        loading={revoking}
+        onConfirm={confirmRevoke}
+        onCancel={() => setRevokeTarget(null)}
+      />
+    </Card>
   );
 }

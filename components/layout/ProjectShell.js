@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { LayoutDashboard, Kanban, ClipboardList, Users } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
 import CompleteProfileGate from "./CompleteProfileGate";
 import CommandPalette from "../CommandPalette";
+import { addRecentlyViewed } from "../../lib/recentlyViewed";
 
 const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
@@ -15,6 +17,10 @@ const TABS = [
 // Changelog / Collaborators). No sidebar — the tabs live centered in the
 // single top bar (see TopNav), so the board gets the full page width.
 export default function ProjectShell({ project, active, children }) {
+  useEffect(() => {
+    addRecentlyViewed(project);
+  }, [project.id, project.name]);
+
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <TopNav
