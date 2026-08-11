@@ -1,4 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase/server";
+import { triageFeedback } from "../../../lib/aiClient";
+import { sendWebhookNotification, buildFeedbackPayload } from "../../../lib/webhookNotify";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_FEEDBACK_LENGTH = 5000;
@@ -61,17 +63,55 @@ export default async function handler(req, res) {
     email || "anonymous"
   } on ${buildLabel} (release ${release.id})`;
 
+  // Best-effort AI triage — never blocks the report if it fails or
+  // ANTHROPIC_API_KEY isn't configured.
+  let aiCategory = null;
+  let aiSeverity = null;
+  try {
+    const triage = await triageFeedback(trimmedFeedback);
+    if (triage.ok) {
+      aiCategory = triage.category;
+      aiSeverity = triage.severity;
+    }
+  } catch (e) {
+    // ignored
+  }
+
   const { error: insertError } = await service.from("tasks").insert({
     project_id: release.project_id,
     title,
     description,
     status: "backlog",
+    source: "tester_feedback",
+    ai_category: aiCategory,
+    ai_severity: aiSeverity,
     created_by: null,
   });
 
   if (insertError) {
     res.status(500).json({ error: insertError.message });
     return;
+  }
+
+  // Best-effort webhook notification — same "never block the real
+  // action" rule as every other notification trigger in this app.
+  try {
+    const { data: project } = await service.from("projects").select("webhook_url").eq("id", release.project_id).single();
+    if (project?.webhook_url) {
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host;
+      await sendWebhookNotification(
+        project.webhook_url,
+        buildFeedbackPayload({
+          appName: release.app_name,
+          feedback: trimmedFeedback,
+          reporterEmail: email,
+          boardUrl: `${protocol}://${host}/projects/${release.project_id}/board`,
+        })
+      );
+    }
+  } catch (e) {
+    // ignored
   }
 
   res.status(200).json({ ok: true });

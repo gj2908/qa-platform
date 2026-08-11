@@ -5,6 +5,9 @@ import ProjectShell from "../../components/layout/ProjectShell";
 import TopNav from "../../components/layout/TopNav";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
+import Input from "../../components/ui/Input";
+import FormField from "../../components/ui/FormField";
+import Badge from "../../components/ui/Badge";
 import PlatformBadge from "../../components/ui/PlatformBadge";
 import AppIcon from "../../components/release/AppIcon";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
@@ -12,15 +15,20 @@ import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import ReportIssueCard from "../../components/release/ReportIssueCard";
 import { useToast } from "../../components/ui/ToastProvider";
 import { getExpiryStatus } from "../../lib/provisioning";
+import { getAvatarColor } from "../../lib/avatarColor";
+import { canManageReleases } from "../../components/ui/role";
 import {
   CalendarClock,
   Check,
   CircleAlert,
   Copy,
   Download,
+  Layers,
+  Lock,
   QrCode,
   ShieldCheck,
   TriangleAlert,
+  Users,
 } from "lucide-react";
 
 // A release with no project (public, no-login upload) has nothing to show
@@ -43,6 +51,26 @@ export async function getServerSideProps({ params, req, res }) {
     .single();
 
   if (!release) return { notFound: true };
+
+  let role = null;
+  let installs = [];
+  if (release.project_id) {
+    const { data } = await supabase.rpc("project_role", { p_project_id: release.project_id });
+    role = data;
+
+    const { data: clicksRaw } = await supabase
+      .from("release_installs")
+      .select("email, clicked_at")
+      .eq("release_id", release.id)
+      .order("clicked_at", { ascending: false })
+      .limit(20);
+    if (clicksRaw?.length) {
+      const emails = [...new Set(clicksRaw.map((c) => c.email))];
+      const { data: profiles } = await supabase.from("profiles").select("email, full_name").in("email", emails);
+      const nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
+      installs = clicksRaw.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
+    }
+  }
 
   // project_id is null for public, no-login uploads — there's no sibling
   // "other versions" grouping for those (and .eq(null) would otherwise
@@ -78,7 +106,7 @@ export async function getServerSideProps({ params, req, res }) {
   });
   const qrSvg = rawQrSvg.replace('fill="#000000"', 'fill="currentColor"');
 
-  return { props: { release, itmsLink, otherVersions: otherVersions || [], qrSvg } };
+  return { props: { release, role, itmsLink, otherVersions: otherVersions || [], qrSvg, installs } };
 }
 
 function SigningNotice({ release }) {
@@ -108,6 +136,15 @@ function SigningNotice({ release }) {
             This build uses a {info.type} profile {info.name ? `(${info.name})` : ""} with{" "}
             {info.deviceCount} registered device{info.deviceCount === 1 ? "" : "s"}. If a tester
             gets &quot;Unable to Download App&quot;, that device isn&apos;t registered yet.
+            {release.project_id && (
+              <>
+                {" "}
+                <a href={`/register-device/${release.project_id}`} className="font-medium text-accent hover:text-accent-hover">
+                  Register a new device
+                </a>
+                .
+              </>
+            )}
           </p>
         </div>
       </div>
@@ -157,18 +194,29 @@ function ExpiryNotice({ release }) {
   );
 }
 
-export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) {
+const CHANNEL_TONE = { internal: "neutral", beta: "warning", production: "success" };
+
+export default function Distribute({ release, role, itmsLink, otherVersions, qrSvg, installs }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
+  const canEdit = canManageReleases(role);
 
   function copyLink() {
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
     toast.success("Link copied.");
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function trackInstallClick() {
+    if (!release.project_id) return;
+    navigator.sendBeacon?.(
+      "/api/releases/track-click",
+      new Blob([JSON.stringify({ releaseId: release.id })], { type: "application/json" })
+    );
   }
 
   const Shell = release.projects ? ProjectShell : MinimalShell;
@@ -189,7 +237,12 @@ export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) 
                 </p>
               </div>
             </div>
-            <PlatformBadge platform={release.platform} className="shrink-0" />
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <PlatformBadge platform={release.platform} />
+              {release.channel !== "production" && (
+                <Badge tone={CHANNEL_TONE[release.channel]}>{release.channel}</Badge>
+              )}
+            </div>
           </div>
 
           <SigningNotice release={release} />
@@ -197,7 +250,7 @@ export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) 
 
           <div>
             {release.platform === "ios" && (
-              <a href={itmsLink} className="block">
+              <a href={itmsLink} className="block" onClick={trackInstallClick}>
                 <Button className="w-full" size="md">
                   <Download size={15} strokeWidth={2.25} />
                   Install
@@ -205,7 +258,7 @@ export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) 
               </a>
             )}
             {release.platform === "android" && release.file_path && (
-              <a href={`/api/download/${release.id}`} className="block">
+              <a href={`/api/download/${release.id}`} className="block" onClick={trackInstallClick}>
                 <Button className="w-full" size="md">
                   <Download size={15} strokeWidth={2.25} />
                   Install
@@ -213,7 +266,13 @@ export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) 
               </a>
             )}
             {release.platform === "web" && release.web_url && (
-              <a href={`/api/download/${release.id}`} target="_blank" rel="noreferrer" className="block">
+              <a
+                href={`/api/download/${release.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="block"
+                onClick={trackInstallClick}
+              >
                 <Button className="w-full" size="md">
                   Open app
                 </Button>
@@ -271,10 +330,138 @@ export default function Distribute({ release, itmsLink, otherVersions, qrSvg }) 
           )}
         </Card>
 
+        {canEdit && <ShareLinkSettingsCard release={release} />}
+
+        {installs.length > 0 && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2">
+              <Users size={14} strokeWidth={2.25} className="text-ink-tertiary" />
+              <p className="text-sm font-medium text-ink-primary">Who's tried this build</p>
+            </div>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              Teammates who clicked Install from this page — not a confirmed on-device install.
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {installs.map((i, idx) => {
+                const displayName = i.full_name || i.email;
+                const color = getAvatarColor(i.email);
+                return (
+                  <div key={idx} className="flex items-center gap-2 text-sm">
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${color.bg} ${color.text}`}
+                    >
+                      {displayName[0].toUpperCase()}
+                    </span>
+                    <span className="text-ink-primary">{displayName}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {release.project_id && <ReportIssueCard releaseId={release.id} />}
         <AppDetailsCard release={release} />
         <OtherVersionsCard releases={otherVersions} basePath="/distribute" />
       </div>
     </Shell>
+  );
+}
+
+function ShareLinkSettingsCard({ release }) {
+  const toast = useToast();
+  const [expiresAt, setExpiresAt] = useState(release.share_expires_at ? release.share_expires_at.slice(0, 10) : "");
+  const [pin, setPin] = useState("");
+  const [hasPin, setHasPin] = useState(!!release.share_pin_hash);
+  const [rollout, setRollout] = useState(release.rollout_percent || "");
+  const [saving, setSaving] = useState(false);
+
+  async function save(overrides = {}) {
+    setSaving(true);
+    const body = {
+      releaseId: release.id,
+      shareExpiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      rolloutPercent: rollout ? Number(rollout) : null,
+      ...overrides,
+    };
+    const res = await fetch("/api/releases/share-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setSaving(false);
+    if (res.ok) {
+      toast.success("Share link settings saved.");
+      if (overrides.clearPin) {
+        setHasPin(false);
+        setPin("");
+      } else if (body.pin) {
+        setHasPin(true);
+        setPin("");
+      }
+      if ("rolloutPercent" in overrides) setRollout(overrides.rolloutPercent || "");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't save share link settings.");
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Lock size={14} strokeWidth={2.25} className="text-ink-tertiary" />
+        <p className="text-sm font-medium text-ink-primary">Share link settings</p>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <FormField label="Expires on" hint="Optional">
+          <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        </FormField>
+        <FormField label={hasPin ? "PIN (set)" : "Set a PIN"} hint={hasPin ? "4-8 digits, blank = unchanged" : "4-8 digits"}>
+          <Input
+            type="text"
+            inputMode="numeric"
+            placeholder={hasPin ? "••••" : "e.g. 4821"}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+          />
+        </FormField>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Layers size={13} strokeWidth={2.25} className="text-ink-tertiary" />
+          <span className="text-xs text-ink-tertiary">Rollout</span>
+          {[25, 50, 100].map((pct) => (
+            <Button
+              key={pct}
+              size="sm"
+              variant={((rollout || 100) === pct) ? "primary" : "secondary"}
+              onClick={() => {
+                setRollout(pct === 100 ? "" : pct);
+                save({ rolloutPercent: pct === 100 ? null : pct });
+              }}
+            >
+              {pct}%
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end gap-2">
+        {hasPin && (
+          <Button variant="secondary" size="sm" onClick={() => save({ clearPin: true })} loading={saving}>
+            Remove PIN
+          </Button>
+        )}
+        <Button
+          size="sm"
+          loading={saving}
+          onClick={() => save(pin.trim() ? { pin: pin.trim() } : {})}
+        >
+          Save
+        </Button>
+      </div>
+    </Card>
   );
 }

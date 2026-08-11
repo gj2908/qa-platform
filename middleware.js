@@ -28,7 +28,11 @@ export async function middleware(req) {
   const isAuthPage =
     req.nextUrl.pathname.startsWith("/login") ||
     req.nextUrl.pathname.startsWith("/forgot-password");
-  const isPublicShare = req.nextUrl.pathname.startsWith("/share/");
+  const isPublicShare =
+    req.nextUrl.pathname.startsWith("/share/") ||
+    req.nextUrl.pathname.startsWith("/channel/") ||
+    req.nextUrl.pathname.startsWith("/register-device/") ||
+    req.nextUrl.pathname.startsWith("/docs/");
   // "/" is the public upload landing page — anyone can drop a build there
   // without signing in (protected instead by requiring an email and, once
   // published, the release ID being an unguessable UUID).
@@ -37,12 +41,15 @@ export async function middleware(req) {
   // CI/CD publishing is authenticated via its own Authorization: Bearer
   // <api token> header, not a session cookie — see pages/api/ci/releases/create.js.
   const isCiApi = req.nextUrl.pathname.startsWith("/api/ci/");
+  // The public read API is also Bearer-token authenticated, not cookie-
+  // based — see pages/api/v1/releases/*.
+  const isPublicV1Api = req.nextUrl.pathname.startsWith("/api/v1/");
   // /reset-password is reached by clicking the email link, which creates the
   // session in the browser after the page loads — so anonymous visitors must
   // be allowed through and signed-in visitors must not be bounced away.
   const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
 
-  if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi) return res;
+  if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi || isPublicV1Api) return res;
 
   if (isPublicLanding) {
     // Signed-in users have no need for the anonymous landing — send them

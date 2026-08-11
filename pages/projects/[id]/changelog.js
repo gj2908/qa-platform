@@ -11,9 +11,12 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import Input from "../../../components/ui/Input";
+import { useToast } from "../../../components/ui/ToastProvider";
 import {
   CalendarClock,
+  Check,
   ClipboardList,
+  Clock,
   ExternalLink,
   Rocket,
   Search,
@@ -21,11 +24,14 @@ import {
   TriangleAlert,
   CircleAlert,
   Trash2,
+  X,
 } from "lucide-react";
 import { relativeTime } from "../../../lib/format";
 import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
-import { canManageReleases } from "../../../components/ui/role";
+import { canManageReleases, isOwner } from "../../../components/ui/role";
 import { getExpiryStatus } from "../../../lib/provisioning";
+import { activateScheduledReleaseIfDue } from "../../../lib/activateScheduledRelease";
+import { createServiceClient } from "../../../lib/supabase/server";
 
 const PLATFORM_ORDER = ["ios", "android", "web"];
 
@@ -46,6 +52,20 @@ export async function getServerSideProps({ params, req, res }) {
   if (!project) return { notFound: true };
 
   const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
+
+  // Activate any scheduled releases whose time has come before rendering,
+  // same lazy-activation approach used on the public pages.
+  const { data: dueScheduled } = await supabase
+    .from("releases")
+    .select("*")
+    .eq("project_id", params.id)
+    .eq("status", "scheduled")
+    .lte("scheduled_for", new Date().toISOString());
+  if (dueScheduled?.length) {
+    const service = createServiceClient();
+    await Promise.all(dueScheduled.map((r) => activateScheduledReleaseIfDue(service, r, req)));
+  }
+
   const { data: releases } = await supabase
     .from("releases")
     .select("*")
@@ -53,7 +73,29 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("status", "published")
     .order("created_at", { ascending: false });
 
-  return { props: { project, role, releases: releases || [] } };
+  const { data: scheduled } = await supabase
+    .from("releases")
+    .select("*")
+    .eq("project_id", params.id)
+    .eq("status", "scheduled")
+    .order("scheduled_for", { ascending: true });
+
+  const { data: pending } = await supabase
+    .from("releases")
+    .select("*")
+    .eq("project_id", params.id)
+    .eq("status", "pending_review")
+    .order("created_at", { ascending: false });
+
+  return {
+    props: {
+      project,
+      role,
+      releases: releases || [],
+      scheduled: scheduled || [],
+      pending: pending || [],
+    },
+  };
 }
 
 function SigningBadge({ release }) {
@@ -185,7 +227,99 @@ function ChangelogRow({ release, onDelete, canEdit }) {
   );
 }
 
-export default function Changelog({ project, role, releases }) {
+function PendingApprovalSection({ pending, onDecided }) {
+  const toast = useToast();
+  const [busyId, setBusyId] = useState(null);
+
+  async function decide(release, action) {
+    setBusyId(release.id);
+    const res = await fetch("/api/releases/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ releaseId: release.id, action }),
+    });
+    setBusyId(null);
+    if (res.ok) {
+      toast.success(action === "approve" ? "Release approved and published." : "Release rejected.");
+      onDecided();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't process that release.");
+    }
+  }
+
+  if (pending.length === 0) return null;
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <Clock size={14} strokeWidth={2.25} className="text-warning" />
+        <h2 className="text-sm font-semibold text-ink-primary">Pending approval</h2>
+        <span className="rounded-full border border-border bg-subtle px-1.5 py-0.5 text-xs font-medium leading-none text-ink-tertiary">
+          {pending.length}
+        </span>
+      </div>
+      <div className="divide-y divide-border rounded-lg border border-warning/40 bg-warning-subtle/40">
+        {pending.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <AppIcon src={r.app_icon} fallbackLabel={r.app_name} size={28} />
+              <PlatformBadge platform={r.platform} />
+              <span className="text-sm font-semibold text-ink-primary">
+                v{r.version}
+                {r.build_number ? ` (${r.build_number})` : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button size="sm" loading={busyId === r.id} onClick={() => decide(r, "approve")}>
+                <Check size={13} strokeWidth={2.25} />
+                Approve
+              </Button>
+              <Button size="sm" variant="secondary" loading={busyId === r.id} onClick={() => decide(r, "reject")}>
+                <X size={13} strokeWidth={2.25} />
+                Reject
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScheduledSection({ scheduled }) {
+  if (scheduled.length === 0) return null;
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <Clock size={14} strokeWidth={2.25} className="text-ink-tertiary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Scheduled</h2>
+        <span className="rounded-full border border-border bg-subtle px-1.5 py-0.5 text-xs font-medium leading-none text-ink-tertiary">
+          {scheduled.length}
+        </span>
+      </div>
+      <div className="divide-y divide-border rounded-lg border border-dashed border-border">
+        {scheduled.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <AppIcon src={r.app_icon} fallbackLabel={r.app_name} size={28} />
+              <PlatformBadge platform={r.platform} />
+              <span className="text-sm font-semibold text-ink-primary">
+                v{r.version}
+                {r.build_number ? ` (${r.build_number})` : ""}
+              </span>
+            </div>
+            <span className="text-xs text-ink-tertiary">
+              Publishes {new Date(r.scheduled_for).toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function Changelog({ project, role, releases, scheduled, pending }) {
   const router = useRouter();
   const canEdit = canManageReleases(role);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -252,6 +386,9 @@ export default function Changelog({ project, role, releases }) {
             {deleteError}
           </p>
         )}
+
+        {isOwner(role) && <PendingApprovalSection pending={pending} onDecided={() => router.replace(router.asPath)} />}
+        {canEdit && <ScheduledSection scheduled={scheduled} />}
 
         {releases.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

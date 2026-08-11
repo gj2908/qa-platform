@@ -1,5 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { logActivity } from "../../../lib/logActivity";
+import { sendWebhookNotification, buildCollaboratorPayload } from "../../../lib/webhookNotify";
 
 const VALID_ROLES = ["viewer", "commenter", "editor"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -52,12 +53,25 @@ export default async function handler(req, res) {
     return;
   }
 
-  await logActivity(createServiceClient(), {
+  const service = createServiceClient();
+  await logActivity(service, {
     projectId,
     actorEmail: user.email,
     action: "collaborator_added",
     detail: `${normalizedEmail} as ${role}`,
   });
+
+  try {
+    const { data: project } = await service.from("projects").select("webhook_url").eq("id", projectId).single();
+    if (project?.webhook_url) {
+      await sendWebhookNotification(
+        project.webhook_url,
+        buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" })
+      );
+    }
+  } catch (e) {
+    // ignored
+  }
 
   res.status(200).json({ ok: true });
 }

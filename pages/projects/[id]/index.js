@@ -12,9 +12,24 @@ import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import { ROLE_META, canManageReleases, isOwner } from "../../../components/ui/role";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
 import { relativeTime } from "../../../lib/format";
-import { Kanban, ClipboardList, ListTodo, PackageCheck, Plus, Rocket, Users, Webhook, Clock } from "lucide-react";
+import {
+  Kanban,
+  ClipboardList,
+  ListTodo,
+  PackageCheck,
+  Plus,
+  Rocket,
+  Users,
+  Webhook,
+  Clock,
+  ShieldCheck,
+  Download as DownloadIcon,
+  Smartphone,
+} from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
+import BarChart from "../../../components/ui/BarChart";
+import { TrendingUp } from "lucide-react";
 import { getAvatarColor } from "../../../lib/avatarColor";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -54,9 +69,50 @@ export async function getServerSideProps({ params, req, res }) {
     activity = activity.map((a) => ({ ...a, actor_name: nameByEmail[a.actor_email] || null }));
   }
 
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data: installEventsRaw } = await supabase
+    .from("install_events")
+    .select("created_at, releases(version)")
+    .eq("project_id", params.id)
+    .gte("created_at", since);
+  const installEvents = installEventsRaw || [];
+
+  const dayBuckets = {};
+  for (let i = 29; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+    dayBuckets[day] = 0;
+  }
+  const versionBuckets = {};
+  for (const e of installEvents) {
+    const day = e.created_at.slice(0, 10);
+    if (day in dayBuckets) dayBuckets[day] += 1;
+    const version = e.releases?.version || "unknown";
+    versionBuckets[version] = (versionBuckets[version] || 0) + 1;
+  }
+  const installTrend = Object.entries(dayBuckets).map(([label, value]) => ({ label, value }));
+  const versionAdoption = Object.entries(versionBuckets)
+    .map(([version, count]) => ({ version, count, pct: Math.round((count / Math.max(installEvents.length, 1)) * 100) }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+
+  // Feedback-analytics: tester-reported tasks, open vs. resolved.
+  const { data: feedbackTasks } = await supabase
+    .from("tasks")
+    .select("status")
+    .eq("project_id", params.id)
+    .eq("source", "tester_feedback");
+  const feedbackStats = {
+    total: feedbackTasks?.length || 0,
+    open: (feedbackTasks || []).filter((t) => t.status !== "done").length,
+    resolved: (feedbackTasks || []).filter((t) => t.status === "done").length,
+  };
+
   return {
     props: {
       project,
+      installTrend,
+      versionAdoption,
+      feedbackStats,
       role,
       tasks: tasks || [],
       releases: releases || [],
@@ -66,7 +122,17 @@ export async function getServerSideProps({ params, req, res }) {
   };
 }
 
-export default function ProjectOverview({ project, role, tasks, releases, collaborators, activity }) {
+export default function ProjectOverview({
+  project,
+  role,
+  tasks,
+  releases,
+  collaborators,
+  activity,
+  installTrend,
+  versionAdoption,
+  feedbackStats,
+}) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const canEdit = canManageReleases(role);
   const openTasks = tasks.filter((t) => t.status !== "done").length;
@@ -212,12 +278,21 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
                   View changelog
                 </Button>
               </Link>
+              <a href={`/register-device/${project.id}`} target="_blank" rel="noreferrer">
+                <Button variant="secondary" className="w-full justify-start">
+                  <Smartphone size={14} strokeWidth={2} />
+                  Device registration link
+                </Button>
+              </a>
             </div>
           </div>
         </div>
 
-        {activity.length > 0 && <ActivityCard activity={activity} />}
+        <InsightsCard installTrend={installTrend} versionAdoption={versionAdoption} feedbackStats={feedbackStats} />
 
+        {activity.length > 0 && <ActivityCard activity={activity} projectId={project.id} isOwner={isOwner(role)} />}
+
+        {isOwner(role) && <ApprovalSettingsCard project={project} />}
         {isOwner(role) && <WebhookCard project={project} />}
       </div>
 
@@ -226,12 +301,79 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
   );
 }
 
-function ActivityCard({ activity }) {
+function InsightsCard({ installTrend, versionAdoption, feedbackStats }) {
+  const totalInstalls = installTrend.reduce((sum, d) => sum + d.value, 0);
+
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2">
-        <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
-        <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
+        <TrendingUp size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Insights</h2>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div>
+          <p className="text-xs font-medium text-ink-secondary">
+            Installs, last 30 days <span className="text-ink-tertiary">· {totalInstalls} total</span>
+          </p>
+          <div className="mt-2">
+            <BarChart data={installTrend} height={80} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-ink-secondary">Version adoption (last 30 days)</p>
+          {versionAdoption.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-tertiary">Not enough data yet.</p>
+          ) : (
+            <div className="mt-2 flex flex-col gap-1.5">
+              {versionAdoption.map((v) => (
+                <div key={v.version} className="flex items-center gap-2 text-xs">
+                  <span className="w-16 shrink-0 truncate text-ink-secondary">v{v.version}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-subtle">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${v.pct}%` }} />
+                  </div>
+                  <span className="w-9 shrink-0 text-right text-ink-tertiary">{v.pct}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {feedbackStats.total > 0 && (
+        <div className="mt-5 flex items-center gap-4 border-t border-border pt-4 text-xs text-ink-tertiary">
+          <span>
+            <span className="font-semibold text-ink-primary">{feedbackStats.total}</span> tester reports
+          </span>
+          <span>
+            <span className="font-semibold text-ink-primary">{feedbackStats.open}</span> open
+          </span>
+          <span>
+            <span className="font-semibold text-ink-primary">{feedbackStats.resolved}</span> resolved
+          </span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ActivityCard({ activity, projectId, isOwner: canExport }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
+        </div>
+        {canExport && (
+          <a href={`/api/projects/activity-export?projectId=${projectId}`}>
+            <Button variant="secondary" size="sm">
+              <DownloadIcon size={13} strokeWidth={2.25} />
+              Export CSV
+            </Button>
+          </a>
+        )}
       </div>
       <div className="mt-4 flex flex-col gap-3.5">
         {activity.map((a) => {
@@ -253,6 +395,49 @@ function ActivityCard({ activity }) {
             </div>
           );
         })}
+      </div>
+    </Card>
+  );
+}
+
+function ApprovalSettingsCard({ project }) {
+  const toast = useToast();
+  const [requireApproval, setRequireApproval] = useState(project.require_approval);
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    const next = !requireApproval;
+    setSaving(true);
+    const res = await fetch("/api/projects/require-approval", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, requireApproval: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setRequireApproval(next);
+      toast.success(next ? "Approval required for editor publishes." : "Approval requirement removed.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update this setting.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Require approval to publish</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              Editors' releases wait for an owner's approval before going out; owner publishes are unaffected.
+            </p>
+          </div>
+        </div>
+        <Button variant={requireApproval ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
+          {requireApproval ? "On" : "Off"}
+        </Button>
       </div>
     </Card>
   );

@@ -8,7 +8,7 @@ import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
-import { ROLE_META, ASSIGNABLE_ROLES } from "../../../components/ui/role";
+import { ROLE_META, ASSIGNABLE_ROLES, canManageReleases } from "../../../components/ui/role";
 import { getAvatarColor } from "../../../lib/avatarColor";
 import { useToast } from "../../../components/ui/ToastProvider";
 import {
@@ -19,6 +19,7 @@ import {
   KeyRound,
   Copy,
   Check,
+  Smartphone,
 } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -52,12 +53,18 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("project_id", params.id)
     .order("created_at", { ascending: false });
 
-  return { props: { project, role, collaborators, tokens: tokens || [] } };
+  const { data: devices } = await supabase
+    .from("registered_devices")
+    .select("id, udid, device_name, submitted_by_email, created_at")
+    .eq("project_id", params.id)
+    .order("created_at", { ascending: false });
+
+  return { props: { project, role, collaborators, tokens: tokens || [], devices: devices || [] } };
 }
 
 const ROLE_ORDER = { owner: 0, editor: 1, commenter: 2, viewer: 3 };
 
-export default function Collaborators({ project, role: myRole, collaborators: initial, tokens }) {
+export default function Collaborators({ project, role: myRole, collaborators: initial, tokens, devices }) {
   const [collaborators, setCollaborators] = useState(
     [...initial].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
   );
@@ -239,6 +246,8 @@ export default function Collaborators({ project, role: myRole, collaborators: in
           })}
         </Card>
 
+        {canManageReleases(myRole) && <DevicesCard project={project} devices={devices} canEdit={isOwner} />}
+
         {isOwner && <TokensCard project={project} tokens={tokens} />}
       </div>
 
@@ -262,6 +271,79 @@ export default function Collaborators({ project, role: myRole, collaborators: in
         onCancel={() => setTransferTarget(null)}
       />
     </ProjectShell>
+  );
+}
+
+function DevicesCard({ project, devices: initial, canEdit }) {
+  const toast = useToast();
+  const [devices, setDevices] = useState(initial);
+  const [copiedId, setCopiedId] = useState(null);
+
+  function copyUdid(device) {
+    navigator.clipboard.writeText(device.udid);
+    setCopiedId(device.id);
+    toast.success("UDID copied.");
+    setTimeout(() => setCopiedId(null), 1500);
+  }
+
+  async function removeDevice(device) {
+    const res = await fetch("/api/devices/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, deviceId: device.id }),
+    });
+    if (res.ok) {
+      setDevices((d) => d.filter((x) => x.id !== device.id));
+    } else {
+      toast.error("Couldn't remove that device.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Smartphone size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Registered devices</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Testers submit their UDID at{" "}
+        <code className="rounded bg-subtle px-1 py-0.5 text-xs">/register-device/{project.id}</code> — copy
+        them in here when regenerating an Ad Hoc provisioning profile.
+      </p>
+
+      {devices.length === 0 ? (
+        <p className="mt-3 text-sm text-ink-tertiary">No devices submitted yet.</p>
+      ) : (
+        <div className="mt-4 divide-y divide-border border-t border-border">
+          {devices.map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate font-mono text-sm text-ink-primary">{d.udid}</p>
+                <p className="truncate text-xs text-ink-tertiary">
+                  {d.device_name || "Unnamed device"}
+                  {d.submitted_by_email ? ` · ${d.submitted_by_email}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button size="sm" variant="secondary" onClick={() => copyUdid(d)}>
+                  {copiedId === d.id ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+                  Copy
+                </Button>
+                {canEdit && (
+                  <button
+                    onClick={() => removeDevice(d)}
+                    title="Remove device"
+                    className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+                  >
+                    <Trash2 size={14} strokeWidth={2.25} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -388,7 +470,12 @@ function TokensCard({ project, tokens: initial }) {
       )}
 
       <div className="mt-4 rounded-md bg-subtle px-3.5 py-3">
-        <p className="text-xs font-medium text-ink-secondary">Example: publish from CI</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-ink-secondary">Example: publish from CI</p>
+          <a href="/docs/api" target="_blank" rel="noreferrer" className="text-xs font-medium text-accent hover:text-accent-hover">
+            View API docs
+          </a>
+        </div>
         <pre className="mt-1.5 overflow-x-auto text-xs text-ink-tertiary">
 {`curl -X POST ${origin}/api/ci/releases/create \\
   -H "Authorization: Bearer qap_..." \\

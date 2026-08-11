@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import Card from "../ui/Card";
 import FormField from "../ui/FormField";
 import Input from "../ui/Input";
+import Select from "../ui/Select";
 import Textarea from "../ui/Textarea";
 import Button from "../ui/Button";
 import AppIcon from "./AppIcon";
@@ -37,6 +38,9 @@ export default function NewReleaseDialog({ project, open, onClose }) {
   const [bundleId, setBundleId] = useState("");
   const [webUrl, setWebUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [channel, setChannel] = useState("production");
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [aiCleaning, setAiCleaning] = useState(false);
   const [file, setFile] = useState(null);
   const [filePath, setFilePath] = useState(null);
   const [iconPreview, setIconPreview] = useState(null);
@@ -151,6 +155,24 @@ export default function NewReleaseDialog({ project, open, onClose }) {
     }
   }
 
+  async function cleanUpNotes() {
+    if (!notes.trim()) return;
+    setAiCleaning(true);
+    try {
+      const res = await fetch("/api/releases/ai-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes, projectId: project.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.notes) setNotes(data.notes);
+    } catch (e) {
+      // best-effort — leave the notes as typed on failure
+    } finally {
+      setAiCleaning(false);
+    }
+  }
+
   function validate() {
     const next = {};
     if (!version.trim()) next.version = "Version is required.";
@@ -201,6 +223,8 @@ export default function NewReleaseDialog({ project, open, onClose }) {
       formData.append("bundleId", bundleId);
       formData.append("appName", appName);
       formData.append("notes", notes);
+      formData.append("channel", channel);
+      if (scheduledFor) formData.append("scheduledFor", new Date(scheduledFor).toISOString());
       formData.append("replace", replace ? "true" : "false");
       if (platform === "web") formData.append("webUrl", webUrl);
       if (filePath) formData.append("filePath", filePath);
@@ -323,6 +347,24 @@ export default function NewReleaseDialog({ project, open, onClose }) {
               </FormField>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Channel" htmlFor="channel" hint="Testers can install &quot;latest beta&quot; etc.">
+                <Select id="channel" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <option value="internal">Internal</option>
+                  <option value="beta">Beta</option>
+                  <option value="production">Production</option>
+                </Select>
+              </FormField>
+              <FormField label="Publish at" htmlFor="scheduledFor" hint="Optional — leave blank to publish now">
+                <Input
+                  id="scheduledFor"
+                  type="datetime-local"
+                  value={scheduledFor}
+                  onChange={(e) => setScheduledFor(e.target.value)}
+                />
+              </FormField>
+            </div>
+
             {platform !== "web" && (
               <FormField
                 label={platform === "ios" ? "Bundle ID" : "Package name"}
@@ -440,6 +482,14 @@ export default function NewReleaseDialog({ project, open, onClose }) {
                 rows={4}
                 placeholder="What changed in this release..."
               />
+              <button
+                type="button"
+                onClick={cleanUpNotes}
+                disabled={!notes.trim() || aiCleaning}
+                className="mt-1.5 self-start text-xs font-medium text-accent hover:text-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {aiCleaning ? "Cleaning up…" : "✨ Clean up with AI"}
+              </button>
             </FormField>
           </Card>
 

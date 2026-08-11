@@ -1,254 +1,195 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createServiceClient } from "../../lib/supabase/server";
-import { detectEnv, safariRedirectUrl } from "../../lib/browserDetect";
+import { activateScheduledReleaseIfDue } from "../../lib/activateScheduledRelease";
+import { isExpired, isRolledOut, needsPin } from "../../lib/shareGating";
+import { buildShareProps } from "../../lib/buildShareProps";
 import Logo from "../../components/layout/Logo";
 import ThemeToggle from "../../components/ThemeToggle";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
-import PlatformBadge from "../../components/ui/PlatformBadge";
-import AppIcon from "../../components/release/AppIcon";
+import Input from "../../components/ui/Input";
+import EmptyState from "../../components/ui/EmptyState";
+import InstallCard from "../../components/release/InstallCard";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
 import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import ReportIssueCard from "../../components/release/ReportIssueCard";
-import { getExpiryStatus } from "../../lib/provisioning";
-import {
-  CalendarClock,
-  CircleAlert,
-  Compass,
-  Download,
-  MonitorSmartphone,
-  ShieldCheck,
-  TriangleAlert,
-} from "lucide-react";
+import { Clock, Lock, TimerOff } from "lucide-react";
 
-export async function getServerSideProps({ params, req }) {
+export async function getServerSideProps({ params, req, res }) {
   const supabase = createServiceClient();
-  const { data: release } = await supabase
+  let { data: release } = await supabase
     .from("releases")
     .select("*, projects(name)")
     .eq("id", params.id)
-    .eq("status", "published")
     .single();
 
   if (!release) return { notFound: true };
 
-  // project_id is null for public, no-login uploads — .eq(null) would
-  // otherwise match every other anonymous upload, not just this one.
-  let otherVersions = [];
-  if (release.project_id) {
-    const { data } = await supabase
-      .from("releases")
-      .select("id, platform, version, build_number, created_at, notes")
-      .eq("project_id", release.project_id)
-      .eq("status", "published")
-      .neq("id", release.id)
-      .order("created_at", { ascending: false })
-      .limit(10);
-    otherVersions = data || [];
+  if (release.status === "scheduled") {
+    release = await activateScheduledReleaseIfDue(supabase, release, req);
+  }
+  if (release.status !== "published") return { notFound: true };
+
+  if (isExpired(release)) {
+    return { props: { gate: "expired" } };
+  }
+  if (!isRolledOut(release, req, res)) {
+    let fallback = null;
+    if (release.project_id) {
+      const { data } = await supabase
+        .from("releases")
+        .select("id")
+        .eq("project_id", release.project_id)
+        .eq("platform", release.platform)
+        .eq("channel", release.channel)
+        .eq("status", "published")
+        .neq("id", release.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      fallback = data?.id || null;
+    }
+    return { props: { gate: "rollout", fallbackReleaseId: fallback } };
+  }
+  if (needsPin(release)) {
+    return {
+      props: {
+        gate: "pin",
+        releaseId: release.id,
+        // Enough to render the branded PIN screen — no install fields.
+        preview: {
+          app_name: release.app_name,
+          app_icon: release.app_icon,
+          version: release.version,
+          build_number: release.build_number,
+        },
+      },
+    };
   }
 
-  const protocol = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers.host;
-
-  let itmsLink = null;
-
-  if (release.platform === "ios") {
-    const manifestUrl = `${protocol}://${host}/api/manifest?releaseId=${release.id}`;
-    itmsLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
-  }
-
-  return { props: { release, itmsLink, otherVersions: otherVersions || [] } };
+  const { itmsLink, otherVersions } = await buildShareProps(supabase, release, req);
+  return { props: { gate: null, release, itmsLink, otherVersions } };
 }
 
-export default function SharePage({ release, itmsLink, otherVersions }) {
-  const [env, setEnv] = useState(null);
-  const appName = release.app_name || release.projects?.name || "Untitled build";
-
-  useEffect(() => {
-    setEnv(detectEnv());
-  }, []);
-
-  const showInstallButton =
-    release.platform !== "ios" || !env || (env.isSafari && !env.isNonSafariIOSBrowser);
-  const expiry = release.platform === "ios" ? getExpiryStatus(release.provisioning_info) : null;
-
+function PageChrome({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <div className="flex items-center justify-between px-4 py-4 sm:px-6">
         <Logo compact />
         <ThemeToggle />
       </div>
-
       <div className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:items-center sm:pt-0">
-        <div className="w-full max-w-[420px]">
-          <Card className="flex flex-col gap-5 p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <AppIcon src={release.app_icon} fallbackLabel={appName} />
-                <div className="min-w-0">
-                  <h1 className="truncate text-lg font-semibold text-ink-primary">{appName}</h1>
-                  <p className="mt-0.5 text-sm text-ink-tertiary">
-                    v{release.version}
-                    {release.build_number ? ` (${release.build_number})` : ""}
-                  </p>
-                </div>
-              </div>
-              <PlatformBadge platform={release.platform} className="shrink-0" />
-            </div>
-
-            {env?.isNonSafariIOSBrowser && release.platform === "ios" && (
-              <div className="flex flex-col gap-2.5 rounded-md bg-warning-subtle px-3.5 py-3.5 text-sm text-warning-subtle-fg">
-                <div className="flex gap-2.5">
-                  <Compass size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-medium">Open this in Safari to install</p>
-                    <p className="mt-0.5 text-ink-secondary">
-                      iOS only allows app installs from Safari. Tap below to reopen this page there.
-                    </p>
-                  </div>
-                </div>
-                <a href={safariRedirectUrl()}>
-                  <Button size="sm" className="w-full">
-                    Open in Safari
-                  </Button>
-                </a>
-                <p className="text-xs text-ink-secondary">
-                  If nothing happens, tap the <strong>⋯</strong> or share icon in your browser's
-                  toolbar and choose <strong>Open in Safari</strong>.
-                </p>
-              </div>
-            )}
-
-            {release.platform === "ios" && release.provisioning_info?.type === "Enterprise" && (
-              <div className="flex gap-2.5 rounded-md bg-success-subtle px-3.5 py-3 text-sm text-success-subtle-fg">
-                <ShieldCheck size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium">Enterprise-signed — installs on any iPhone</p>
-                  <p className="mt-0.5 text-ink-secondary">
-                    No UDID registration needed. Just tap Install.
-                  </p>
-                </div>
-              </div>
-            )}
-            {release.platform === "ios" &&
-              (release.provisioning_info?.type === "Development" ||
-                release.provisioning_info?.type === "Ad Hoc") && (
-                <div className="flex gap-2.5 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
-                  <TriangleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-medium">Signed for registered devices only</p>
-                    <p className="mt-0.5 text-ink-secondary">
-                      This build uses a {release.provisioning_info.type} profile{" "}
-                      {release.provisioning_info.name ? `(${release.provisioning_info.name})` : ""} with{" "}
-                      {release.provisioning_info.deviceCount} registered device
-                      {release.provisioning_info.deviceCount === 1 ? "" : "s"}. If you get
-                      &quot;Unable to Download App&quot;, this device isn&apos;t registered yet.
-                    </p>
-                  </div>
-                </div>
-              )}
-            {release.platform === "ios" &&
-              !release.provisioning_info?.type &&
-              release.ota_ready === false && (
-                <div className="flex gap-2.5 rounded-md bg-danger-subtle px-3.5 py-3 text-sm text-danger-subtle-fg">
-                  <CircleAlert size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                  <div>
-                    <p className="font-medium">Signing couldn&apos;t be verified for OTA install</p>
-                    <p className="mt-0.5 text-ink-secondary">
-                      {release.provisioning_info?.error ? `${release.provisioning_info.error}. ` : ""}
-                      Ask the release owner to rebuild with an Ad Hoc or Enterprise profile.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-            {expiry && expiry.status !== "ok" && (
-              <div
-                className={`flex gap-2.5 rounded-md px-3.5 py-3 text-sm ${
-                  expiry.status === "expired"
-                    ? "bg-danger-subtle text-danger-subtle-fg"
-                    : "bg-warning-subtle text-warning-subtle-fg"
-                }`}
-              >
-                <CalendarClock size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium">
-                    {expiry.status === "expired"
-                      ? "Provisioning profile has expired"
-                      : "Provisioning profile expiring soon"}
-                  </p>
-                  <p className="mt-0.5 text-ink-secondary">
-                    {expiry.status === "expired"
-                      ? "This build can no longer be installed. Ask the release owner to upload a new version."
-                      : `Installs will stop working in ${expiry.daysLeft} day${expiry.daysLeft === 1 ? "" : "s"}.`}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {env?.isDesktopModeIPad && release.platform === "ios" && (
-              <div className="flex gap-2.5 rounded-md bg-accent-subtle px-3.5 py-3 text-sm text-accent-subtle-fg">
-                <MonitorSmartphone size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium">Switch to mobile site to install</p>
-                  <p className="mt-0.5 text-ink-secondary">
-                    This page is loading in Desktop Site mode. In Safari, tap the{" "}
-                    <strong>ᴀᴀ</strong> icon in the address bar → <strong>Request Mobile Website</strong>,
-                    then tap Install again.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div>
-              {release.platform === "ios" && showInstallButton && (
-                <a href={itmsLink} className="block">
-                  <Button className="w-full" size="md">
-                    <Download size={15} strokeWidth={2.25} />
-                    Install
-                  </Button>
-                </a>
-              )}
-              {release.platform === "android" && release.file_path && (
-                <a href={`/api/download/${release.id}`} className="block">
-                  <Button className="w-full" size="md">
-                    <Download size={15} strokeWidth={2.25} />
-                    Install
-                  </Button>
-                </a>
-              )}
-              {release.platform === "web" && release.web_url && (
-                <a href={`/api/download/${release.id}`} target="_blank" rel="noreferrer" className="block">
-                  <Button className="w-full" size="md">
-                    Open app
-                  </Button>
-                </a>
-              )}
-              <p className="mt-2 text-center text-xs text-ink-tertiary">
-                {release.platform === "ios" &&
-                  "Requires this device's UDID to be registered in the app's provisioning profile."}
-                {release.platform === "android" &&
-                  "Downloads the APK — you may need to allow installs from unknown sources."}
-              </p>
-            </div>
-
-            {release.notes && (
-              <div className="border-t border-border pt-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">
-                  Release notes
-                </h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-ink-secondary">{release.notes}</p>
-              </div>
-            )}
-          </Card>
-
-          <div className="mt-5 flex flex-col gap-5">
-            {release.project_id && <ReportIssueCard releaseId={release.id} />}
-            <AppDetailsCard release={release} />
-            <OtherVersionsCard releases={otherVersions} basePath="/share" />
-          </div>
-        </div>
+        <div className="w-full max-w-[420px]">{children}</div>
       </div>
     </div>
+  );
+}
+
+function PinGate({ releaseId, preview, onUnlocked }) {
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const appName = preview.app_name || "this build";
+
+  async function submit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    const res = await fetch("/api/public/verify-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ releaseId, pin }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setSubmitting(false);
+    if (res.ok) {
+      onUnlocked(data);
+    } else {
+      setError(data.error || "Couldn't verify that PIN.");
+    }
+  }
+
+  return (
+    <Card className="flex flex-col items-center gap-4 p-6 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
+        <Lock size={18} strokeWidth={2} />
+      </span>
+      <div>
+        <h1 className="text-lg font-semibold text-ink-primary">Enter PIN to install {appName}</h1>
+        <p className="mt-1 text-sm text-ink-tertiary">
+          v{preview.version}
+          {preview.build_number ? ` (${preview.build_number})` : ""}
+        </p>
+      </div>
+      <form onSubmit={submit} className="flex w-full flex-col gap-3">
+        <Input
+          type="text"
+          inputMode="numeric"
+          placeholder="PIN"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          error={!!error}
+          autoFocus
+        />
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <Button type="submit" loading={submitting} disabled={!pin.trim()} className="w-full">
+          Unlock
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+export default function SharePage(props) {
+  const [unlocked, setUnlocked] = useState(null);
+
+  if (props.gate === "expired") {
+    return (
+      <PageChrome>
+        <EmptyState icon={TimerOff} title="This link has expired" description="Ask the release owner for a new link." />
+      </PageChrome>
+    );
+  }
+
+  if (props.gate === "rollout") {
+    return (
+      <PageChrome>
+        <EmptyState
+          icon={Clock}
+          title="This release is rolling out gradually"
+          description="Check back soon — it's not available on this device yet."
+          action={
+            props.fallbackReleaseId && (
+              <a href={`/share/${props.fallbackReleaseId}`}>
+                <Button variant="secondary">Install the previous version</Button>
+              </a>
+            )
+          }
+        />
+      </PageChrome>
+    );
+  }
+
+  if (props.gate === "pin" && !unlocked) {
+    return (
+      <PageChrome>
+        <PinGate releaseId={props.releaseId} preview={props.preview} onUnlocked={setUnlocked} />
+      </PageChrome>
+    );
+  }
+
+  const release = unlocked?.release || props.release;
+  const itmsLink = unlocked?.itmsLink ?? props.itmsLink;
+  const otherVersions = unlocked?.otherVersions ?? props.otherVersions ?? [];
+
+  return (
+    <PageChrome>
+      <InstallCard release={release} itmsLink={itmsLink} />
+      <div className="mt-5 flex flex-col gap-5">
+        {release.project_id && <ReportIssueCard releaseId={release.id} />}
+        <AppDetailsCard release={release} />
+        <OtherVersionsCard releases={otherVersions} basePath="/share" />
+      </div>
+    </PageChrome>
   );
 }

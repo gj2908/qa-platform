@@ -8,6 +8,7 @@ create table projects (
   name text not null,
   description text,
   webhook_url text, -- optional Slack-incoming-webhook-compatible URL, notified on publish
+  require_approval boolean not null default false, -- non-owner publishes land as pending_review
   created_by uuid references auth.users(id),
   created_at timestamptz default now()
 );
@@ -39,6 +40,9 @@ create table tasks (
   position int default 0,
   assignee_email text,
   due_date date,
+  source text not null default 'manual' check (source in ('manual', 'tester_feedback')),
+  ai_category text check (ai_category is null or ai_category in ('bug', 'feature', 'question')),
+  ai_severity text check (ai_severity is null or ai_severity in ('low', 'medium', 'high')),
   created_by uuid references auth.users(id),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -62,8 +66,15 @@ create table releases (
   device_family text,        -- extracted from the ipa (e.g. "iPhone, iPad")
   uploader_email text,       -- set for releases from the public, no-login upload landing page
   install_count integer not null default 0, -- incremented server-side (manifest.js / api/download)
+  channel text not null default 'production' check (channel in ('internal', 'beta', 'production')),
+  share_expires_at timestamptz,  -- optional share-link expiry
+  share_pin_hash text,           -- optional share-link PIN, sha256 hash only
+  rollout_percent integer check (rollout_percent is null or (rollout_percent >= 1 and rollout_percent <= 99)),
+  scheduled_for timestamptz,     -- lazily activated, see lib/activateScheduledRelease.js
+  approved_by uuid references auth.users(id),
+  approved_at timestamptz,
   status text not null default 'published'
-    check (status in ('draft', 'published')),
+    check (status in ('draft', 'published', 'scheduled', 'pending_review')),
   created_by uuid references auth.users(id),
   created_at timestamptz default now()
 );
@@ -156,6 +167,42 @@ as $$
   update releases set install_count = install_count + 1 where id = p_release_id;
 $$;
 
+-- ── Registered devices ───────────────────────────────────────
+-- Manually-submitted iOS device UDIDs, so a developer doesn't have to
+-- email/Slack testers to ask for theirs before regenerating an Ad Hoc
+-- provisioning profile. Submitted anonymously via a public form.
+create table registered_devices (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  udid text not null,
+  device_name text,
+  submitted_by_email text,
+  created_at timestamptz default now()
+);
+
+-- ── Install clicks ───────────────────────────────────────────
+-- Honestly "install clicks," not confirmed installs — the actual
+-- device-triggered download is never authenticated.
+create table release_installs (
+  id uuid primary key default gen_random_uuid(),
+  release_id uuid not null references releases(id) on delete cascade,
+  email text not null,
+  clicked_at timestamptz default now()
+);
+
+-- ── Install events ───────────────────────────────────────────
+-- Per-event log (vs. releases.install_count's running total) powering
+-- the Overview page's install-trend chart and version-adoption breakdown.
+create table install_events (
+  id uuid primary key default gen_random_uuid(),
+  release_id uuid not null references releases(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  platform text not null,
+  created_at timestamptz default now()
+);
+
+create index install_events_project_created_idx on install_events (project_id, created_at);
+
 -- ── Role lookup helper ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
 -- queries) so this bypasses project_collaborators' own RLS instead of
@@ -246,6 +293,27 @@ alter table project_activity enable row level security;
 alter table notification_read_state enable row level security;
 alter table api_tokens enable row level security;
 alter table project_favorites enable row level security;
+alter table registered_devices enable row level security;
+alter table release_installs enable row level security;
+alter table install_events enable row level security;
+
+create policy "members read devices" on registered_devices
+  for select using (project_role(project_id) is not null);
+create policy "editor+ manage devices" on registered_devices
+  for all using (project_role(project_id) in ('owner', 'editor'))
+  with check (project_role(project_id) in ('owner', 'editor'));
+
+create policy "members read install clicks" on release_installs
+  for select using (
+    exists (
+      select 1 from releases
+      where releases.id = release_installs.release_id
+        and project_role(releases.project_id) is not null
+    )
+  );
+
+create policy "members read install events" on install_events
+  for select using (project_role(project_id) is not null);
 
 create policy "self read own read-state" on notification_read_state
   for select using (auth.jwt() ->> 'email' = email);

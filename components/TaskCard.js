@@ -1,6 +1,12 @@
-import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2 } from "lucide-react";
 import { STATUS_META, STATUS_ORDER } from "./ui/status";
 import { getAvatarColor } from "../lib/avatarColor";
+
+const AI_CATEGORY_TONE = {
+  bug: "bg-danger-subtle text-danger-subtle-fg",
+  feature: "bg-accent-subtle text-accent-subtle-fg",
+  question: "bg-subtle text-ink-tertiary",
+};
 
 function dueDateStatus(dueDate) {
   if (!dueDate) return null;
@@ -44,6 +50,17 @@ export default function TaskCard({ task, assigneeName, onMove, onDelete, onOpen,
 
       {task.description && (
         <p className="line-clamp-2 text-xs leading-relaxed text-ink-tertiary">{task.description}</p>
+      )}
+
+      {task.ai_category && (
+        <span
+          title="AI-suggested — not verified by a person"
+          className={`inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${AI_CATEGORY_TONE[task.ai_category] || AI_CATEGORY_TONE.question}`}
+        >
+          <Sparkles size={10} strokeWidth={2.25} />
+          {task.ai_category}
+          {task.ai_severity ? ` · ${task.ai_severity}` : ""}
+        </span>
       )}
 
       {(task.assignee_email || dueStatus) && (

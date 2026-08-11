@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   const supabase = createServiceClient();
   const { data: release } = await supabase
     .from("releases")
-    .select("platform, file_path, web_url")
+    .select("platform, file_path, web_url, project_id")
     .eq("id", id)
     .eq("status", "published")
     .single();
@@ -39,6 +39,11 @@ export default async function handler(req, res) {
   }
 
   await supabase.rpc("increment_install_count", { p_release_id: id });
+  if (release.project_id) {
+    await supabase
+      .from("install_events")
+      .insert({ release_id: id, project_id: release.project_id, platform: release.platform });
+  }
 
   res.redirect(302, targetUrl);
 }

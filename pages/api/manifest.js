@@ -43,6 +43,15 @@ export default async function handler(req, res) {
     () => {},
     () => {}
   );
+  if (release.project_id) {
+    supabase
+      .from("install_events")
+      .insert({ release_id: releaseId, project_id: release.project_id, platform: "ios" })
+      .then(
+        () => {},
+        () => {}
+      );
+  }
 
   // Shown on iOS's native "Install App" confirmation popup alongside the
   // title below — without these, that system dialog falls back to a

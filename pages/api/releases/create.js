@@ -40,6 +40,8 @@ export default async function handler(req, res) {
   const appNameInput = get("appName") || null;
   const replace = get("replace") === "true" || get("replace") === "1";
   const providedFilePath = get("filePath");
+  const channel = get("channel") || "production";
+  const scheduledFor = get("scheduledFor") || null;
 
   if (!projectId) {
     res.status(400).json({ error: "Missing required fields" });
@@ -72,11 +74,14 @@ export default async function handler(req, res) {
     providedFilePath,
     createdByUserId: user.id,
     actorEmail: user.email,
+    channel,
+    scheduledFor,
+    publisherRole: role,
   });
 
   if (!result.ok) {
     res.status(result.status).json(result.body);
     return;
   }
-  res.status(200).json({ releaseId: result.releaseId });
+  res.status(200).json({ releaseId: result.releaseId, status: result.status });
 }
