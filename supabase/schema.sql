@@ -9,7 +9,7 @@ create table projects (
   description text,
   webhook_url text, -- optional Slack-incoming-webhook-compatible URL, notified on publish
   require_approval boolean not null default false, -- non-owner publishes land as pending_review
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -43,7 +43,7 @@ create table tasks (
   source text not null default 'manual' check (source in ('manual', 'tester_feedback')),
   ai_category text check (ai_category is null or ai_category in ('bug', 'feature', 'question')),
   ai_severity text check (ai_severity is null or ai_severity in ('low', 'medium', 'high')),
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -71,11 +71,11 @@ create table releases (
   share_pin_hash text,           -- optional share-link PIN, sha256 hash only
   rollout_percent integer check (rollout_percent is null or (rollout_percent >= 1 and rollout_percent <= 99)),
   scheduled_for timestamptz,     -- lazily activated, see lib/activateScheduledRelease.js
-  approved_by uuid references auth.users(id),
+  approved_by uuid references auth.users(id) on delete set null,
   approved_at timestamptz,
   status text not null default 'published'
     check (status in ('draft', 'published', 'scheduled', 'pending_review')),
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -142,7 +142,7 @@ create table api_tokens (
   token_hash text not null unique,
   token_prefix text not null,  -- first 8 chars, shown in the UI for identification
   label text,
-  created_by uuid references auth.users(id),
+  created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   last_used_at timestamptz
 );
