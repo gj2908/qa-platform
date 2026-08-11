@@ -230,7 +230,7 @@ export default function NewRelease({ project }) {
     <AppShell
       project={project}
       breadcrumbs={[
-        { label: "Projects", href: "/" },
+        { label: "Projects", href: "/dashboard" },
         { label: project.name },
         { label: "New release" },
       ]}

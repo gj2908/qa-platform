@@ -94,6 +94,7 @@ export default async function handler(req, res) {
   let minOsVersion = null;
   let fileSizeBytes = null;
   let detectedBundleId = null;
+  let deviceFamily = null;
 
   if (platform !== "web" && filePath) {
     let buildBuffer = null;
@@ -130,6 +131,7 @@ export default async function handler(req, res) {
       minOsVersion = appInfo.minOsVersion;
       fileSizeBytes = appInfo.fileSizeBytes;
       detectedBundleId = appInfo.bundleId;
+      deviceFamily = appInfo.deviceFamily;
     }
   }
 
@@ -198,6 +200,7 @@ export default async function handler(req, res) {
       app_icon: appIcon,
       min_os_version: minOsVersion,
       file_size_bytes: fileSizeBytes,
+      device_family: deviceFamily,
       status: "published",
       created_by: user.id,
     })

@@ -1,19 +1,23 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Kanban, ClipboardList, Rocket, LayoutGrid, X } from "lucide-react";
+import { Kanban, ClipboardList, Rocket, X } from "lucide-react";
 import Logo from "./Logo";
 import ProjectSwitcher from "./ProjectSwitcher";
 
 export default function Sidebar({ project, mobileOpen, onClose }) {
   const router = useRouter();
 
+  // The project switcher below already covers "go to a project" / "go to
+  // the dashboard" — a project's own Board/Changelog/New release links only
+  // make sense once a project is selected, so there's nothing to show here
+  // otherwise (avoids a redundant "Projects" link duplicating the switcher).
   const navItems = project
     ? [
         { href: `/projects/${project.id}/board`, label: "Board", icon: Kanban },
         { href: `/projects/${project.id}/changelog`, label: "Changelog", icon: ClipboardList },
         { href: `/projects/${project.id}/new-release`, label: "New release", icon: Rocket },
       ]
-    : [{ href: "/", label: "Projects", icon: LayoutGrid }];
+    : [];
 
   return (
     <>
@@ -30,7 +34,7 @@ export default function Sidebar({ project, mobileOpen, onClose }) {
         }`}
       >
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
-          <Link href="/">
+          <Link href="/dashboard">
             <Logo />
           </Link>
           <button
@@ -45,28 +49,30 @@ export default function Sidebar({ project, mobileOpen, onClose }) {
           <ProjectSwitcher currentProject={project} />
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3 thin-scrollbar">
-          <ul className="flex flex-col gap-0.5">
-            {navItems.map(({ href, label, icon: Icon }) => {
-              const active = router.asPath === href || router.asPath.startsWith(href + "?");
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
-                      active
-                        ? "bg-accent-subtle text-accent-subtle-fg"
-                        : "text-ink-secondary hover:bg-hover hover:text-ink-primary"
-                    }`}
-                  >
-                    <Icon size={16} strokeWidth={2} />
-                    {label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        {navItems.length > 0 && (
+          <nav className="flex-1 overflow-y-auto px-3 py-3 thin-scrollbar">
+            <ul className="flex flex-col gap-0.5">
+              {navItems.map(({ href, label, icon: Icon }) => {
+                const active = router.asPath === href || router.asPath.startsWith(href + "?");
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
+                        active
+                          ? "bg-accent-subtle text-accent-subtle-fg"
+                          : "text-ink-secondary hover:bg-hover hover:text-ink-primary"
+                      }`}
+                    >
+                      <Icon size={16} strokeWidth={2} />
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )}
       </aside>
     </>
   );

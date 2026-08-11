@@ -29,7 +29,7 @@ create table tasks (
 -- ── Releases (changelog + QA distribution) ─────────────────
 create table releases (
   id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
+  project_id uuid references projects(id) on delete cascade, -- null for public, no-login uploads
   platform text not null check (platform in ('ios', 'android', 'web')),
   version text not null,
   build_number text,
@@ -37,10 +37,12 @@ create table releases (
   notes text,               -- release notes, markdown
   file_path text,           -- storage path, for ios/android
   web_url text,             -- direct link, for web platform
-  app_name text,             -- extracted from the ipa/apk, or user-entered fallback
-  app_icon text,             -- base64 data URI, extracted from the ipa/apk
+  app_name text,             -- extracted from the ipa/apk (or site title), or user-entered fallback
+  app_icon text,             -- base64 data URI, extracted from the ipa/apk or site favicon
   min_os_version text,       -- extracted from the ipa/apk
   file_size_bytes bigint,    -- extracted from the ipa/apk
+  device_family text,        -- extracted from the ipa (e.g. "iPhone, iPad")
+  uploader_email text,       -- set for releases from the public, no-login upload landing page
   status text not null default 'published'
     check (status in ('draft', 'published')),
   created_by uuid references auth.users(id),

@@ -19,14 +19,21 @@ export async function getServerSideProps({ params, req, res }) {
 
   if (!release) return { notFound: true };
 
-  const { data: otherVersions } = await supabase
-    .from("releases")
-    .select("id, platform, version, build_number, created_at")
-    .eq("project_id", release.project_id)
-    .eq("status", "published")
-    .neq("id", release.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
+  // project_id is null for public, no-login uploads — there's no sibling
+  // "other versions" grouping for those (and .eq(null) would otherwise
+  // match every other anonymous upload, not just this uploader's).
+  let otherVersions = [];
+  if (release.project_id) {
+    const { data } = await supabase
+      .from("releases")
+      .select("id, platform, version, build_number, created_at, notes")
+      .eq("project_id", release.project_id)
+      .eq("status", "published")
+      .neq("id", release.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    otherVersions = data || [];
+  }
 
   const service = createServiceClient();
   const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -100,7 +107,7 @@ function SigningNotice({ release }) {
 export default function Distribute({ release, itmsLink, androidUrl, otherVersions }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
-  const appName = release.app_name || release.projects?.name;
+  const appName = release.app_name || release.projects?.name || "Untitled build";
 
   function copyLink() {
     navigator.clipboard.writeText(shareUrl);
@@ -108,15 +115,16 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
     setTimeout(() => setCopied(false), 1500);
   }
 
-  return (
-    <AppShell
-      project={release.projects}
-      breadcrumbs={[
-        { label: "Projects", href: "/" },
+  const breadcrumbs = release.project_id
+    ? [
+        { label: "Projects", href: "/dashboard" },
         { label: release.projects?.name, href: `/projects/${release.project_id}/changelog` },
         { label: "Distribute" },
-      ]}
-    >
+      ]
+    : [{ label: "Dashboard", href: "/dashboard" }, { label: "Distribute" }];
+
+  return (
+    <AppShell project={release.projects} breadcrumbs={breadcrumbs}>
       <div className="mx-auto flex max-w-md flex-col gap-5">
         <Card className="flex flex-col gap-5 p-6">
           <div className="flex items-center justify-between gap-3">

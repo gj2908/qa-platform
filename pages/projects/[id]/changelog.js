@@ -18,6 +18,20 @@ import {
   Trash2,
 } from "lucide-react";
 import { relativeTime } from "../../../lib/format";
+import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
+
+const PLATFORM_ORDER = ["ios", "android", "web"];
+
+function groupReleasesByPlatform(releases) {
+  const groups = {};
+  for (const r of releases) {
+    (groups[r.platform] ||= []).push(r);
+  }
+  return PLATFORM_ORDER.filter((p) => groups[p]?.length).map((platform) => ({
+    platform,
+    releases: groups[platform],
+  }));
+}
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -97,8 +111,11 @@ function ChangelogRow({ release, onDelete }) {
 
       {release.notes && (
         <div>
+          <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-tertiary">
+            Build notes
+          </h4>
           <p
-            className={`whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary ${
+            className={`mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary ${
               !expanded && isLong ? "line-clamp-2" : ""
             }`}
           >
@@ -145,7 +162,7 @@ export default function Changelog({ project, releases }) {
   return (
     <AppShell
       project={project}
-      breadcrumbs={[{ label: "Projects", href: "/" }, { label: project.name }, { label: "Changelog" }]}
+      breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Changelog" }]}
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -182,10 +199,27 @@ export default function Changelog({ project, releases }) {
             }
           />
         ) : (
-          <div className="divide-y divide-border rounded-lg border border-border bg-surface">
-            {releases.map((r) => (
-              <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} />
-            ))}
+          <div className="flex flex-col gap-6">
+            {groupReleasesByPlatform(releases).map(({ platform, releases: group }) => {
+              const meta = PLATFORM_META[platform];
+              const Icon = meta.icon;
+              return (
+                <div key={platform}>
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <Icon size={14} strokeWidth={2.25} className="text-ink-tertiary" />
+                    <h2 className="text-sm font-semibold text-ink-primary">{meta.label} builds</h2>
+                    <span className="rounded-full border border-border bg-subtle px-1.5 py-0.5 text-xs font-medium leading-none text-ink-tertiary">
+                      {group.length}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-border rounded-lg border border-border bg-surface">
+                    {group.map((r) => (
+                      <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

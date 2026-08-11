@@ -48,7 +48,7 @@ export default function ProjectSwitcher({ currentProject }) {
       {open && (
         <div className="absolute left-0 top-full z-30 mt-1.5 w-64 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
           <Link
-            href="/"
+            href="/dashboard"
             onClick={() => setOpen(false)}
             className="flex items-center justify-between rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
           >

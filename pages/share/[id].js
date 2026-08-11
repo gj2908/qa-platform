@@ -29,14 +29,20 @@ export async function getServerSideProps({ params, req }) {
 
   if (!release) return { notFound: true };
 
-  const { data: otherVersions } = await supabase
-    .from("releases")
-    .select("id, platform, version, build_number, created_at")
-    .eq("project_id", release.project_id)
-    .eq("status", "published")
-    .neq("id", release.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
+  // project_id is null for public, no-login uploads — .eq(null) would
+  // otherwise match every other anonymous upload, not just this one.
+  let otherVersions = [];
+  if (release.project_id) {
+    const { data } = await supabase
+      .from("releases")
+      .select("id, platform, version, build_number, created_at, notes")
+      .eq("project_id", release.project_id)
+      .eq("status", "published")
+      .neq("id", release.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    otherVersions = data || [];
+  }
 
   const protocol = req.headers["x-forwarded-proto"] || "https";
   const host = req.headers.host;
@@ -59,7 +65,7 @@ export async function getServerSideProps({ params, req }) {
 
 export default function SharePage({ release, itmsLink, androidUrl, otherVersions }) {
   const [env, setEnv] = useState(null);
-  const appName = release.app_name || release.projects?.name;
+  const appName = release.app_name || release.projects?.name || "Untitled build";
 
   useEffect(() => {
     setEnv(detectEnv());

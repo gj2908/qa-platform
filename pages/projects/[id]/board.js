@@ -66,7 +66,7 @@ export default function Board({ project, tasks: initialTasks }) {
   return (
     <AppShell
       project={project}
-      breadcrumbs={[{ label: "Projects", href: "/" }, { label: project.name }, { label: "Board" }]}
+      breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Board" }]}
     >
       <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

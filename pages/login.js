@@ -22,7 +22,7 @@ export default function Login() {
     setMessage("");
     setLoading(true);
     const supabase = createClient();
-    const redirectTo = router.query.redirectTo || "/";
+    const redirectTo = router.query.redirectTo || "/dashboard";
 
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({

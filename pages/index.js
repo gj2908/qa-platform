@@ -1,272 +1,261 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { createServerSupabase } from "../lib/supabase/server";
-import { createClient } from "../lib/supabase/client";
-import AppShell from "../components/layout/AppShell";
+import { useRouter } from "next/router";
+import Logo from "../components/layout/Logo";
+import ThemeToggle from "../components/ThemeToggle";
 import Card from "../components/ui/Card";
-import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import EmptyState from "../components/ui/EmptyState";
-import ConfirmDialog from "../components/ui/ConfirmDialog";
+import Textarea from "../components/ui/Textarea";
+import Button from "../components/ui/Button";
+import FormField from "../components/ui/FormField";
 import {
-  FolderKanban,
-  Kanban,
-  ClipboardList,
-  Rocket,
-  Plus,
-  ListTodo,
-  PackageCheck,
-  Ellipsis,
-  Trash2,
+  Apple,
+  CircleAlert,
+  CloudUpload,
+  FileCheck,
+  Globe,
+  Smartphone,
+  X,
 } from "lucide-react";
-import { relativeTime } from "../lib/format";
+import { formatBytes } from "../lib/format";
 
-export async function getServerSideProps({ req, res }) {
-  const supabase = createServerSupabase(req, res);
-  const { data: projects } = await supabase
-    .from("projects")
-    .select("*")
-    .order("created_at", { ascending: false });
+const PLATFORMS = [
+  { key: "ios", label: "iOS", hint: ".ipa", icon: Apple },
+  { key: "android", label: "Android", hint: ".apk / .aab", icon: Smartphone },
+  { key: "web", label: "Web app", hint: "link", icon: Globe },
+];
 
-  const { count: openTasksCount } = await supabase
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "done");
+export default function PublicLanding() {
+  const router = useRouter();
+  const [platform, setPlatform] = useState("ios");
+  const [email, setEmail] = useState("");
+  const [appName, setAppName] = useState("");
+  const [webUrl, setWebUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [file, setFile] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [error, setError] = useState("");
 
-  const { data: lastRelease } = await supabase
-    .from("releases")
-    .select("created_at")
-    .eq("status", "published")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return {
-    props: {
-      projects: projects || [],
-      stats: {
-        activeProjects: projects?.length || 0,
-        openTasks: openTasksCount || 0,
-        lastReleaseAt: lastRelease?.created_at || null,
-      },
-    },
-  };
-}
-
-export default function Dashboard({ projects, stats }) {
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
-
-  async function createProject(e) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setCreating(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    await supabase.from("projects").insert({ name, created_by: user.id });
-    window.location.reload();
+  function validate() {
+    const next = {};
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = "Enter a valid email address.";
+    if (platform === "web" && !webUrl.trim()) next.webUrl = "App URL is required.";
+    if (platform !== "web" && !file) next.file = "Choose a build file to upload.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
   }
 
-  async function confirmDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setDeleteError("");
-    const res = await fetch("/api/projects/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: deleteTarget.id }),
-    });
-    setDeleting(false);
-    if (res.ok) {
-      window.location.reload();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setDeleteError(data.error || "Couldn't delete this project.");
-      setDeleteTarget(null);
+  function handleFile(selected) {
+    if (!selected) return;
+    setFile(selected);
+    setErrors((e) => ({ ...e, file: undefined }));
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragActive(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) handleFile(dropped);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    if (!validate()) return;
+
+    setSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("email", email.trim());
+      formData.append("platform", platform);
+      formData.append("appName", appName);
+      formData.append("notes", notes);
+      if (platform === "web") formData.append("webUrl", webUrl);
+      if (file) formData.append("file", file);
+
+      const res = await fetch("/api/public/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+
+      router.push(`/share/${data.releaseId}`);
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+      setSubmitting(false);
     }
   }
 
   return (
-    <AppShell title="Projects" breadcrumbs={[{ label: "Projects" }]}>
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-ink-primary">Projects</h1>
-            <p className="mt-1 text-sm text-ink-tertiary">
-              An overview of everything your team is shipping and testing.
+    <div className="flex min-h-screen flex-col bg-canvas">
+      <div className="flex items-center justify-between px-4 py-4 sm:px-6">
+        <Logo />
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <Link
+            href="/login"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+
+      <div className="flex flex-1 items-start justify-center px-4 pb-16 pt-6 sm:pt-10">
+        <div className="w-full max-w-lg">
+          <div className="mb-6 text-center">
+            <h1 className="text-xl font-semibold text-ink-primary">Distribute your build</h1>
+            <p className="mt-1.5 text-sm text-ink-tertiary">
+              Drop an .ipa, .apk/.aab, or paste a link — get a shareable install page instantly. No
+              account needed.
             </p>
           </div>
-          <Button onClick={() => setShowForm((s) => !s)}>
-            <Plus size={15} strokeWidth={2.25} />
-            New project
-          </Button>
-        </div>
 
-        {deleteError && (
-          <p className="rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
-            {deleteError}
-          </p>
-        )}
+          <Card className="p-5 sm:p-6">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <FormField label="Platform">
+                <div className="grid grid-cols-3 gap-2">
+                  {PLATFORMS.map(({ key, label, hint, icon: Icon }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setPlatform(key);
+                        setErrors({});
+                      }}
+                      className={`flex flex-col items-center gap-1.5 rounded-md border px-2 py-3 text-center transition-colors ${
+                        platform === key
+                          ? "border-accent bg-accent-subtle text-accent-subtle-fg"
+                          : "border-border text-ink-secondary hover:bg-hover"
+                      }`}
+                    >
+                      <Icon size={17} strokeWidth={2} />
+                      <span className="text-xs font-medium">{label}</span>
+                      <span className="text-[11px] text-ink-tertiary">{hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </FormField>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatTile
-            icon={FolderKanban}
-            label="Active projects"
-            value={stats.activeProjects}
-          />
-          <StatTile icon={ListTodo} label="Open tasks" value={stats.openTasks} />
-          <StatTile
-            icon={PackageCheck}
-            label="Last release"
-            value={relativeTime(stats.lastReleaseAt)}
-          />
-        </div>
-
-        {showForm && (
-          <Card className="p-4">
-            <form onSubmit={createProject} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <label htmlFor="projectName" className="mb-1.5 block text-sm font-medium text-ink-primary">
-                  Project name
-                </label>
+              <FormField
+                label="Your email"
+                htmlFor="email"
+                required
+                error={errors.email}
+                hint="We'll tie this upload to your email — sign in with it later to see your uploads."
+              >
                 <Input
-                  id="projectName"
-                  placeholder="e.g. Mobile App"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoFocus
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  error={!!errors.email}
                 />
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" loading={creating} disabled={!name.trim()}>
-                  Create
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
-                  Cancel
-                </Button>
-              </div>
+              </FormField>
+
+              <FormField label="App name" htmlFor="appName" hint="Optional — auto-detected if left blank.">
+                <Input
+                  id="appName"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder="Auto-detected"
+                />
+              </FormField>
+
+              {platform === "web" ? (
+                <FormField label="App URL" htmlFor="webUrl" required error={errors.webUrl}>
+                  <Input
+                    id="webUrl"
+                    type="url"
+                    value={webUrl}
+                    onChange={(e) => setWebUrl(e.target.value)}
+                    placeholder="https://app.yourcompany.com"
+                    error={!!errors.webUrl}
+                  />
+                </FormField>
+              ) : (
+                <FormField
+                  label={`Build file (${platform === "ios" ? ".ipa" : ".apk / .aab"})`}
+                  required
+                  error={errors.file}
+                >
+                  {file ? (
+                    <div className="flex items-center gap-3 rounded-md border border-border bg-subtle px-3 py-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-success-subtle text-success-subtle-fg">
+                        <FileCheck size={15} strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-ink-primary">{file.name}</p>
+                        <p className="text-xs text-ink-tertiary">{formatBytes(file.size)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFile(null)}
+                        className="shrink-0 rounded p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={() => setDragActive(false)}
+                      onDrop={handleDrop}
+                      className={`flex cursor-pointer flex-col items-center gap-2 rounded-md border border-dashed px-4 py-8 text-center transition-colors hover:bg-hover ${
+                        dragActive ? "border-accent bg-accent-subtle" : errors.file ? "border-danger" : "border-border"
+                      }`}
+                    >
+                      <CloudUpload size={20} className="text-ink-tertiary" strokeWidth={1.75} />
+                      <span className="text-sm text-ink-secondary">
+                        <span className="font-medium text-accent">Choose a file</span> or drag it here
+                      </span>
+                      <input
+                        type="file"
+                        accept={platform === "ios" ? ".ipa" : ".apk,.aab"}
+                        onChange={(e) => handleFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                </FormField>
+              )}
+
+              <FormField label="Notes" htmlFor="notes" hint="Optional — shown on the install page.">
+                <Textarea
+                  id="notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  placeholder="What's in this build..."
+                />
+              </FormField>
+
+              {error && (
+                <p className="flex items-center gap-1.5 text-sm text-danger">
+                  <CircleAlert size={14} />
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" loading={submitting} size="md" className="w-full">
+                {submitting ? "Uploading…" : "Get install link"}
+              </Button>
             </form>
           </Card>
-        )}
 
-        {projects.length === 0 ? (
-          <EmptyState
-            icon={FolderKanban}
-            title="No projects yet"
-            description="Create your first project to start tracking tasks and shipping releases."
-            action={
-              <Button onClick={() => setShowForm(true)}>
-                <Plus size={15} strokeWidth={2.25} />
-                New project
-              </Button>
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((p) => (
-              <ProjectCard key={p.id} project={p} onDelete={() => setDeleteTarget(p)} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        title={`Delete "${deleteTarget?.name}"?`}
-        description="This permanently deletes the project, its board, and every release — including uploaded build files. This can't be undone."
-        confirmLabel="Delete project"
-        loading={deleting}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteTarget(null)}
-      />
-    </AppShell>
-  );
-}
-
-function ProjectCard({ project: p, onDelete }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  return (
-    <Card className="flex flex-col gap-4 p-4 transition-colors hover:border-border-strong">
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
-          <FolderKanban size={17} strokeWidth={2} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
-          <p className="mt-0.5 text-xs text-ink-tertiary">
-            Created {new Date(p.created_at).toLocaleDateString()}
+          <p className="mt-5 text-center text-sm text-ink-tertiary">
+            Have an account?{" "}
+            <Link href="/login" className="font-medium text-accent hover:text-accent-hover">
+              Sign in
+            </Link>{" "}
+            to manage projects, boards, and every upload in one place.
           </p>
         </div>
-        <div ref={menuRef} className="relative shrink-0">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
-          >
-            <Ellipsis size={16} strokeWidth={2} />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete();
-                }}
-                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
-              >
-                <Trash2 size={13} strokeWidth={2.25} />
-                Delete project
-              </button>
-            </div>
-          )}
-        </div>
       </div>
-      <div className="flex items-center gap-1 border-t border-border pt-3">
-        <ProjectLink href={`/projects/${p.id}/board`} icon={Kanban} label="Board" />
-        <ProjectLink href={`/projects/${p.id}/changelog`} icon={ClipboardList} label="Changelog" />
-        <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
-      </div>
-    </Card>
-  );
-}
-
-function StatTile({ icon: Icon, label, value }) {
-  return (
-    <Card className="flex items-center gap-3 p-4">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-subtle text-ink-secondary">
-        <Icon size={17} strokeWidth={2} />
-      </span>
-      <div className="min-w-0">
-        <p className="text-lg font-semibold leading-tight text-ink-primary">{value}</p>
-        <p className="truncate text-xs text-ink-tertiary">{label}</p>
-      </div>
-    </Card>
-  );
-}
-
-function ProjectLink({ href, icon: Icon, label }) {
-  return (
-    <Link
-      href={href}
-      className="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
-    >
-      <Icon size={13} strokeWidth={2} />
-      {label}
-    </Link>
+    </div>
   );
 }

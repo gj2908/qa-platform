@@ -29,12 +29,28 @@ export async function middleware(req) {
     req.nextUrl.pathname.startsWith("/login") ||
     req.nextUrl.pathname.startsWith("/forgot-password");
   const isPublicShare = req.nextUrl.pathname.startsWith("/share/");
+  // "/" is the public upload landing page — anyone can drop a build there
+  // without signing in (protected instead by requiring an email and, once
+  // published, the release ID being an unguessable UUID).
+  const isPublicLanding = req.nextUrl.pathname === "/";
+  const isPublicUploadApi = req.nextUrl.pathname.startsWith("/api/public/");
   // /reset-password is reached by clicking the email link, which creates the
   // session in the browser after the page loads — so anonymous visitors must
   // be allowed through and signed-in visitors must not be bounced away.
   const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
 
-  if (isPublicShare || isResetPassword) return res;
+  if (isPublicShare || isResetPassword || isPublicUploadApi) return res;
+
+  if (isPublicLanding) {
+    // Signed-in users have no need for the anonymous landing — send them
+    // straight to their dashboard instead.
+    if (user) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+    return res;
+  }
 
   if (!user && !isAuthPage) {
     const url = req.nextUrl.clone();
@@ -45,19 +61,19 @@ export async function middleware(req) {
 
   if (user && isAuthPage) {
     const url = req.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
   return res;
 }
 
-// NOTE: /api/manifest and /share/* are excluded from the login gate on
-// purpose. /api/manifest is fetched directly by Apple's OS-level installer,
-// which carries no browser auth cookies. /share/* is the public,
-// anyone-with-the-link install page — it's meant to be reachable without
-// signing in (protected instead by the release ID being an unguessable
-// UUID and, for iOS, the underlying file URL expiring after 5 minutes).
+// NOTE: /api/manifest, /share/*, /api/public/*, and "/" itself are excluded
+// from the login gate on purpose. /api/manifest is fetched directly by
+// Apple's OS-level installer, which carries no browser auth cookies.
+// /share/* is the public, anyone-with-the-link install page. "/" is the
+// public upload landing, and /api/public/* is the endpoint it posts to —
+// both meant to be reachable without signing in.
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|api/manifest|share/).*)"],
 };
