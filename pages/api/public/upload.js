@@ -99,7 +99,11 @@ export default async function handler(req, res) {
     }
 
     const appInfo = await analyzeAppBinary(buildBuffer, platform);
-    appName = appName || appInfo.appName;
+    // The name embedded in the build itself is authoritative for
+    // iOS/Android — it's what actually shows on the device after install,
+    // so a stray or stale value typed into the form must never override
+    // it. Only fall back to user input if extraction found none.
+    appName = appInfo.appName || appName;
     appIcon = appInfo.icon;
     version = appInfo.version;
     buildNumber = appInfo.buildNumber;

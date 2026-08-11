@@ -276,7 +276,7 @@ export default function NewReleaseDialog({ project, open, onClose }) {
               hint={
                 platform === "web"
                   ? "Shown as the install page title — detected from the site if left blank."
-                  : "Optional — leave blank to detect it from the build file automatically."
+                  : "Always taken from the build itself — it's what shows on the device after install, so it can't be overridden here."
               }
             >
               <div className="flex items-center gap-2.5">
@@ -295,8 +295,9 @@ export default function NewReleaseDialog({ project, open, onClose }) {
                   id="appName"
                   value={appName}
                   onChange={(e) => setAppName(e.target.value)}
-                  placeholder={platform === "web" ? "My App" : "Auto-detected from the build if left blank"}
+                  placeholder={platform === "web" ? "My App" : "Detected automatically from the build file"}
                   error={!!errors.appName}
+                  disabled={platform !== "web" && !!file}
                 />
               </div>
             </FormField>

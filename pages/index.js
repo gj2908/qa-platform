@@ -154,12 +154,21 @@ export default function PublicLanding() {
                 />
               </FormField>
 
-              <FormField label="App name" htmlFor="appName" hint="Optional — auto-detected if left blank.">
+              <FormField
+                label="App name"
+                htmlFor="appName"
+                hint={
+                  platform === "web"
+                    ? "Optional — auto-detected if left blank."
+                    : "Always taken from the build itself — it's what shows on the device after install, so it can't be overridden here."
+                }
+              >
                 <Input
                   id="appName"
                   value={appName}
                   onChange={(e) => setAppName(e.target.value)}
-                  placeholder="Auto-detected"
+                  placeholder={platform === "web" ? "Auto-detected" : "Detected automatically from the build file"}
+                  disabled={platform !== "web" && !!file}
                 />
               </FormField>
 
