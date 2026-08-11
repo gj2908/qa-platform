@@ -20,12 +20,19 @@ import {
 } from "lucide-react";
 import { formatBytes } from "../../../lib/format";
 import AppIcon from "../../../components/release/AppIcon";
+import { canManageReleases } from "../../../components/ui/role";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
   const { data: project } = await supabase.from("projects").select("*").eq("id", params.id).single();
   if (!project) return { notFound: true };
-  return { props: { project } };
+
+  const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
+  if (!canManageReleases(role)) {
+    return { redirect: { destination: `/projects/${params.id}/changelog`, permanent: false } };
+  }
+
+  return { props: { project, role } };
 }
 
 const PLATFORMS = [
@@ -34,7 +41,7 @@ const PLATFORMS = [
   { key: "web", label: "Web app", hint: "link", icon: Globe },
 ];
 
-export default function NewRelease({ project }) {
+export default function NewRelease({ project, role }) {
   const router = useRouter();
   const [platform, setPlatform] = useState("ios");
   const [appName, setAppName] = useState("");
@@ -229,6 +236,7 @@ export default function NewRelease({ project }) {
   return (
     <AppShell
       project={project}
+      role={role}
       breadcrumbs={[
         { label: "Projects", href: "/dashboard" },
         { label: project.name },

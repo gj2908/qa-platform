@@ -1,21 +1,13 @@
--- Run this in the Supabase SQL editor (or via `supabase db push`).
+-- Project collaboration: multiple people per project with Google-Drive-style
+-- roles (owner / editor / commenter / viewer), ownership transfer, and real
+-- database-level access control (previously any signed-in user could read
+-- and write every project — see the old comment on the policies this file
+-- replaces).
 
-create extension if not exists "pgcrypto";
-
--- ── Projects ────────────────────────────────────────────────
-create table projects (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  description text,
-  created_by uuid references auth.users(id),
-  created_at timestamptz default now()
-);
-
--- ── Project collaborators ───────────────────────────────────
+-- ── Collaborators ───────────────────────────────────────────
 -- Keyed by email (not user id) so an owner can add someone before they've
--- ever signed up. Roles are Google-Drive-style: viewer (install + view
--- only), commenter (+ board access), editor (+ publish/delete releases),
--- owner (+ manage collaborators, transfer ownership, delete the project).
+-- ever signed up — matches the same email-linking pattern used for public,
+-- no-login release uploads (uploader_email on releases).
 create table project_collaborators (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
@@ -25,50 +17,13 @@ create table project_collaborators (
   unique (project_id, email)
 );
 
+-- At most one owner per project at any time.
 create unique index one_owner_per_project on project_collaborators (project_id) where role = 'owner';
 
--- ── Tasks (kanban board) ───────────────────────────────────
-create table tasks (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade,
-  title text not null,
-  description text,
-  status text not null default 'backlog'
-    check (status in ('backlog', 'todo', 'in_progress', 'review', 'done')),
-  position int default 0,
-  assignee_email text,
-  created_by uuid references auth.users(id),
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
--- ── Releases (changelog + QA distribution) ─────────────────
-create table releases (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid references projects(id) on delete cascade, -- null for public, no-login uploads
-  platform text not null check (platform in ('ios', 'android', 'web')),
-  version text not null,
-  build_number text,
-  bundle_id text,          -- required for iOS manifest generation
-  notes text,               -- release notes, markdown
-  file_path text,           -- storage path, for ios/android
-  web_url text,             -- direct link, for web platform
-  app_name text,             -- extracted from the ipa/apk (or site title), or user-entered fallback
-  app_icon text,             -- base64 data URI, extracted from the ipa/apk or site favicon
-  min_os_version text,       -- extracted from the ipa/apk
-  file_size_bytes bigint,    -- extracted from the ipa/apk
-  device_family text,        -- extracted from the ipa (e.g. "iPhone, iPad")
-  uploader_email text,       -- set for releases from the public, no-login upload landing page
-  status text not null default 'published'
-    check (status in ('draft', 'published')),
-  created_by uuid references auth.users(id),
-  created_at timestamptz default now()
-);
-
 -- ── Role lookup helper ──────────────────────────────────────
--- security definer + owned by the migration role (which owns the tables it
--- queries) so this bypasses project_collaborators' own RLS instead of
--- recursing into it.
+-- security definer + owned by the migration role, which owns the table it
+-- queries, so this bypasses project_collaborators' own RLS instead of
+-- recursing into it. Standard Supabase pattern for this kind of check.
 create or replace function project_role(p_project_id uuid)
 returns text
 language sql
@@ -82,7 +37,7 @@ as $$
   limit 1;
 $$;
 
--- Auto-assign the creator as owner whenever a project is created.
+-- ── Auto-assign the creator as owner ────────────────────────
 create or replace function assign_project_owner()
 returns trigger
 language plpgsql
@@ -102,13 +57,15 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_assign_project_owner on projects;
 create trigger trg_assign_project_owner
   after insert on projects
   for each row execute function assign_project_owner();
 
--- Transfers ownership atomically (the new owner must already be a
--- collaborator) so the "one owner per project" index is never violated and
--- a failure never leaves a project ownerless.
+-- ── Ownership transfer ──────────────────────────────────────
+-- Runs both role updates in one transaction so the partial unique index
+-- above is never briefly violated (or, on failure, never leaves a project
+-- with zero owners) — the new owner must already be a collaborator.
 create or replace function transfer_project_ownership(p_project_id uuid, p_new_owner_email text)
 returns void
 language plpgsql
@@ -139,38 +96,58 @@ begin
 end;
 $$;
 
--- ── Row Level Security ──────────────────────────────────────
--- A project (and its tasks/releases) is only visible to its owner and
--- explicitly added collaborators — nobody else. Role determines write
--- access: viewer is read-only, commenter can use the board, editor can
--- also publish/delete releases, owner can also manage collaborators and
--- delete the project.
+-- ── Backfill existing projects ──────────────────────────────
+-- Without this, every project created before this migration would
+-- disappear from view for its own creator once the new SELECT policy
+-- below takes effect.
+insert into project_collaborators (project_id, email, role)
+select p.id, u.email, 'owner'
+from projects p
+join auth.users u on u.id = p.created_by
+on conflict (project_id, email) do nothing;
 
-alter table projects enable row level security;
-alter table tasks enable row level security;
-alter table releases enable row level security;
+-- ── project_collaborators RLS ───────────────────────────────
 alter table project_collaborators enable row level security;
 
 create policy "members read collaborators" on project_collaborators
   for select using (project_role(project_id) is not null);
+
 create policy "owner manages collaborators" on project_collaborators
   for all using (project_role(project_id) = 'owner')
   with check (project_role(project_id) = 'owner');
 
+-- ── projects RLS (replaces the old "any authenticated user" policies) ──
+drop policy if exists "authenticated read projects" on projects;
+drop policy if exists "authenticated write projects" on projects;
+
 create policy "members read projects" on projects
   for select using (project_role(id) is not null);
+
 create policy "authenticated create projects" on projects
   for insert with check (auth.role() = 'authenticated');
+
 create policy "owner update projects" on projects
   for update using (project_role(id) = 'owner') with check (true);
+
 create policy "owner delete projects" on projects
   for delete using (project_role(id) = 'owner');
 
+-- ── tasks RLS ────────────────────────────────────────────────
+drop policy if exists "authenticated read tasks" on tasks;
+drop policy if exists "authenticated write tasks" on tasks;
+
 create policy "members read tasks" on tasks
   for select using (project_role(project_id) is not null);
+
+-- Commenter and above can use the board (per the "Comment = Install + Board"
+-- role definition); viewers are read-only.
 create policy "commenter+ write tasks" on tasks
   for all using (project_role(project_id) in ('owner', 'editor', 'commenter'))
   with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
+
+-- ── releases RLS ─────────────────────────────────────────────
+drop policy if exists "authenticated read releases" on releases;
+drop policy if exists "authenticated write releases" on releases;
 
 -- project_id is null for public, no-login uploads — those are governed by
 -- uploader_email instead of project membership.
@@ -179,6 +156,10 @@ create policy "members read releases" on releases
     (project_id is not null and project_role(project_id) is not null)
     or (project_id is null and uploader_email = (auth.jwt() ->> 'email'))
   );
+
+-- Only editor/owner can publish or delete releases — commenters get board
+-- access but not release management, matching the viewer/commenter/editor
+-- split described for this feature.
 create policy "editor+ write releases" on releases
   for all using (
     (project_id is not null and project_role(project_id) in ('owner', 'editor'))
@@ -188,8 +169,3 @@ create policy "editor+ write releases" on releases
     (project_id is not null and project_role(project_id) in ('owner', 'editor'))
     or (project_id is null and uploader_email = (auth.jwt() ->> 'email'))
   );
-
--- ── Storage bucket for build files ──────────────────────────
--- Create manually in Supabase dashboard: Storage → New bucket → "builds" → Private.
--- Access is only ever via signed URLs generated server-side (service role key),
--- never exposed directly to the browser.

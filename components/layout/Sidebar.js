@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Kanban, ClipboardList, Rocket, X } from "lucide-react";
+import { Kanban, ClipboardList, Rocket, Users, X } from "lucide-react";
 import Logo from "./Logo";
 import ProjectSwitcher from "./ProjectSwitcher";
+import { canManageReleases } from "../ui/role";
 
-export default function Sidebar({ project, mobileOpen, onClose }) {
+export default function Sidebar({ project, role, mobileOpen, onClose }) {
   const router = useRouter();
 
   // The project switcher below already covers "go to a project" / "go to
@@ -15,8 +16,13 @@ export default function Sidebar({ project, mobileOpen, onClose }) {
     ? [
         { href: `/projects/${project.id}/board`, label: "Board", icon: Kanban },
         { href: `/projects/${project.id}/changelog`, label: "Changelog", icon: ClipboardList },
-        { href: `/projects/${project.id}/new-release`, label: "New release", icon: Rocket },
-      ]
+        canManageReleases(role) && {
+          href: `/projects/${project.id}/new-release`,
+          label: "New release",
+          icon: Rocket,
+        },
+        { href: `/projects/${project.id}/collaborators`, label: "Collaborators", icon: Users },
+      ].filter(Boolean)
     : [];
 
   return (

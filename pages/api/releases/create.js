@@ -48,6 +48,16 @@ export default async function handler(req, res) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
+
+  // Publishing a release uses the service role below (it needs to touch
+  // storage and run file analysis), which bypasses RLS — so the caller's
+  // role has to be checked explicitly here instead of relying on the DB.
+  const { data: role } = await authSupabase.rpc("project_role", { p_project_id: projectId });
+  if (role !== "owner" && role !== "editor") {
+    res.status(403).json({ error: "You don't have permission to publish releases in this project" });
+    return;
+  }
+
   if (platform === "ios" && !bundleId) {
     res.status(400).json({ error: "Bundle ID is required for iOS releases" });
     return;

@@ -19,6 +19,10 @@ export async function getServerSideProps({ params, req, res }) {
 
   if (!release) return { notFound: true };
 
+  const { data: role } = release.project_id
+    ? await supabase.rpc("project_role", { p_project_id: release.project_id })
+    : { data: null };
+
   // project_id is null for public, no-login uploads — there's no sibling
   // "other versions" grouping for those (and .eq(null) would otherwise
   // match every other anonymous upload, not just this uploader's).
@@ -52,7 +56,7 @@ export async function getServerSideProps({ params, req, res }) {
     androidUrl = publicFile.publicUrl || null;
   }
 
-  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
+  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [], role } };
 }
 
 function SigningNotice({ release }) {
@@ -104,7 +108,7 @@ function SigningNotice({ release }) {
   return null;
 }
 
-export default function Distribute({ release, itmsLink, androidUrl, otherVersions }) {
+export default function Distribute({ release, itmsLink, androidUrl, otherVersions, role }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
@@ -124,7 +128,7 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
     : [{ label: "Dashboard", href: "/dashboard" }, { label: "Distribute" }];
 
   return (
-    <AppShell project={release.projects} breadcrumbs={breadcrumbs}>
+    <AppShell project={release.projects} role={role} breadcrumbs={breadcrumbs}>
       <div className="mx-auto flex max-w-md flex-col gap-5">
         <Card className="flex flex-col gap-5 p-6">
           <div className="flex items-center justify-between gap-3">

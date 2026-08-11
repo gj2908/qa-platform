@@ -24,6 +24,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { relativeTime } from "../lib/format";
+import { ROLE_META, canManageReleases } from "../components/ui/role";
 
 export async function getServerSideProps({ req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -31,10 +32,16 @@ export async function getServerSideProps({ req, res }) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: projects } = await supabase
+  const { data: projectsRaw } = await supabase
     .from("projects")
     .select("*")
     .order("created_at", { ascending: false });
+
+  const { data: myRoles } = user?.email
+    ? await supabase.from("project_collaborators").select("project_id, role").eq("email", user.email)
+    : { data: [] };
+  const roleByProject = Object.fromEntries((myRoles || []).map((r) => [r.project_id, r.role]));
+  const projects = (projectsRaw || []).map((p) => ({ ...p, role: roleByProject[p.id] || null }));
 
   const { count: openTasksCount } = await supabase
     .from("tasks")
@@ -281,6 +288,9 @@ export default function Dashboard({ projects, myUploads, stats }) {
 function ProjectCard({ project: p, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const isOwner = p.role === "owner";
+  const roleMeta = ROLE_META[p.role];
+  const RoleIcon = roleMeta?.icon;
 
   useEffect(() => {
     function onClickOutside(e) {
@@ -298,37 +308,48 @@ function ProjectCard({ project: p, onDelete }) {
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
-          <p className="mt-0.5 text-xs text-ink-tertiary">
-            Created {new Date(p.created_at).toLocaleDateString()}
-          </p>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <p className="text-xs text-ink-tertiary">Created {new Date(p.created_at).toLocaleDateString()}</p>
+            {roleMeta && (
+              <span className="flex items-center gap-1 text-xs text-ink-tertiary">
+                <span className="text-ink-disabled">·</span>
+                <RoleIcon size={11} strokeWidth={2.25} />
+                {roleMeta.label}
+              </span>
+            )}
+          </div>
         </div>
-        <div ref={menuRef} className="relative shrink-0">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
-          >
-            <Ellipsis size={16} strokeWidth={2} />
-          </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete();
-                }}
-                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
-              >
-                <Trash2 size={13} strokeWidth={2.25} />
-                Delete project
-              </button>
-            </div>
-          )}
-        </div>
+        {isOwner && (
+          <div ref={menuRef} className="relative shrink-0">
+            <button
+              onClick={() => setMenuOpen((o) => !o)}
+              className="rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
+            >
+              <Ellipsis size={16} strokeWidth={2} />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete();
+                  }}
+                  className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
+                >
+                  <Trash2 size={13} strokeWidth={2.25} />
+                  Delete project
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-1 border-t border-border pt-3">
         <ProjectLink href={`/projects/${p.id}/board`} icon={Kanban} label="Board" />
         <ProjectLink href={`/projects/${p.id}/changelog`} icon={ClipboardList} label="Changelog" />
-        <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
+        {canManageReleases(p.role) && (
+          <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
+        )}
       </div>
     </Card>
   );

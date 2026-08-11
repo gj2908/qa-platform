@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { relativeTime } from "../../../lib/format";
 import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
+import { canManageReleases } from "../../../components/ui/role";
 
 const PLATFORM_ORDER = ["ios", "android", "web"];
 
@@ -36,6 +37,9 @@ function groupReleasesByPlatform(releases) {
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
   const { data: project } = await supabase.from("projects").select("*").eq("id", params.id).single();
+  if (!project) return { notFound: true };
+
+  const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
   const { data: releases } = await supabase
     .from("releases")
     .select("*")
@@ -43,8 +47,7 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("status", "published")
     .order("created_at", { ascending: false });
 
-  if (!project) return { notFound: true };
-  return { props: { project, releases: releases || [] } };
+  return { props: { project, role, releases: releases || [] } };
 }
 
 function SigningBadge({ release }) {
@@ -74,7 +77,7 @@ function SigningBadge({ release }) {
   return null;
 }
 
-function ChangelogRow({ release, onDelete }) {
+function ChangelogRow({ release, onDelete, canEdit }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = release.notes && release.notes.length > 180;
 
@@ -97,13 +100,15 @@ function ChangelogRow({ release, onDelete }) {
               Install page
             </Button>
           </Link>
-          <button
-            onClick={() => onDelete(release)}
-            title="Delete release"
-            className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-          >
-            <Trash2 size={14} strokeWidth={2.25} />
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => onDelete(release)}
+              title="Delete release"
+              className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+            >
+              <Trash2 size={14} strokeWidth={2.25} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -135,7 +140,8 @@ function ChangelogRow({ release, onDelete }) {
   );
 }
 
-export default function Changelog({ project, releases }) {
+export default function Changelog({ project, role, releases }) {
+  const canEdit = canManageReleases(role);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -162,6 +168,7 @@ export default function Changelog({ project, releases }) {
   return (
     <AppShell
       project={project}
+      role={role}
       breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Changelog" }]}
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -170,12 +177,14 @@ export default function Changelog({ project, releases }) {
             <h1 className="text-xl font-semibold text-ink-primary">Changelog</h1>
             <p className="mt-1 text-sm text-ink-tertiary">Published releases for {project.name}.</p>
           </div>
-          <Link href={`/projects/${project.id}/new-release`}>
-            <Button>
-              <Rocket size={15} strokeWidth={2.25} />
-              New release
-            </Button>
-          </Link>
+          {canEdit && (
+            <Link href={`/projects/${project.id}/new-release`}>
+              <Button>
+                <Rocket size={15} strokeWidth={2.25} />
+                New release
+              </Button>
+            </Link>
+          )}
         </div>
 
         {deleteError && (
@@ -188,14 +197,20 @@ export default function Changelog({ project, releases }) {
           <EmptyState
             icon={ClipboardList}
             title="No releases yet"
-            description="Publish your first build to see it show up here."
+            description={
+              canEdit
+                ? "Publish your first build to see it show up here."
+                : "Nothing has been published to this project yet."
+            }
             action={
-              <Link href={`/projects/${project.id}/new-release`}>
-                <Button>
-                  <Rocket size={15} strokeWidth={2.25} />
-                  New release
-                </Button>
-              </Link>
+              canEdit && (
+                <Link href={`/projects/${project.id}/new-release`}>
+                  <Button>
+                    <Rocket size={15} strokeWidth={2.25} />
+                    New release
+                  </Button>
+                </Link>
+              )
             }
           />
         ) : (
@@ -214,7 +229,7 @@ export default function Changelog({ project, releases }) {
                   </div>
                   <div className="divide-y divide-border rounded-lg border border-border bg-surface">
                     {group.map((r) => (
-                      <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} />
+                      <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} canEdit={canEdit} />
                     ))}
                   </div>
                 </div>

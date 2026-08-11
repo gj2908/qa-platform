@@ -6,25 +6,29 @@ import AppShell from "../../../components/layout/AppShell";
 import Input from "../../../components/ui/Input";
 import Button from "../../../components/ui/Button";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
+import { canManageBoard } from "../../../components/ui/role";
 import { Inbox, Plus } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
   const { data: project } = await supabase.from("projects").select("*").eq("id", params.id).single();
+  if (!project) return { notFound: true };
+
+  const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
   const { data: tasks } = await supabase
     .from("tasks")
     .select("*")
     .eq("project_id", params.id)
     .order("created_at", { ascending: true });
 
-  if (!project) return { notFound: true };
-  return { props: { project, tasks: tasks || [] } };
+  return { props: { project, role, tasks: tasks || [] } };
 }
 
-export default function Board({ project, tasks: initialTasks }) {
+export default function Board({ project, role, tasks: initialTasks }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
+  const canEdit = canManageBoard(role);
 
   async function addTask(e) {
     e.preventDefault();
@@ -58,6 +62,7 @@ export default function Board({ project, tasks: initialTasks }) {
 
   function handleDrop(e, columnKey) {
     e.preventDefault();
+    if (!canEdit) return;
     const taskId = e.dataTransfer.getData("text/plain");
     const task = tasks.find((t) => t.id === taskId);
     if (task && task.status !== columnKey) moveTask(task, columnKey);
@@ -66,6 +71,7 @@ export default function Board({ project, tasks: initialTasks }) {
   return (
     <AppShell
       project={project}
+      role={role}
       breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Board" }]}
     >
       <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
@@ -74,18 +80,20 @@ export default function Board({ project, tasks: initialTasks }) {
             <h1 className="text-xl font-semibold text-ink-primary">{project.name}</h1>
             <p className="mt-1 text-sm text-ink-tertiary">{tasks.length} tasks across the board</p>
           </div>
-          <form onSubmit={addTask} className="flex gap-2">
-            <Input
-              placeholder="New task title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-56"
-            />
-            <Button type="submit" loading={adding} disabled={!title.trim()}>
-              <Plus size={15} strokeWidth={2.25} />
-              Add task
-            </Button>
-          </form>
+          {canEdit && (
+            <form onSubmit={addTask} className="flex gap-2">
+              <Input
+                placeholder="New task title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-56"
+              />
+              <Button type="submit" loading={adding} disabled={!title.trim()}>
+                <Plus size={15} strokeWidth={2.25} />
+                Add task
+              </Button>
+            </form>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-x-auto pb-1 thin-scrollbar">
@@ -96,7 +104,7 @@ export default function Board({ project, tasks: initialTasks }) {
               return (
                 <div
                   key={key}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragOver={(e) => canEdit && e.preventDefault()}
                   onDrop={(e) => handleDrop(e, key)}
                   className="flex w-[270px] shrink-0 flex-col rounded-lg border border-border bg-subtle lg:w-auto"
                 >
@@ -113,7 +121,13 @@ export default function Board({ project, tasks: initialTasks }) {
                   <div className="flex-1 overflow-y-auto thin-scrollbar px-2 py-2">
                     <div className="flex flex-col gap-2">
                       {columnTasks.map((t) => (
-                        <TaskCard key={t.id} task={t} onMove={moveTask} onDelete={deleteTask} />
+                        <TaskCard
+                          key={t.id}
+                          task={t}
+                          onMove={moveTask}
+                          onDelete={deleteTask}
+                          editable={canEdit}
+                        />
                       ))}
                       {columnTasks.length === 0 && (
                         <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed border-border py-8 text-center">

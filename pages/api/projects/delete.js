@@ -21,6 +21,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Everything below uses the service role (it needs to touch storage),
+  // which bypasses RLS — so ownership has to be checked explicitly here
+  // before doing anything, not just left to the DB.
+  const { data: role } = await authSupabase.rpc("project_role", { p_project_id: projectId });
+  if (role !== "owner") {
+    res.status(403).json({ error: "Only the project owner can delete it" });
+    return;
+  }
+
   const service = createServiceClient();
 
   // Clean up any uploaded build files so the private "builds" bucket doesn't
