@@ -137,7 +137,7 @@ export default function Dashboard({ projects, myUploads, stats }) {
   }
 
   return (
-    <AppShell title="Dashboard" breadcrumbs={[{ label: "Dashboard" }]}>
+    <AppShell>
       <div className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

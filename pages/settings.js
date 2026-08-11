@@ -59,7 +59,7 @@ export default function Settings() {
   }
 
   return (
-    <AppShell title="Settings" breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: "Settings" }]}>
+    <AppShell>
       <div className="mx-auto flex max-w-xl flex-col gap-6">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Settings</h1>

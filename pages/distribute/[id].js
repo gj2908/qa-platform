@@ -1,10 +1,7 @@
 import { useState } from "react";
-import Link from "next/link";
 import { createServerSupabase, createServiceClient } from "../../lib/supabase/server";
 import ProjectShell from "../../components/layout/ProjectShell";
-import Logo from "../../components/layout/Logo";
-import ThemeToggle from "../../components/ThemeToggle";
-import UserMenu from "../../components/layout/UserMenu";
+import TopNav from "../../components/layout/TopNav";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PlatformBadge from "../../components/ui/PlatformBadge";
@@ -18,16 +15,7 @@ import { Check, CircleAlert, Copy, Download, ShieldCheck, TriangleAlert } from "
 function MinimalShell({ children }) {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
-      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
-        <Link href="/dashboard">
-          <Logo />
-        </Link>
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
-          <div className="h-5 w-px bg-border" />
-          <UserMenu />
-        </div>
-      </header>
+      <TopNav />
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
     </div>
   );
