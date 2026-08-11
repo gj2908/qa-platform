@@ -18,13 +18,23 @@ export async function getServerSideProps({ params, req, res }) {
 
   const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
 
-  const { data: collaborators } = await supabase
+  const { data: collaboratorsRaw } = await supabase
     .from("project_collaborators")
     .select("email, role, created_at")
     .eq("project_id", params.id)
     .order("role");
 
-  return { props: { project, role, collaborators: collaborators || [] } };
+  let collaborators = collaboratorsRaw || [];
+  if (collaborators.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("email, full_name")
+      .in("email", collaborators.map((c) => c.email));
+    const nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
+    collaborators = collaborators.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
+  }
+
+  return { props: { project, role, collaborators } };
 }
 
 const ROLE_ORDER = { owner: 0, editor: 1, commenter: 2, viewer: 3 };
@@ -100,7 +110,7 @@ export default function Collaborators({ project, role: myRole, collaborators: in
 
   return (
     <ProjectShell project={project} active="collaborators">
-      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Collaborators</h1>
           <p className="mt-1 text-sm text-ink-tertiary">
@@ -168,13 +178,17 @@ export default function Collaborators({ project, role: myRole, collaborators: in
           {collaborators.map((c) => {
             const meta = ROLE_META[c.role];
             const Icon = meta.icon;
+            const displayName = c.full_name || c.email;
             return (
               <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg">
-                    {c.email[0].toUpperCase()}
+                    {displayName[0].toUpperCase()}
                   </span>
-                  <span className="truncate text-sm text-ink-primary">{c.email}</span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-ink-primary">{displayName}</p>
+                    {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge tone={meta.tone} icon={Icon}>
@@ -207,7 +221,7 @@ export default function Collaborators({ project, role: myRole, collaborators: in
 
       <ConfirmDialog
         open={!!removeTarget}
-        title={`Remove ${removeTarget?.email}?`}
+        title={`Remove ${removeTarget?.full_name || removeTarget?.email}?`}
         description="They'll immediately lose access to this project's board, changelog, and releases."
         confirmLabel="Remove"
         loading={busy}
@@ -217,7 +231,7 @@ export default function Collaborators({ project, role: myRole, collaborators: in
 
       <ConfirmDialog
         open={!!transferTarget}
-        title={`Make ${transferTarget?.email} the owner?`}
+        title={`Make ${transferTarget?.full_name || transferTarget?.email} the owner?`}
         description="You'll become an editor on this project. Only the new owner will be able to manage collaborators, transfer ownership again, or delete the project."
         confirmLabel="Transfer ownership"
         loading={busy}

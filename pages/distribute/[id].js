@@ -10,6 +10,7 @@ import AppIcon from "../../components/release/AppIcon";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
 import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import ReportIssueCard from "../../components/release/ReportIssueCard";
+import { useToast } from "../../components/ui/ToastProvider";
 import { getExpiryStatus } from "../../lib/provisioning";
 import {
   CalendarClock,
@@ -164,6 +165,7 @@ function ExpiryNotice({ release }) {
 }
 
 export default function Distribute({ release, itmsLink, androidUrl, otherVersions, qrSvg }) {
+  const toast = useToast();
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
@@ -172,6 +174,7 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
   function copyLink() {
     navigator.clipboard.writeText(shareUrl);
     setCopied(true);
+    toast.success("Link copied.");
     setTimeout(() => setCopied(false), 1500);
   }
 

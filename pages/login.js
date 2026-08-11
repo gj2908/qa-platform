@@ -8,6 +8,7 @@ import Button from "../components/ui/Button";
 import { CircleAlert, CircleCheck } from "lucide-react";
 
 export default function Login() {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("signin");
@@ -39,7 +40,10 @@ export default function Login() {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: `${window.location.origin}${redirectTo}` },
+        options: {
+          data: { full_name: name.trim() },
+          emailRedirectTo: `${window.location.origin}${redirectTo}`,
+        },
       });
       setLoading(false);
       if (error) {
@@ -63,13 +67,23 @@ export default function Login() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        {mode === "signup" && (
+          <Input
+            type="text"
+            required
+            placeholder="Full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        )}
         <Input
           type="email"
           required
           placeholder="you@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          autoFocus
+          autoFocus={mode !== "signup"}
         />
         <Input
           type="password"

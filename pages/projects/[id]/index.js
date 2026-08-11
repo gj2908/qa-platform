@@ -19,11 +19,24 @@ import {
   PackageCheck,
   Plus,
   Rocket,
+  Trash2,
+  UserPlus,
+  UserMinus,
+  ArrowLeftRight,
   Users,
   Webhook,
-  CircleCheck,
-  CircleAlert,
+  Clock,
 } from "lucide-react";
+import { useToast } from "../../../components/ui/ToastProvider";
+
+const ACTIVITY_META = {
+  release_published: { icon: Rocket, label: "published a release" },
+  release_deleted: { icon: Trash2, label: "deleted a release" },
+  collaborator_added: { icon: UserPlus, label: "added a collaborator" },
+  collaborator_removed: { icon: UserMinus, label: "removed a collaborator" },
+  ownership_transferred: { icon: ArrowLeftRight, label: "transferred ownership" },
+  webhook_updated: { icon: Webhook, label: "updated release notifications" },
+};
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -40,10 +53,27 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("status", "published")
     .order("created_at", { ascending: false })
     .limit(5);
-  const { data: collaborators } = await supabase
+  const { data: collaboratorsRaw } = await supabase
     .from("project_collaborators")
     .select("email, role")
     .eq("project_id", params.id);
+  const { data: activityRaw } = await supabase
+    .from("project_activity")
+    .select("id, actor_email, action, detail, created_at")
+    .eq("project_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  let collaborators = collaboratorsRaw || [];
+  let activity = activityRaw || [];
+
+  const emails = [...new Set([...collaborators.map((c) => c.email), ...activity.map((a) => a.actor_email)])];
+  if (emails.length > 0) {
+    const { data: profiles } = await supabase.from("profiles").select("email, full_name").in("email", emails);
+    const nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
+    collaborators = collaborators.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
+    activity = activity.map((a) => ({ ...a, actor_name: nameByEmail[a.actor_email] || null }));
+  }
 
   return {
     props: {
@@ -51,12 +81,13 @@ export async function getServerSideProps({ params, req, res }) {
       role,
       tasks: tasks || [],
       releases: releases || [],
-      collaborators: collaborators || [],
+      collaborators,
+      activity,
     },
   };
 }
 
-export default function ProjectOverview({ project, role, tasks, releases, collaborators }) {
+export default function ProjectOverview({ project, role, tasks, releases, collaborators, activity }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const canEdit = canManageReleases(role);
   const openTasks = tasks.filter((t) => t.status !== "done").length;
@@ -64,7 +95,7 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
 
   return (
     <ProjectShell project={project} active="overview">
-      <div className="mx-auto flex max-w-4xl flex-col gap-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -171,13 +202,14 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
             <Card className="divide-y divide-border overflow-hidden">
               {collaborators.map((c) => {
                 const meta = ROLE_META[c.role];
+                const displayName = c.full_name || c.email;
                 return (
                   <div key={c.email} className="flex items-center gap-2.5 px-4 py-2.5">
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-semibold text-accent-subtle-fg">
-                      {c.email[0].toUpperCase()}
+                      {displayName[0].toUpperCase()}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-ink-primary">{c.email}</p>
+                      <p className="truncate text-xs font-medium text-ink-primary">{displayName}</p>
                       <p className="text-[11px] text-ink-tertiary">{meta.label}</p>
                     </div>
                   </div>
@@ -202,6 +234,8 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
           </div>
         </div>
 
+        {activity.length > 0 && <ActivityCard activity={activity} />}
+
         {isOwner(role) && <WebhookCard project={project} />}
       </div>
 
@@ -210,19 +244,48 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
   );
 }
 
+function ActivityCard({ activity }) {
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
+      </div>
+      <div className="mt-4 flex flex-col gap-3.5">
+        {activity.map((a) => {
+          const meta = ACTIVITY_META[a.action] || { icon: Clock, label: a.action };
+          const Icon = meta.icon;
+          const displayName = a.actor_name || a.actor_email;
+          return (
+            <div key={a.id} className="flex items-start gap-2.5">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
+                <Icon size={12} strokeWidth={2.25} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-ink-primary">
+                  <span className="font-medium">{displayName}</span> {meta.label}
+                  {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
+                </p>
+                <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 function WebhookCard({ project }) {
+  const toast = useToast();
   const [url, setUrl] = useState(project.webhook_url || "");
   const [savedUrl, setSavedUrl] = useState(project.webhook_url || "");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   async function save(e) {
     e.preventDefault();
     setSaving(true);
-    setError("");
-    setMessage("");
     const res = await fetch("/api/projects/webhook", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -230,18 +293,16 @@ function WebhookCard({ project }) {
     });
     setSaving(false);
     if (res.ok) {
-      setMessage("Saved.");
+      toast.success("Webhook URL saved.");
       setSavedUrl(url.trim());
     } else {
       const data = await res.json().catch(() => ({}));
-      setError(data.error || "Couldn't save the webhook URL.");
+      toast.error(data.error || "Couldn't save the webhook URL.");
     }
   }
 
   async function sendTest() {
     setTesting(true);
-    setError("");
-    setMessage("");
     const res = await fetch("/api/projects/webhook-test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -249,10 +310,10 @@ function WebhookCard({ project }) {
     });
     setTesting(false);
     if (res.ok) {
-      setMessage("Test notification sent.");
+      toast.success("Test notification sent.");
     } else {
       const data = await res.json().catch(() => ({}));
-      setError(data.error || "Couldn't reach that URL.");
+      toast.error(data.error || "Couldn't reach that URL.");
     }
   }
 
@@ -294,19 +355,6 @@ function WebhookCard({ project }) {
           </Button>
         </div>
       </form>
-
-      {message && (
-        <p className="mt-2.5 flex items-center gap-1.5 text-sm text-success">
-          <CircleCheck size={14} strokeWidth={2.25} />
-          {message}
-        </p>
-      )}
-      {error && (
-        <p className="mt-2.5 flex items-center gap-1.5 text-sm text-danger">
-          <CircleAlert size={14} strokeWidth={2.25} />
-          {error}
-        </p>
-      )}
     </Card>
   );
 }

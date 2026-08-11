@@ -1,4 +1,5 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
   const service = createServiceClient();
   const { data: release } = await service
     .from("releases")
-    .select("file_path, project_id, uploader_email")
+    .select("file_path, project_id, uploader_email, platform, version, build_number")
     .eq("id", releaseId)
     .single();
 
@@ -58,6 +59,15 @@ export default async function handler(req, res) {
   if (deleteError) {
     res.status(500).json({ error: deleteError.message });
     return;
+  }
+
+  if (release.project_id) {
+    await logActivity(service, {
+      projectId: release.project_id,
+      actorEmail: user.email,
+      action: "release_deleted",
+      detail: `${release.platform} v${release.version}${release.build_number ? ` (${release.build_number})` : ""}`,
+    });
   }
 
   res.status(200).json({ ok: true });

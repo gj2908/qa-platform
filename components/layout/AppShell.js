@@ -1,4 +1,6 @@
 import TopNav from "./TopNav";
+import CompleteProfileGate from "./CompleteProfileGate";
+import CommandPalette from "../CommandPalette";
 
 // Layout for the dashboard/account-level pages. No sidebar — matches
 // ProjectShell's single top-bar pattern. No centered nav here: Home
@@ -9,6 +11,8 @@ export default function AppShell({ children }) {
     <div className="flex min-h-screen flex-col bg-canvas">
       <TopNav />
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <CompleteProfileGate />
+      <CommandPalette />
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
 
 // Saves or clears a project's outgoing release-notification URL.
 // Owner-only, same permission model as collaborator management.
@@ -49,6 +50,13 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logActivity(createServiceClient(), {
+    projectId,
+    actorEmail: user.email,
+    action: "webhook_updated",
+    detail: trimmed ? "URL set" : "URL cleared",
+  });
 
   res.status(200).json({ ok: true });
 }

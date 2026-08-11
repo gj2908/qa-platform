@@ -1,11 +1,82 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import AppShell from "../components/layout/AppShell";
 import FormField from "../components/ui/FormField";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
+import { useCurrentUser } from "../lib/useCurrentUser";
+import { useToast } from "../components/ui/ToastProvider";
 import { CircleAlert, CircleCheck } from "lucide-react";
+
+function ProfileCard() {
+  const toast = useToast();
+  const user = useCurrentUser();
+  const [fullName, setFullName] = useState("");
+  const [initialized, setInitialized] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user && !initialized) {
+      setFullName(user.user_metadata?.full_name || "");
+      setInitialized(true);
+    }
+  }, [user, initialized]);
+
+  async function save(e) {
+    e.preventDefault();
+    setError("");
+    const trimmed = fullName.trim();
+    if (!trimmed) {
+      setError("Name can't be empty.");
+      return;
+    }
+    setSaving(true);
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.updateUser({ data: { full_name: trimmed } });
+    if (authError) {
+      setSaving(false);
+      setError(authError.message);
+      return;
+    }
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ full_name: trimmed })
+      .eq("id", user.id);
+    setSaving(false);
+    if (profileError) {
+      setError(profileError.message);
+      return;
+    }
+    toast.success("Profile updated.");
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink-primary">Profile</h2>
+      <p className="mt-1 text-sm text-ink-tertiary">Your name, shown to collaborators on shared projects.</p>
+
+      <form onSubmit={save} className="mt-5 flex flex-col gap-4">
+        <FormField label="Full name" htmlFor="fullName" required error={error}>
+          <Input
+            id="fullName"
+            required
+            placeholder="Jane Cooper"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            error={!!error}
+          />
+        </FormField>
+        <div>
+          <Button type="submit" loading={saving}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
 
 export default function Settings() {
   const [oldPassword, setOldPassword] = useState("");
@@ -63,8 +134,10 @@ export default function Settings() {
       <div className="mx-auto flex max-w-xl flex-col gap-6">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Settings</h1>
-          <p className="mt-1 text-sm text-ink-tertiary">Manage your account security.</p>
+          <p className="mt-1 text-sm text-ink-tertiary">Manage your profile and account security.</p>
         </div>
+
+        <ProfileCard />
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-ink-primary">Change password</h2>

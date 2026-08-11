@@ -66,6 +66,50 @@ create table releases (
   created_at timestamptz default now()
 );
 
+-- ── Profiles ─────────────────────────────────────────────────
+-- A public-facing display name for a user, so collaborators on a shared
+-- project can see who "jane@company.com" actually is instead of just
+-- their email. full_name is null until the user sets one (at sign-up or
+-- later in Settings) — every UI site must fall back to email when null.
+create table profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text not null unique,
+  full_name text,
+  created_at timestamptz default now()
+);
+
+-- Auto-create a profile row whenever someone signs up. Reads full_name
+-- from the signup-time options.data payload; null if not provided.
+create or replace function handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into profiles (id, email, full_name)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name')
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+create trigger trg_handle_new_user
+  after insert on auth.users
+  for each row execute function handle_new_user();
+
+-- ── Project activity log ────────────────────────────────────
+-- Releases published/deleted, collaborator changes, webhook updates —
+-- surfaced as a "Recent activity" timeline on the project Overview page.
+create table project_activity (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  actor_email text not null,
+  action text not null,  -- e.g. 'release_published', 'collaborator_added'
+  detail text,             -- human-readable one-liner, e.g. "v1.2 (34) for iOS"
+  created_at timestamptz default now()
+);
+
 -- ── Role lookup helper ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
 -- queries) so this bypasses project_collaborators' own RLS instead of
@@ -151,6 +195,18 @@ alter table projects enable row level security;
 alter table tasks enable row level security;
 alter table releases enable row level security;
 alter table project_collaborators enable row level security;
+alter table profiles enable row level security;
+alter table project_activity enable row level security;
+
+create policy "members read activity" on project_activity
+  for select using (project_role(project_id) is not null);
+-- No insert/update/delete policy for normal clients — rows are only ever
+-- written by trusted server routes via the service-role client.
+
+create policy "authenticated read profiles" on profiles
+  for select using (auth.role() = 'authenticated');
+create policy "self update profile" on profiles
+  for update using (auth.uid() = id) with check (auth.uid() = id);
 
 create policy "members read collaborators" on project_collaborators
   for select using (project_role(project_id) is not null);

@@ -1,4 +1,5 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
 
 const VALID_ROLES = ["viewer", "commenter", "editor"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,6 +51,13 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logActivity(createServiceClient(), {
+    projectId,
+    actorEmail: user.email,
+    action: "collaborator_added",
+    detail: `${normalizedEmail} as ${role}`,
+  });
 
   res.status(200).json({ ok: true });
 }

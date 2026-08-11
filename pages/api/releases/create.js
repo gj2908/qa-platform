@@ -6,6 +6,7 @@ import { analyzeAppBinary } from "../../../lib/appAnalyzer";
 import { findDuplicateRelease } from "../../../lib/findDuplicateRelease";
 import { fetchWebAppInfo } from "../../../lib/faviconFetcher";
 import { sendWebhookNotification, buildReleasePayload } from "../../../lib/webhookNotify";
+import { logActivity } from "../../../lib/logActivity";
 
 export const config = {
   api: { bodyParser: false },
@@ -222,6 +223,13 @@ export default async function handler(req, res) {
     res.status(500).json({ error: insertError.message });
     return;
   }
+
+  await logActivity(service, {
+    projectId,
+    actorEmail: user.email,
+    action: "release_published",
+    detail: `${release.platform} v${release.version}${release.build_number ? ` (${release.build_number})` : ""}`,
+  });
 
   // Best-effort release notification — never lets a slow/broken webhook
   // fail or meaningfully delay the response (bounded by the helper's own

@@ -218,7 +218,7 @@ export default function Changelog({ project, role, releases }) {
 
   return (
     <ProjectShell project={project} active="changelog">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-ink-primary">Changelog</h1>

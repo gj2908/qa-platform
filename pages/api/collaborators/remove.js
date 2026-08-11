@@ -1,4 +1,5 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -42,6 +43,13 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logActivity(createServiceClient(), {
+    projectId,
+    actorEmail: user.email,
+    action: "collaborator_removed",
+    detail: email.trim().toLowerCase(),
+  });
 
   res.status(200).json({ ok: true });
 }

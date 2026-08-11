@@ -1,6 +1,8 @@
 import { LayoutDashboard, Kanban, ClipboardList, Users } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
+import CompleteProfileGate from "./CompleteProfileGate";
+import CommandPalette from "../CommandPalette";
 
 const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
@@ -28,6 +30,8 @@ export default function ProjectShell({ project, active, children }) {
         ))}
       />
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <CompleteProfileGate />
+      <CommandPalette />
     </div>
   );
 }
