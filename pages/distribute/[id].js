@@ -1,6 +1,10 @@
 import { useState } from "react";
+import Link from "next/link";
 import { createServerSupabase, createServiceClient } from "../../lib/supabase/server";
-import AppShell from "../../components/layout/AppShell";
+import ProjectShell from "../../components/layout/ProjectShell";
+import Logo from "../../components/layout/Logo";
+import ThemeToggle from "../../components/ThemeToggle";
+import UserMenu from "../../components/layout/UserMenu";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import PlatformBadge from "../../components/ui/PlatformBadge";
@@ -8,6 +12,26 @@ import AppIcon from "../../components/release/AppIcon";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
 import OtherVersionsCard from "../../components/release/OtherVersionsCard";
 import { Check, CircleAlert, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-react";
+
+// A release with no project (public, no-login upload) has nothing to show
+// tabs for — just enough chrome to get back to the dashboard.
+function MinimalShell({ children }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-canvas">
+      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
+        <Link href="/dashboard">
+          <Logo />
+        </Link>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <div className="h-5 w-px bg-border" />
+          <UserMenu />
+        </div>
+      </header>
+      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+    </div>
+  );
+}
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res); // enforces login via middleware already
@@ -18,10 +42,6 @@ export async function getServerSideProps({ params, req, res }) {
     .single();
 
   if (!release) return { notFound: true };
-
-  const { data: role } = release.project_id
-    ? await supabase.rpc("project_role", { p_project_id: release.project_id })
-    : { data: null };
 
   // project_id is null for public, no-login uploads — there's no sibling
   // "other versions" grouping for those (and .eq(null) would otherwise
@@ -56,7 +76,7 @@ export async function getServerSideProps({ params, req, res }) {
     androidUrl = publicFile.publicUrl || null;
   }
 
-  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [], role } };
+  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
 }
 
 function SigningNotice({ release }) {
@@ -108,7 +128,7 @@ function SigningNotice({ release }) {
   return null;
 }
 
-export default function Distribute({ release, itmsLink, androidUrl, otherVersions, role }) {
+export default function Distribute({ release, itmsLink, androidUrl, otherVersions }) {
   const [copied, setCopied] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
@@ -119,16 +139,11 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
     setTimeout(() => setCopied(false), 1500);
   }
 
-  const breadcrumbs = release.project_id
-    ? [
-        { label: "Projects", href: "/dashboard" },
-        { label: release.projects?.name, href: `/projects/${release.project_id}/changelog` },
-        { label: "Distribute" },
-      ]
-    : [{ label: "Dashboard", href: "/dashboard" }, { label: "Distribute" }];
+  const Shell = release.projects ? ProjectShell : MinimalShell;
+  const shellProps = release.projects ? { project: release.projects, active: null } : {};
 
   return (
-    <AppShell project={release.projects} role={role} breadcrumbs={breadcrumbs}>
+    <Shell {...shellProps}>
       <div className="mx-auto flex max-w-md flex-col gap-5">
         <Card className="flex flex-col gap-5 p-6">
           <div className="flex items-center justify-between gap-3">
@@ -205,6 +220,6 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
         <AppDetailsCard release={release} />
         <OtherVersionsCard releases={otherVersions} basePath="/distribute" />
       </div>
-    </AppShell>
+    </Shell>
   );
 }

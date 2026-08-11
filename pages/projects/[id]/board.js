@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import { createClient } from "../../../lib/supabase/client";
 import TaskCard from "../../../components/TaskCard";
-import AppShell from "../../../components/layout/AppShell";
+import ProjectShell from "../../../components/layout/ProjectShell";
 import Input from "../../../components/ui/Input";
 import Button from "../../../components/ui/Button";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
@@ -69,12 +69,8 @@ export default function Board({ project, role, tasks: initialTasks }) {
   }
 
   return (
-    <AppShell
-      project={project}
-      role={role}
-      breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Board" }]}
-    >
-      <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
+    <ProjectShell project={project} active="board">
+      <div className="flex h-[calc(100vh-9rem)] flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-ink-primary">{project.name}</h1>
@@ -143,6 +139,6 @@ export default function Board({ project, role, tasks: initialTasks }) {
           </div>
         </div>
       </div>
-    </AppShell>
+    </ProjectShell>
   );
 }

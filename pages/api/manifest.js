@@ -37,6 +37,32 @@ export default async function handler(req, res) {
 
   const fileUrl = publicFile.publicUrl;
 
+  // Shown on iOS's native "Install App" confirmation popup alongside the
+  // title below — without these, that system dialog falls back to a
+  // generic gray icon.
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers.host;
+  const iconUrl = release.app_icon ? `${protocol}://${host}/api/release-icon/${release.id}` : null;
+  const iconAssets = iconUrl
+    ? `
+        <dict>
+          <key>kind</key>
+          <string>display-image</string>
+          <key>needs-shine</key>
+          <false/>
+          <key>url</key>
+          <string>${escapeXml(iconUrl)}</string>
+        </dict>
+        <dict>
+          <key>kind</key>
+          <string>full-size-image</string>
+          <key>needs-shine</key>
+          <false/>
+          <key>url</key>
+          <string>${escapeXml(iconUrl)}</string>
+        </dict>`
+    : "";
+
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -51,7 +77,7 @@ export default async function handler(req, res) {
           <string>software-package</string>
           <key>url</key>
           <string>${fileUrl}</string>
-        </dict>
+        </dict>${iconAssets}
       </array>
       <key>metadata</key>
       <dict>

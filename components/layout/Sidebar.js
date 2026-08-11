@@ -1,29 +1,19 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Kanban, ClipboardList, Rocket, Users, X } from "lucide-react";
+import { LayoutGrid, Settings as SettingsIcon, X } from "lucide-react";
 import Logo from "./Logo";
 import ProjectSwitcher from "./ProjectSwitcher";
-import { canManageReleases } from "../ui/role";
 
-export default function Sidebar({ project, role, mobileOpen, onClose }) {
+// Only ever rendered for the dashboard/account-level pages now — once
+// you're inside a project, ProjectShell's top tabs take over and there's
+// no sidebar at all (see components/layout/ProjectShell.js).
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Projects", icon: LayoutGrid },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
+];
+
+export default function Sidebar({ mobileOpen, onClose }) {
   const router = useRouter();
-
-  // The project switcher below already covers "go to a project" / "go to
-  // the dashboard" — a project's own Board/Changelog/New release links only
-  // make sense once a project is selected, so there's nothing to show here
-  // otherwise (avoids a redundant "Projects" link duplicating the switcher).
-  const navItems = project
-    ? [
-        { href: `/projects/${project.id}/board`, label: "Board", icon: Kanban },
-        { href: `/projects/${project.id}/changelog`, label: "Changelog", icon: ClipboardList },
-        canManageReleases(role) && {
-          href: `/projects/${project.id}/new-release`,
-          label: "New release",
-          icon: Rocket,
-        },
-        { href: `/projects/${project.id}/collaborators`, label: "Collaborators", icon: Users },
-      ].filter(Boolean)
-    : [];
 
   return (
     <>
@@ -52,33 +42,31 @@ export default function Sidebar({ project, role, mobileOpen, onClose }) {
         </div>
 
         <div className="px-3 pt-3">
-          <ProjectSwitcher currentProject={project} />
+          <ProjectSwitcher />
         </div>
 
-        {navItems.length > 0 && (
-          <nav className="flex-1 overflow-y-auto px-3 py-3 thin-scrollbar">
-            <ul className="flex flex-col gap-0.5">
-              {navItems.map(({ href, label, icon: Icon }) => {
-                const active = router.asPath === href || router.asPath.startsWith(href + "?");
-                return (
-                  <li key={href}>
-                    <Link
-                      href={href}
-                      className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
-                        active
-                          ? "bg-accent-subtle text-accent-subtle-fg"
-                          : "text-ink-secondary hover:bg-hover hover:text-ink-primary"
-                      }`}
-                    >
-                      <Icon size={16} strokeWidth={2} />
-                      {label}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        )}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 thin-scrollbar">
+          <ul className="flex flex-col gap-0.5">
+            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+              const active = router.asPath === href || router.asPath.startsWith(href + "?");
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    className={`flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
+                      active
+                        ? "bg-accent-subtle text-accent-subtle-fg"
+                        : "text-ink-secondary hover:bg-hover hover:text-ink-primary"
+                    }`}
+                  >
+                    <Icon size={16} strokeWidth={2} />
+                    {label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
       </aside>
     </>
   );

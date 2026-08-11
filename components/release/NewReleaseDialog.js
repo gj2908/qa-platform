@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
-import { createServerSupabase } from "../../../lib/supabase/server";
-import AppShell from "../../../components/layout/AppShell";
-import Card from "../../../components/ui/Card";
-import FormField from "../../../components/ui/FormField";
-import Input from "../../../components/ui/Input";
-import Select from "../../../components/ui/Select";
-import Textarea from "../../../components/ui/Textarea";
-import Button from "../../../components/ui/Button";
+import Card from "../ui/Card";
+import FormField from "../ui/FormField";
+import Input from "../ui/Input";
+import Textarea from "../ui/Textarea";
+import Button from "../ui/Button";
+import AppIcon from "./AppIcon";
 import {
   Apple,
   CircleAlert,
@@ -15,25 +13,11 @@ import {
   FileCheck,
   Globe,
   LoaderCircle,
+  Rocket,
   Smartphone,
   X,
 } from "lucide-react";
-import { formatBytes } from "../../../lib/format";
-import AppIcon from "../../../components/release/AppIcon";
-import { canManageReleases } from "../../../components/ui/role";
-
-export async function getServerSideProps({ params, req, res }) {
-  const supabase = createServerSupabase(req, res);
-  const { data: project } = await supabase.from("projects").select("*").eq("id", params.id).single();
-  if (!project) return { notFound: true };
-
-  const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
-  if (!canManageReleases(role)) {
-    return { redirect: { destination: `/projects/${params.id}/changelog`, permanent: false } };
-  }
-
-  return { props: { project, role } };
-}
+import { formatBytes } from "../../lib/format";
 
 const PLATFORMS = [
   { key: "ios", label: "iOS", hint: ".ipa", icon: Apple },
@@ -41,7 +25,10 @@ const PLATFORMS = [
   { key: "web", label: "Web app", hint: "link", icon: Globe },
 ];
 
-export default function NewRelease({ project, role }) {
+// Floating dialog version of the release form — opened from the Changelog
+// (or Overview) page instead of navigating to a separate route, so
+// publishing a build never loses your place in the project.
+export default function NewReleaseDialog({ project, open, onClose }) {
   const router = useRouter();
   const [platform, setPlatform] = useState("ios");
   const [appName, setAppName] = useState("");
@@ -57,7 +44,7 @@ export default function NewRelease({ project, role }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [webDetecting, setWebDetecting] = useState(false);
-  const [phase, setPhase] = useState("idle"); // idle | uploading | publishing
+  const [phase, setPhase] = useState("idle"); // idle | publishing
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [duplicate, setDuplicate] = useState(null);
@@ -65,6 +52,8 @@ export default function NewRelease({ project, role }) {
 
   const submitting = phase !== "idle";
   const busyWithFile = uploadingFile || analyzing;
+
+  if (!open) return null;
 
   function discardUpload(path) {
     if (!path) return;
@@ -80,6 +69,11 @@ export default function NewRelease({ project, role }) {
     setFile(null);
     setFilePath(null);
     setIconPreview(null);
+  }
+
+  function handleClose() {
+    if (submitting || busyWithFile) return;
+    onClose();
   }
 
   async function handleFileSelected(selectedFile) {
@@ -179,21 +173,12 @@ export default function NewRelease({ project, role }) {
     if (!validate()) return;
 
     try {
-      // Before uploading anything, check whether the exact same app (same
-      // specifications) was already published to this project.
       if (!replace) {
         setDuplicateChecking(true);
         const checkRes = await fetch("/api/releases/check-duplicate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectId: project.id,
-            platform,
-            version,
-            buildNumber,
-            bundleId,
-            webUrl,
-          }),
+          body: JSON.stringify({ projectId: project.id, platform, version, buildNumber, bundleId, webUrl }),
         });
         setDuplicateChecking(false);
         const checkData = await checkRes.json();
@@ -203,8 +188,6 @@ export default function NewRelease({ project, role }) {
         }
       }
 
-      // The build file was already uploaded (and analyzed for prefill) as
-      // soon as it was chosen — publish just needs the resulting path.
       if (platform !== "web" && !filePath) {
         throw new Error("Still uploading the build file — try again in a moment.");
       }
@@ -234,26 +217,31 @@ export default function NewRelease({ project, role }) {
   }
 
   return (
-    <AppShell
-      project={project}
-      role={role}
-      breadcrumbs={[
-        { label: "Projects", href: "/dashboard" },
-        { label: project.name },
-        { label: "New release" },
-      ]}
-    >
-      <div className="mx-auto flex max-w-xl flex-col gap-6">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-primary">New release</h1>
-          <p className="mt-1 text-sm text-ink-tertiary">
-            Publish a build for {project.name} and generate an install page.
-          </p>
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-4 pb-10 pt-8 sm:items-center sm:pt-4">
+      <div className="absolute inset-0 bg-neutral-950/50" onClick={handleClose} aria-hidden="true" />
+      <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
+              <Rocket size={14} strokeWidth={2.25} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-ink-primary">New release</h2>
+              <p className="text-xs text-ink-tertiary">{project.name}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleClose}
+            disabled={submitting || busyWithFile}
+            className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary disabled:opacity-40"
+          >
+            <X size={16} />
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <Card className="flex flex-col gap-4 p-5">
-            <h2 className="text-sm font-semibold text-ink-primary">Release details</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5 overflow-y-auto px-5 py-5 thin-scrollbar">
+          <Card className="flex flex-col gap-4 p-4">
+            <h3 className="text-sm font-semibold text-ink-primary">Release details</h3>
 
             <FormField label="Platform">
               <div className="grid grid-cols-3 gap-2">
@@ -357,8 +345,8 @@ export default function NewRelease({ project, role }) {
             )}
           </Card>
 
-          <Card className="flex flex-col gap-4 p-5">
-            <h2 className="text-sm font-semibold text-ink-primary">Build source</h2>
+          <Card className="flex flex-col gap-4 p-4">
+            <h3 className="text-sm font-semibold text-ink-primary">Build source</h3>
 
             {platform === "web" ? (
               <FormField
@@ -448,7 +436,7 @@ export default function NewRelease({ project, role }) {
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={5}
+                rows={4}
                 placeholder="What changed in this release..."
               />
             </FormField>
@@ -462,15 +450,15 @@ export default function NewRelease({ project, role }) {
           )}
 
           {duplicate && (
-            <Card className="flex flex-col gap-4 border-warning/40 p-5">
+            <Card className="flex flex-col gap-4 border-warning/40 p-4">
               <div className="flex gap-3">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-warning-subtle text-warning-subtle-fg">
                   <CircleAlert size={16} strokeWidth={2} />
                 </span>
                 <div className="flex flex-col gap-1">
-                  <h2 className="text-sm font-semibold text-ink-primary">
+                  <h3 className="text-sm font-semibold text-ink-primary">
                     This build already exists in this project
-                  </h2>
+                  </h3>
                   <p className="text-sm text-ink-secondary">
                     {duplicate.appName ? `${duplicate.appName} · ` : ""}
                     {duplicate.version}
@@ -515,6 +503,6 @@ export default function NewRelease({ project, role }) {
           )}
         </form>
       </div>
-    </AppShell>
+    </div>
   );
 }

@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { createServerSupabase } from "../../../lib/supabase/server";
-import AppShell from "../../../components/layout/AppShell";
+import ProjectShell from "../../../components/layout/ProjectShell";
 import Button from "../../../components/ui/Button";
 import Badge from "../../../components/ui/Badge";
 import EmptyState from "../../../components/ui/EmptyState";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import AppIcon from "../../../components/release/AppIcon";
+import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import {
   ClipboardList,
   ExternalLink,
@@ -141,10 +143,18 @@ function ChangelogRow({ release, onDelete, canEdit }) {
 }
 
 export default function Changelog({ project, role, releases }) {
+  const router = useRouter();
   const canEdit = canManageReleases(role);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  // Deep-link support (e.g. the dashboard's "Release" quick link) — opens
+  // the New release dialog right away instead of requiring an extra click.
+  useEffect(() => {
+    if (router.query.new === "1" && canEdit) setDialogOpen(true);
+  }, [router.query.new, canEdit]);
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -166,11 +176,7 @@ export default function Changelog({ project, role, releases }) {
   }
 
   return (
-    <AppShell
-      project={project}
-      role={role}
-      breadcrumbs={[{ label: "Projects", href: "/dashboard" }, { label: project.name }, { label: "Changelog" }]}
-    >
+    <ProjectShell project={project} active="changelog">
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -178,12 +184,10 @@ export default function Changelog({ project, role, releases }) {
             <p className="mt-1 text-sm text-ink-tertiary">Published releases for {project.name}.</p>
           </div>
           {canEdit && (
-            <Link href={`/projects/${project.id}/new-release`}>
-              <Button>
-                <Rocket size={15} strokeWidth={2.25} />
-                New release
-              </Button>
-            </Link>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Rocket size={15} strokeWidth={2.25} />
+              New release
+            </Button>
           )}
         </div>
 
@@ -204,12 +208,10 @@ export default function Changelog({ project, role, releases }) {
             }
             action={
               canEdit && (
-                <Link href={`/projects/${project.id}/new-release`}>
-                  <Button>
-                    <Rocket size={15} strokeWidth={2.25} />
-                    New release
-                  </Button>
-                </Link>
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Rocket size={15} strokeWidth={2.25} />
+                  New release
+                </Button>
               )
             }
           />
@@ -248,6 +250,8 @@ export default function Changelog({ project, role, releases }) {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-    </AppShell>
+
+      <NewReleaseDialog project={project} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+    </ProjectShell>
   );
 }

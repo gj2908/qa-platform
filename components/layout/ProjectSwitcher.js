@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronsUpDown, Check, LayoutGrid } from "lucide-react";
+import { ChevronsUpDown, LayoutGrid } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 
-export default function ProjectSwitcher({ currentProject }) {
+export default function ProjectSwitcher() {
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState(null);
   const ref = useRef(null);
@@ -39,9 +39,7 @@ export default function ProjectSwitcher({ currentProject }) {
         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-subtle text-ink-tertiary">
           <LayoutGrid size={12} strokeWidth={2.25} />
         </span>
-        <span className="min-w-0 flex-1 truncate font-medium text-ink-primary">
-          {currentProject ? currentProject.name : "All projects"}
-        </span>
+        <span className="min-w-0 flex-1 truncate font-medium text-ink-primary">Jump to project</span>
         <ChevronsUpDown size={13} className="shrink-0 text-ink-tertiary" />
       </button>
 
@@ -65,14 +63,11 @@ export default function ProjectSwitcher({ currentProject }) {
             {projects?.map((p) => (
               <Link
                 key={p.id}
-                href={`/projects/${p.id}/board`}
+                href={`/projects/${p.id}`}
                 onClick={() => setOpen(false)}
-                className="flex items-center justify-between gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
+                className="flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
               >
                 <span className="truncate">{p.name}</span>
-                {currentProject?.id === p.id && (
-                  <Check size={13} className="shrink-0 text-accent" />
-                )}
               </Link>
             ))}
           </div>

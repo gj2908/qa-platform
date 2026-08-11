@@ -2,12 +2,15 @@ import { useState } from "react";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
-export default function AppShell({ title, breadcrumbs, project, role, children }) {
+// Layout for the dashboard/account-level pages. Project-scoped pages
+// (Overview/Board/Changelog/Collaborators) use ProjectShell instead — no
+// sidebar there, see components/layout/ProjectShell.js for why.
+export default function AppShell({ title, breadcrumbs, children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen bg-canvas">
-      <Sidebar project={project} role={role} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
           title={title}

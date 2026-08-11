@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
-import AppShell from "../../../components/layout/AppShell";
+import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
@@ -99,14 +99,7 @@ export default function Collaborators({ project, role: myRole, collaborators: in
   }
 
   return (
-    <AppShell
-      project={project}
-      breadcrumbs={[
-        { label: "Projects", href: "/dashboard" },
-        { label: project.name },
-        { label: "Collaborators" },
-      ]}
-    >
+    <ProjectShell project={project} active="collaborators">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Collaborators</h1>
@@ -231,6 +224,6 @@ export default function Collaborators({ project, role: myRole, collaborators: in
         onConfirm={confirmTransfer}
         onCancel={() => setTransferTarget(null)}
       />
-    </AppShell>
+    </ProjectShell>
   );
 }

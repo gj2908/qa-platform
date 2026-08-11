@@ -303,22 +303,27 @@ function ProjectCard({ project: p, onDelete }) {
   return (
     <Card className="flex flex-col gap-4 p-4 transition-colors hover:border-border-strong">
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
-          <FolderKanban size={17} strokeWidth={2} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <p className="text-xs text-ink-tertiary">Created {new Date(p.created_at).toLocaleDateString()}</p>
-            {roleMeta && (
-              <span className="flex items-center gap-1 text-xs text-ink-tertiary">
-                <span className="text-ink-disabled">·</span>
-                <RoleIcon size={11} strokeWidth={2.25} />
-                {roleMeta.label}
-              </span>
-            )}
+        <Link
+          href={`/projects/${p.id}`}
+          className="flex min-w-0 flex-1 items-start gap-3 rounded-md -m-1 p-1 transition-colors hover:bg-hover"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
+            <FolderKanban size={17} strokeWidth={2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <p className="text-xs text-ink-tertiary">Created {new Date(p.created_at).toLocaleDateString()}</p>
+              {roleMeta && (
+                <span className="flex items-center gap-1 text-xs text-ink-tertiary">
+                  <span className="text-ink-disabled">·</span>
+                  <RoleIcon size={11} strokeWidth={2.25} />
+                  {roleMeta.label}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        </Link>
         {isOwner && (
           <div ref={menuRef} className="relative shrink-0">
             <button
@@ -348,7 +353,7 @@ function ProjectCard({ project: p, onDelete }) {
         <ProjectLink href={`/projects/${p.id}/board`} icon={Kanban} label="Board" />
         <ProjectLink href={`/projects/${p.id}/changelog`} icon={ClipboardList} label="Changelog" />
         {canManageReleases(p.role) && (
-          <ProjectLink href={`/projects/${p.id}/new-release`} icon={Rocket} label="Release" />
+          <ProjectLink href={`/projects/${p.id}/changelog?new=1`} icon={Rocket} label="Release" />
         )}
       </div>
     </Card>
