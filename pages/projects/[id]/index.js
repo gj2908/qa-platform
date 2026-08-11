@@ -4,13 +4,26 @@ import { createServerSupabase } from "../../../lib/supabase/server";
 import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
+import Input from "../../../components/ui/Input";
+import FormField from "../../../components/ui/FormField";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
-import { ROLE_META, canManageReleases } from "../../../components/ui/role";
+import { ROLE_META, canManageReleases, isOwner } from "../../../components/ui/role";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
 import { relativeTime } from "../../../lib/format";
-import { Kanban, ClipboardList, ListTodo, PackageCheck, Plus, Rocket, Users } from "lucide-react";
+import {
+  Kanban,
+  ClipboardList,
+  ListTodo,
+  PackageCheck,
+  Plus,
+  Rocket,
+  Users,
+  Webhook,
+  CircleCheck,
+  CircleAlert,
+} from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -188,10 +201,113 @@ export default function ProjectOverview({ project, role, tasks, releases, collab
             </div>
           </div>
         </div>
+
+        {isOwner(role) && <WebhookCard project={project} />}
       </div>
 
       <NewReleaseDialog project={project} open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </ProjectShell>
+  );
+}
+
+function WebhookCard({ project }) {
+  const [url, setUrl] = useState(project.webhook_url || "");
+  const [savedUrl, setSavedUrl] = useState(project.webhook_url || "");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+    const res = await fetch("/api/projects/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, webhookUrl: url }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setMessage("Saved.");
+      setSavedUrl(url.trim());
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Couldn't save the webhook URL.");
+    }
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setError("");
+    setMessage("");
+    const res = await fetch("/api/projects/webhook-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id }),
+    });
+    setTesting(false);
+    if (res.ok) {
+      setMessage("Test notification sent.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Couldn't reach that URL.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Webhook size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Release notifications</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Posts a message to this URL every time a new release is published. Compatible with Slack
+        incoming webhooks.
+      </p>
+
+      <form onSubmit={save} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <FormField label="Webhook URL" htmlFor="webhookUrl">
+            <Input
+              id="webhookUrl"
+              type="url"
+              placeholder="https://hooks.slack.com/services/…"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </FormField>
+        </div>
+        <div className="flex gap-2">
+          <Button type="submit" variant="secondary" loading={saving}>
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={sendTest}
+            loading={testing}
+            disabled={!savedUrl}
+          >
+            Send test
+          </Button>
+        </div>
+      </form>
+
+      {message && (
+        <p className="mt-2.5 flex items-center gap-1.5 text-sm text-success">
+          <CircleCheck size={14} strokeWidth={2.25} />
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="mt-2.5 flex items-center gap-1.5 text-sm text-danger">
+          <CircleAlert size={14} strokeWidth={2.25} />
+          {error}
+        </p>
+      )}
+    </Card>
   );
 }
 

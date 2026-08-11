@@ -1,4 +1,5 @@
 import { useState } from "react";
+import QRCode from "qrcode";
 import { createServerSupabase, createServiceClient } from "../../lib/supabase/server";
 import ProjectShell from "../../components/layout/ProjectShell";
 import TopNav from "../../components/layout/TopNav";
@@ -8,7 +9,18 @@ import PlatformBadge from "../../components/ui/PlatformBadge";
 import AppIcon from "../../components/release/AppIcon";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
 import OtherVersionsCard from "../../components/release/OtherVersionsCard";
-import { Check, CircleAlert, Copy, Download, ShieldCheck, TriangleAlert } from "lucide-react";
+import ReportIssueCard from "../../components/release/ReportIssueCard";
+import { getExpiryStatus } from "../../lib/provisioning";
+import {
+  CalendarClock,
+  Check,
+  CircleAlert,
+  Copy,
+  Download,
+  QrCode,
+  ShieldCheck,
+  TriangleAlert,
+} from "lucide-react";
 
 // A release with no project (public, no-login upload) has nothing to show
 // tabs for — just enough chrome to get back to the dashboard.
@@ -64,7 +76,15 @@ export async function getServerSideProps({ params, req, res }) {
     androidUrl = publicFile.publicUrl || null;
   }
 
-  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [] } };
+  const shareUrl = `${protocol}://${host}/share/${release.id}`;
+  const rawQrSvg = await QRCode.toString(shareUrl, {
+    type: "svg",
+    margin: 1,
+    color: { dark: "#000000", light: "#0000" },
+  });
+  const qrSvg = rawQrSvg.replace('fill="#000000"', 'fill="currentColor"');
+
+  return { props: { release, itmsLink, androidUrl, otherVersions: otherVersions || [], qrSvg } };
 }
 
 function SigningNotice({ release }) {
@@ -116,8 +136,36 @@ function SigningNotice({ release }) {
   return null;
 }
 
-export default function Distribute({ release, itmsLink, androidUrl, otherVersions }) {
+function ExpiryNotice({ release }) {
+  if (release.platform !== "ios") return null;
+  const expiry = getExpiryStatus(release.provisioning_info);
+  if (!expiry || expiry.status === "ok") return null;
+
+  const expired = expiry.status === "expired";
+  return (
+    <div
+      className={`flex gap-2.5 rounded-md px-3.5 py-3 text-sm ${
+        expired ? "bg-danger-subtle text-danger-subtle-fg" : "bg-warning-subtle text-warning-subtle-fg"
+      }`}
+    >
+      <CalendarClock size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+      <div>
+        <p className="font-medium">
+          {expired ? "Provisioning profile has expired" : "Provisioning profile expiring soon"}
+        </p>
+        <p className="mt-0.5 text-ink-secondary">
+          {expired
+            ? "This build can no longer be installed. Re-sign and re-upload a new version."
+            : `Installs will stop working in ${expiry.daysLeft} day${expiry.daysLeft === 1 ? "" : "s"}. Re-sign and upload a new build before then.`}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function Distribute({ release, itmsLink, androidUrl, otherVersions, qrSvg }) {
   const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
 
@@ -149,6 +197,7 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
           </div>
 
           <SigningNotice release={release} />
+          <ExpiryNotice release={release} />
 
           <div>
             {release.platform === "ios" && (
@@ -192,19 +241,41 @@ export default function Distribute({ release, itmsLink, androidUrl, otherVersion
           )}
         </Card>
 
-        <Card className="flex items-center justify-between gap-3 p-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-ink-primary">Public share link</p>
-            <p className="mt-0.5 truncate text-xs text-ink-tertiary">
-              Anyone with this link can view and install — no login required.
-            </p>
+        <Card className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink-primary">Public share link</p>
+              <p className="mt-0.5 truncate text-xs text-ink-tertiary">
+                Anyone with this link can view and install — no login required.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setQrOpen((o) => !o)}
+                aria-pressed={qrOpen}
+              >
+                <QrCode size={13} strokeWidth={2.25} />
+                QR
+              </Button>
+              <Button variant="secondary" size="sm" onClick={copyLink}>
+                {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
           </div>
-          <Button variant="secondary" size="sm" onClick={copyLink} className="shrink-0">
-            {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
+          {qrOpen && (
+            <div className="mt-4 flex justify-center border-t border-border pt-4">
+              <div
+                className="h-40 w-40 rounded-md bg-white p-2.5 text-neutral-950"
+                dangerouslySetInnerHTML={{ __html: qrSvg }}
+              />
+            </div>
+          )}
         </Card>
 
+        {release.project_id && <ReportIssueCard releaseId={release.id} />}
         <AppDetailsCard release={release} />
         <OtherVersionsCard releases={otherVersions} basePath="/distribute" />
       </div>

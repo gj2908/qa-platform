@@ -11,6 +11,7 @@ import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import {
+  CalendarClock,
   ClipboardList,
   ExternalLink,
   Rocket,
@@ -22,6 +23,7 @@ import {
 import { relativeTime } from "../../../lib/format";
 import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
 import { canManageReleases } from "../../../components/ui/role";
+import { getExpiryStatus } from "../../../lib/provisioning";
 
 const PLATFORM_ORDER = ["ios", "android", "web"];
 
@@ -79,6 +81,45 @@ function SigningBadge({ release }) {
   return null;
 }
 
+function ExpiryBadge({ release }) {
+  if (release.platform !== "ios") return null;
+  const expiry = getExpiryStatus(release.provisioning_info);
+  if (!expiry || expiry.status === "ok") return null;
+
+  if (expiry.status === "expired") {
+    return (
+      <Badge tone="danger" icon={CalendarClock}>
+        Profile expired
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone="warning" icon={CalendarClock}>
+      Expires in {expiry.daysLeft} day{expiry.daysLeft === 1 ? "" : "s"}
+    </Badge>
+  );
+}
+
+function StatusBadges({ release }) {
+  const expiry = release.platform === "ios" ? getExpiryStatus(release.provisioning_info) : null;
+  const info = release.provisioning_info;
+  const hasSigningBadge =
+    release.platform === "ios" &&
+    (info?.type === "Enterprise" ||
+      info?.type === "Development" ||
+      info?.type === "Ad Hoc" ||
+      (!info?.type && release.ota_ready === false));
+  const hasExpiryBadge = expiry && expiry.status !== "ok";
+  if (!hasSigningBadge && !hasExpiryBadge) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <SigningBadge release={release} />
+      <ExpiryBadge release={release} />
+    </div>
+  );
+}
+
 function ChangelogRow({ release, onDelete, canEdit }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = release.notes && release.notes.length > 180;
@@ -114,7 +155,7 @@ function ChangelogRow({ release, onDelete, canEdit }) {
         </div>
       </div>
 
-      <SigningBadge release={release} />
+      <StatusBadges release={release} />
 
       {release.notes && (
         <div>

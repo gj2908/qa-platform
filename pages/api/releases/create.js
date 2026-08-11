@@ -5,6 +5,7 @@ import { analyzeIpa } from "../../../lib/ipaAnalyzer";
 import { analyzeAppBinary } from "../../../lib/appAnalyzer";
 import { findDuplicateRelease } from "../../../lib/findDuplicateRelease";
 import { fetchWebAppInfo } from "../../../lib/faviconFetcher";
+import { sendWebhookNotification, buildReleasePayload } from "../../../lib/webhookNotify";
 
 export const config = {
   api: { bodyParser: false },
@@ -220,6 +221,33 @@ export default async function handler(req, res) {
   if (insertError) {
     res.status(500).json({ error: insertError.message });
     return;
+  }
+
+  // Best-effort release notification — never lets a slow/broken webhook
+  // fail or meaningfully delay the response (bounded by the helper's own
+  // 5s timeout).
+  try {
+    const { data: project } = await service
+      .from("projects")
+      .select("webhook_url")
+      .eq("id", projectId)
+      .single();
+    if (project?.webhook_url) {
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host;
+      await sendWebhookNotification(
+        project.webhook_url,
+        buildReleasePayload({
+          appName: release.app_name,
+          version: release.version,
+          buildNumber: release.build_number,
+          platform: release.platform,
+          installUrl: `${protocol}://${host}/distribute/${release.id}`,
+        })
+      );
+    }
+  } catch (e) {
+    // ignored — notification failures never affect the publish response
   }
 
   res.status(200).json({ releaseId: release.id });

@@ -7,6 +7,7 @@ create table projects (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
+  webhook_url text, -- optional Slack-incoming-webhook-compatible URL, notified on publish
   created_by uuid references auth.users(id),
   created_at timestamptz default now()
 );

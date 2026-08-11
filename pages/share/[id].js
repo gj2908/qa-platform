@@ -9,7 +9,10 @@ import PlatformBadge from "../../components/ui/PlatformBadge";
 import AppIcon from "../../components/release/AppIcon";
 import AppDetailsCard from "../../components/release/AppDetailsCard";
 import OtherVersionsCard from "../../components/release/OtherVersionsCard";
+import ReportIssueCard from "../../components/release/ReportIssueCard";
+import { getExpiryStatus } from "../../lib/provisioning";
 import {
+  CalendarClock,
   CircleAlert,
   Compass,
   Download,
@@ -73,6 +76,7 @@ export default function SharePage({ release, itmsLink, androidUrl, otherVersions
 
   const showInstallButton =
     release.platform !== "ios" || !env || (env.isSafari && !env.isNonSafariIOSBrowser);
+  const expiry = release.platform === "ios" ? getExpiryStatus(release.provisioning_info) : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
@@ -164,6 +168,30 @@ export default function SharePage({ release, itmsLink, androidUrl, otherVersions
                 </div>
               )}
 
+            {expiry && expiry.status !== "ok" && (
+              <div
+                className={`flex gap-2.5 rounded-md px-3.5 py-3 text-sm ${
+                  expiry.status === "expired"
+                    ? "bg-danger-subtle text-danger-subtle-fg"
+                    : "bg-warning-subtle text-warning-subtle-fg"
+                }`}
+              >
+                <CalendarClock size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    {expiry.status === "expired"
+                      ? "Provisioning profile has expired"
+                      : "Provisioning profile expiring soon"}
+                  </p>
+                  <p className="mt-0.5 text-ink-secondary">
+                    {expiry.status === "expired"
+                      ? "This build can no longer be installed. Ask the release owner to upload a new version."
+                      : `Installs will stop working in ${expiry.daysLeft} day${expiry.daysLeft === 1 ? "" : "s"}.`}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {env?.isDesktopModeIPad && release.platform === "ios" && (
               <div className="flex gap-2.5 rounded-md bg-accent-subtle px-3.5 py-3 text-sm text-accent-subtle-fg">
                 <MonitorSmartphone size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
@@ -221,6 +249,7 @@ export default function SharePage({ release, itmsLink, androidUrl, otherVersions
           </Card>
 
           <div className="mt-5 flex flex-col gap-5">
+            {release.project_id && <ReportIssueCard releaseId={release.id} />}
             <AppDetailsCard release={release} />
             <OtherVersionsCard releases={otherVersions} basePath="/share" />
           </div>
