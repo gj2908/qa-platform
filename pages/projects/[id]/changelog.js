@@ -6,7 +6,17 @@ import Button from "../../../components/ui/Button";
 import Badge from "../../../components/ui/Badge";
 import EmptyState from "../../../components/ui/EmptyState";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
-import { ClipboardList, ExternalLink, Rocket, ShieldCheck, TriangleAlert, CircleAlert } from "lucide-react";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import AppIcon from "../../../components/release/AppIcon";
+import {
+  ClipboardList,
+  ExternalLink,
+  Rocket,
+  ShieldCheck,
+  TriangleAlert,
+  CircleAlert,
+  Trash2,
+} from "lucide-react";
 import { relativeTime } from "../../../lib/format";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -50,7 +60,7 @@ function SigningBadge({ release }) {
   return null;
 }
 
-function ChangelogRow({ release }) {
+function ChangelogRow({ release, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = release.notes && release.notes.length > 180;
 
@@ -58,6 +68,7 @@ function ChangelogRow({ release }) {
     <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
+          <AppIcon src={release.app_icon} fallbackLabel={release.app_name} size={28} />
           <PlatformBadge platform={release.platform} />
           <span className="text-sm font-semibold text-ink-primary">
             v{release.version}
@@ -65,12 +76,21 @@ function ChangelogRow({ release }) {
           </span>
           <span className="text-xs text-ink-tertiary">{relativeTime(release.created_at)}</span>
         </div>
-        <Link href={`/distribute/${release.id}`}>
-          <Button size="sm" variant="secondary">
-            <ExternalLink size={13} strokeWidth={2.25} />
-            Install page
-          </Button>
-        </Link>
+        <div className="flex items-center gap-1.5">
+          <Link href={`/distribute/${release.id}`}>
+            <Button size="sm" variant="secondary">
+              <ExternalLink size={13} strokeWidth={2.25} />
+              Install page
+            </Button>
+          </Link>
+          <button
+            onClick={() => onDelete(release)}
+            title="Delete release"
+            className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+          >
+            <Trash2 size={14} strokeWidth={2.25} />
+          </button>
+        </div>
       </div>
 
       <SigningBadge release={release} />
@@ -99,6 +119,29 @@ function ChangelogRow({ release }) {
 }
 
 export default function Changelog({ project, releases }) {
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError("");
+    const res = await fetch("/api/releases/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ releaseId: deleteTarget.id }),
+    });
+    setDeleting(false);
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error || "Couldn't delete this release.");
+      setDeleteTarget(null);
+    }
+  }
+
   return (
     <AppShell
       project={project}
@@ -118,6 +161,12 @@ export default function Changelog({ project, releases }) {
           </Link>
         </div>
 
+        {deleteError && (
+          <p className="rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
+            {deleteError}
+          </p>
+        )}
+
         {releases.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
@@ -135,11 +184,21 @@ export default function Changelog({ project, releases }) {
         ) : (
           <div className="divide-y divide-border rounded-lg border border-border bg-surface">
             {releases.map((r) => (
-              <ChangelogRow key={r.id} release={r} />
+              <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`Delete v${deleteTarget?.version}${deleteTarget?.build_number ? ` (${deleteTarget.build_number})` : ""}?`}
+        description="This permanently removes the release and its uploaded build file. Its install and share links will stop working. This can't be undone."
+        confirmLabel="Delete release"
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </AppShell>
   );
 }

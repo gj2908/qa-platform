@@ -14,10 +14,12 @@ import {
   CloudUpload,
   FileCheck,
   Globe,
+  LoaderCircle,
   Smartphone,
   X,
 } from "lucide-react";
 import { formatBytes } from "../../../lib/format";
+import AppIcon from "../../../components/release/AppIcon";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -42,6 +44,12 @@ export default function NewRelease({ project }) {
   const [webUrl, setWebUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState(null);
+  const [filePath, setFilePath] = useState(null);
+  const [iconPreview, setIconPreview] = useState(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [webDetecting, setWebDetecting] = useState(false);
   const [phase, setPhase] = useState("idle"); // idle | uploading | publishing
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
@@ -49,6 +57,98 @@ export default function NewRelease({ project }) {
   const [duplicateChecking, setDuplicateChecking] = useState(false);
 
   const submitting = phase !== "idle";
+  const busyWithFile = uploadingFile || analyzing;
+
+  function discardUpload(path) {
+    if (!path) return;
+    fetch("/api/releases/discard-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filePath: path }),
+    }).catch(() => {});
+  }
+
+  function resetFile() {
+    if (filePath) discardUpload(filePath);
+    setFile(null);
+    setFilePath(null);
+    setIconPreview(null);
+  }
+
+  async function handleFileSelected(selectedFile) {
+    if (!selectedFile) return;
+    setFile(selectedFile);
+    setFilePath(null);
+    setIconPreview(null);
+    setErrors((e) => ({ ...e, file: undefined }));
+    setUploadingFile(true);
+
+    try {
+      const signRes = await fetch("/api/releases/sign-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, platform, filename: selectedFile.name }),
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok) throw new Error(signData.error || "Could not start upload");
+
+      const putRes = await fetch(signData.uploadUrl, { method: "PUT", body: selectedFile });
+      if (!putRes.ok) throw new Error("Upload to storage failed");
+
+      setFilePath(signData.filePath);
+      setUploadingFile(false);
+      setAnalyzing(true);
+
+      const analyzeRes = await fetch("/api/releases/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform, filePath: signData.filePath }),
+      });
+      const info = await analyzeRes.json();
+      if (analyzeRes.ok) {
+        setAppName((prev) => prev || info.appName || "");
+        setVersion((prev) => prev || info.version || "");
+        setBuildNumber((prev) => prev || info.buildNumber || "");
+        setBundleId((prev) => prev || info.bundleId || "");
+        setIconPreview(info.icon || null);
+      }
+    } catch (err) {
+      setErrors((e) => ({ ...e, file: err.message || "Upload failed" }));
+      setFile(null);
+      setFilePath(null);
+    } finally {
+      setUploadingFile(false);
+      setAnalyzing(false);
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragActive(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) handleFileSelected(dropped);
+  }
+
+  async function detectWebInfo(url) {
+    if (!url.trim() || appName.trim()) return;
+    setWebDetecting(true);
+    try {
+      const res = await fetch("/api/releases/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "web", webUrl: url }),
+      });
+      const info = await res.json();
+      if (res.ok) {
+        setAppName((prev) => prev || info.appName || "");
+        setIconPreview(info.icon || null);
+      }
+    } catch (e) {
+      // best-effort — the form still works without a detected name/icon
+    } finally {
+      setWebDetecting(false);
+    }
+  }
 
   function validate() {
     const next = {};
@@ -96,22 +196,10 @@ export default function NewRelease({ project }) {
         }
       }
 
-      let filePath = null;
-
-      if (platform !== "web") {
-        setPhase("uploading");
-        const signRes = await fetch("/api/releases/sign-upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectId: project.id, platform, filename: file.name }),
-        });
-        const signData = await signRes.json();
-        if (!signRes.ok) throw new Error(signData.error || "Could not start upload");
-
-        const putRes = await fetch(signData.uploadUrl, { method: "PUT", body: file });
-        if (!putRes.ok) throw new Error("Upload to storage failed");
-
-        filePath = signData.filePath;
+      // The build file was already uploaded (and analyzed for prefill) as
+      // soon as it was chosen — publish just needs the resulting path.
+      if (platform !== "web" && !filePath) {
+        throw new Error("Still uploading the build file — try again in a moment.");
       }
 
       setPhase("publishing");
@@ -166,6 +254,7 @@ export default function NewRelease({ project }) {
                     key={key}
                     type="button"
                     onClick={() => {
+                      if (key !== platform) resetFile();
                       setPlatform(key);
                       setErrors({});
                     }}
@@ -190,17 +279,30 @@ export default function NewRelease({ project }) {
               error={errors.appName}
               hint={
                 platform === "web"
-                  ? "Shown as the install page title."
+                  ? "Shown as the install page title — detected from the site if left blank."
                   : "Optional — leave blank to detect it from the build file automatically."
               }
             >
-              <Input
-                id="appName"
-                value={appName}
-                onChange={(e) => setAppName(e.target.value)}
-                placeholder={platform === "web" ? "My App" : "Auto-detected from the build if left blank"}
-                error={!!errors.appName}
-              />
+              <div className="flex items-center gap-2.5">
+                {(iconPreview || analyzing || webDetecting) && (
+                  <span className="shrink-0">
+                    {analyzing || webDetecting ? (
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md bg-subtle text-ink-tertiary">
+                        <LoaderCircle size={14} className="animate-spin" />
+                      </span>
+                    ) : (
+                      <AppIcon src={iconPreview} fallbackLabel={appName} size={36} />
+                    )}
+                  </span>
+                )}
+                <Input
+                  id="appName"
+                  value={appName}
+                  onChange={(e) => setAppName(e.target.value)}
+                  placeholder={platform === "web" ? "My App" : "Auto-detected from the build if left blank"}
+                  error={!!errors.appName}
+                />
+              </div>
             </FormField>
 
             <div className="grid grid-cols-2 gap-3">
@@ -224,19 +326,23 @@ export default function NewRelease({ project }) {
               </FormField>
             </div>
 
-            {platform === "ios" && (
+            {platform !== "web" && (
               <FormField
-                label="Bundle ID"
+                label={platform === "ios" ? "Bundle ID" : "Package name"}
                 htmlFor="bundleId"
-                required
-                hint="Required to generate the iOS install manifest."
+                required={platform === "ios"}
+                hint={
+                  platform === "ios"
+                    ? "Required to generate the iOS install manifest."
+                    : "Optional — auto-detected from the build if left blank."
+                }
                 error={errors.bundleId}
               >
                 <Input
                   id="bundleId"
                   value={bundleId}
                   onChange={(e) => setBundleId(e.target.value)}
-                  placeholder="com.yourcompany.app"
+                  placeholder={platform === "ios" ? "com.yourcompany.app" : "com.yourcompany.app (auto-detected)"}
                   error={!!errors.bundleId}
                 />
               </FormField>
@@ -247,12 +353,19 @@ export default function NewRelease({ project }) {
             <h2 className="text-sm font-semibold text-ink-primary">Build source</h2>
 
             {platform === "web" ? (
-              <FormField label="App URL" htmlFor="webUrl" required error={errors.webUrl}>
+              <FormField
+                label="App URL"
+                htmlFor="webUrl"
+                required
+                error={errors.webUrl}
+                hint="We'll try to detect the app name and favicon from this URL."
+              >
                 <Input
                   id="webUrl"
                   type="url"
                   value={webUrl}
                   onChange={(e) => setWebUrl(e.target.value)}
+                  onBlur={(e) => detectWebInfo(e.target.value)}
                   placeholder="https://app.yourcompany.com"
                   error={!!errors.webUrl}
                 />
@@ -265,25 +378,46 @@ export default function NewRelease({ project }) {
               >
                 {file ? (
                   <div className="flex items-center gap-3 rounded-md border border-border bg-subtle px-3 py-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-success-subtle text-success-subtle-fg">
-                      <FileCheck size={15} strokeWidth={2} />
-                    </span>
+                    {analyzing ? (
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-subtle text-ink-tertiary">
+                        <LoaderCircle size={15} className="animate-spin" />
+                      </span>
+                    ) : iconPreview ? (
+                      <AppIcon src={iconPreview} fallbackLabel={file.name} size={32} />
+                    ) : (
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-success-subtle text-success-subtle-fg">
+                        <FileCheck size={15} strokeWidth={2} />
+                      </span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-ink-primary">{file.name}</p>
-                      <p className="text-xs text-ink-tertiary">{formatBytes(file.size)}</p>
+                      <p className="text-xs text-ink-tertiary">
+                        {uploadingFile
+                          ? "Uploading…"
+                          : analyzing
+                            ? "Reading app details…"
+                            : formatBytes(file.size)}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setFile(null)}
-                      className="shrink-0 rounded p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
+                      onClick={resetFile}
+                      disabled={busyWithFile}
+                      className="shrink-0 rounded p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary disabled:opacity-40"
                     >
                       <X size={14} />
                     </button>
                   </div>
                 ) : (
                   <label
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDragActive(true);
+                    }}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={handleDrop}
                     className={`flex cursor-pointer flex-col items-center gap-2 rounded-md border border-dashed px-4 py-6 text-center transition-colors hover:bg-hover ${
-                      errors.file ? "border-danger" : "border-border"
+                      dragActive ? "border-accent bg-accent-subtle" : errors.file ? "border-danger" : "border-border"
                     }`}
                   >
                     <CloudUpload size={18} className="text-ink-tertiary" strokeWidth={1.75} />
@@ -293,7 +427,7 @@ export default function NewRelease({ project }) {
                     <input
                       type="file"
                       accept={platform === "ios" ? ".ipa" : ".apk,.aab"}
-                      onChange={(e) => setFile(e.target.files[0] || null)}
+                      onChange={(e) => handleFileSelected(e.target.files?.[0] || null)}
                       className="hidden"
                     />
                   </label>
@@ -355,17 +489,20 @@ export default function NewRelease({ project }) {
           {!duplicate && (
             <Button
               type="submit"
+              disabled={busyWithFile}
               loading={submitting || duplicateChecking}
               size="md"
               className="self-start px-6"
             >
-              {duplicateChecking
-                ? "Checking…"
-                : phase === "uploading"
-                  ? "Uploading build…"
-                  : phase === "publishing"
-                    ? "Publishing…"
-                    : "Publish release"}
+              {uploadingFile
+                ? "Uploading build…"
+                : analyzing
+                  ? "Reading app details…"
+                  : duplicateChecking
+                    ? "Checking…"
+                    : phase === "publishing"
+                      ? "Publishing…"
+                      : "Publish release"}
             </Button>
           )}
         </form>

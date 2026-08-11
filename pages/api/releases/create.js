@@ -4,6 +4,7 @@ import { createServerSupabase, createServiceClient } from "../../../lib/supabase
 import { analyzeIpa } from "../../../lib/ipaAnalyzer";
 import { analyzeAppBinary } from "../../../lib/appAnalyzer";
 import { findDuplicateRelease } from "../../../lib/findDuplicateRelease";
+import { fetchWebAppInfo } from "../../../lib/faviconFetcher";
 
 export const config = {
   api: { bodyParser: false },
@@ -130,6 +131,12 @@ export default async function handler(req, res) {
       fileSizeBytes = appInfo.fileSizeBytes;
       detectedBundleId = appInfo.bundleId;
     }
+  }
+
+  if (platform === "web" && webUrl) {
+    const webInfo = await fetchWebAppInfo(webUrl);
+    appName = appName || webInfo.appName;
+    appIcon = webInfo.icon;
   }
 
   // A build that matches the exact same specifications (same project, same
