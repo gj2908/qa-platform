@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../lib/supabase/server";
-import { createClient } from "../lib/supabase/client";
 import AppShell from "../components/layout/AppShell";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
-import Input from "../components/ui/Input";
 import EmptyState from "../components/ui/EmptyState";
 import ConfirmDialog from "../components/ui/ConfirmDialog";
+import NewProjectDialog from "../components/project/NewProjectDialog";
 import AppIcon from "../components/release/AppIcon";
 import PlatformBadge from "../components/ui/PlatformBadge";
 import {
@@ -84,25 +83,11 @@ export async function getServerSideProps({ req, res }) {
 }
 
 export default function Dashboard({ projects, myUploads, stats }) {
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteKind, setDeleteKind] = useState("project"); // "project" | "release"
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-
-  async function createProject(e) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setCreating(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    await supabase.from("projects").insert({ name, created_by: user.id });
-    window.location.reload();
-  }
 
   function askDeleteProject(project) {
     setDeleteKind("project");
@@ -146,7 +131,7 @@ export default function Dashboard({ projects, myUploads, stats }) {
               An overview of everything your team is shipping and testing.
             </p>
           </div>
-          <Button onClick={() => setShowForm((s) => !s)}>
+          <Button onClick={() => setDialogOpen(true)}>
             <Plus size={15} strokeWidth={2.25} />
             New project
           </Button>
@@ -172,40 +157,13 @@ export default function Dashboard({ projects, myUploads, stats }) {
           />
         </div>
 
-        {showForm && (
-          <Card className="p-4">
-            <form onSubmit={createProject} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <label htmlFor="projectName" className="mb-1.5 block text-sm font-medium text-ink-primary">
-                  Project name
-                </label>
-                <Input
-                  id="projectName"
-                  placeholder="e.g. Mobile App"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" loading={creating} disabled={!name.trim()}>
-                  Create
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-
         {projects.length === 0 ? (
           <EmptyState
             icon={FolderKanban}
             title="No projects yet"
             description="Create your first project to start tracking tasks and shipping releases."
             action={
-              <Button onClick={() => setShowForm(true)}>
+              <Button onClick={() => setDialogOpen(true)}>
                 <Plus size={15} strokeWidth={2.25} />
                 New project
               </Button>
@@ -281,6 +239,8 @@ export default function Dashboard({ projects, myUploads, stats }) {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      <NewProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </AppShell>
   );
 }
