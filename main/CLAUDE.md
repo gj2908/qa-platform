@@ -57,6 +57,12 @@ See the repo-root `CLAUDE.md` for the two-app/shared-database shape, and
   pin whose release is no longer published) lives in
   `lib/resolveLatestRelease.js` — reused by `pages/channel/[projectId]/[channel].js`
   and `pages/api/v1/check-update.js`. Don't reimplement this a third time.
+- **`main/CHANGELOG.md` is a copy, not a symlink, of the repo-root
+  `CHANGELOG.md`.** `pages/changelog-log.js` reads the local copy at
+  build time because Vercel's build sandbox for this subdirectory-rooted
+  project doesn't expose files outside `main/`, even though the full
+  repo is cloned (confirmed by a real deploy failure — `ENOENT` on
+  `../CHANGELOG.md`). Update both files together when adding an entry.
 
 ## Testing changes
 
