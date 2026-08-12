@@ -6,11 +6,11 @@
     },
     {
       "path": "/api/cron/pending-review-check",
-      "schedule": "0 * * * *"
+      "schedule": "0 14 * * *"
     },
     {
       "path": "/api/cron/task-due-check",
-      "schedule": "0 * * * *"
+      "schedule": "0 15 * * *"
     }
   ]
 }
