@@ -255,6 +255,20 @@ pass = "env(RESEND_API_KEY)"
 admin_email = "notifications@resend.dev"
 sender_name = "QA Platform"
 
+# Default templates only show a "click this link" button — no visible code
+# at all — which makes the OTP-code entry UI (main/'s OtpCodeInput) useless
+# since there's nothing for a user to type in. These show the code
+# prominently, with the link kept as a fallback. magic_link covers
+# signInWithOtp() (existing-user reverification + forgot-password);
+# confirmation covers signUp()/resend() (new-signup verification).
+[auth.email.template.magic_link]
+subject = "Your QA Platform sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Verify your QA Platform email"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

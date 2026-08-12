@@ -77,7 +77,12 @@ export default function Login() {
   async function resendVerification() {
     setResending(true);
     const supabase = createClient();
-    await supabase.auth.resend({ type: "signup", email: unconfirmedEmail });
+    const redirectTo = router.query.redirectTo || "/dashboard";
+    await supabase.auth.resend({
+      type: "signup",
+      email: unconfirmedEmail,
+      options: { emailRedirectTo: `${window.location.origin}${redirectTo}` },
+    });
     setResending(false);
     setError("");
     setMessage("Verification email sent — check your inbox.");
@@ -104,7 +109,12 @@ export default function Login() {
   async function resendSignupOtp() {
     setResending(true);
     const supabase = createClient();
-    await supabase.auth.resend({ type: "signup", email: awaitingSignupOtp || unconfirmedEmail });
+    const redirectTo = router.query.redirectTo || "/dashboard";
+    await supabase.auth.resend({
+      type: "signup",
+      email: awaitingSignupOtp || unconfirmedEmail,
+      options: { emailRedirectTo: `${window.location.origin}${redirectTo}` },
+    });
     setResending(false);
     setOtpError("");
   }
