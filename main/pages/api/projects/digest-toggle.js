@@ -1,4 +1,5 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
 
 // Owner-only toggle. Uses the caller's own RLS-respecting client (the
 // existing "owner update projects" policy already covers this column,
@@ -39,6 +40,15 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logActivity(createServiceClient(), {
+    projectId,
+    actorEmail: user.email,
+    action: "project_settings_updated",
+    detail: `digest_enabled set to ${!!digestEnabled}`,
+    ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    userAgent: req.headers["user-agent"],
+  });
 
   res.status(200).json({ ok: true });
 }

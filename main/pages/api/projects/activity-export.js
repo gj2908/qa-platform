@@ -1,12 +1,13 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
+import { logActivity } from "../../../lib/logActivity";
+import { csvRow } from "../../../lib/csv";
 
-function csvEscape(value) {
-  const str = String(value ?? "");
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-}
+const BATCH_SIZE = 1000;
 
 // Owner-only: the full activity log (not just the latest 10 shown on the
 // Overview card) as a CSV download, for compliance/record-keeping.
+// Streamed in batches rather than one unbounded query + full in-memory
+// buffer, since a long-lived project's history can be large.
 export default async function handler(req, res) {
   const authSupabase = createServerSupabase(req, res);
   const {
@@ -29,19 +30,34 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { data: activity } = await authSupabase
-    .from("project_activity")
-    .select("actor_email, action, detail, created_at")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false });
-
-  const rows = [
-    ["Timestamp", "Actor", "Action", "Detail"],
-    ...(activity || []).map((a) => [a.created_at, a.actor_email, a.action, a.detail || ""]),
-  ];
-  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
-
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", `attachment; filename="activity-${projectId}.csv"`);
-  res.status(200).send(csv);
+  res.write(csvRow(["Timestamp", "Actor", "Action", "Detail"]));
+
+  let offset = 0;
+  for (;;) {
+    const { data: batch } = await authSupabase
+      .from("project_activity")
+      .select("actor_email, action, detail, created_at")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + BATCH_SIZE - 1);
+
+    for (const a of batch || []) {
+      res.write(csvRow([a.created_at, a.actor_email, a.action, a.detail || ""]));
+    }
+
+    if (!batch || batch.length < BATCH_SIZE) break;
+    offset += BATCH_SIZE;
+  }
+
+  res.end();
+
+  await logActivity(createServiceClient(), {
+    projectId,
+    actorEmail: user.email,
+    action: "activity_exported",
+    ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    userAgent: req.headers["user-agent"],
+  });
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, Settings } from "lucide-react";
+import { LogOut, Settings, Building2 } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import { getAvatarColor } from "../../lib/avatarColor";
@@ -60,6 +60,14 @@ export default function UserMenu() {
           >
             <Settings size={14} strokeWidth={2} />
             Settings
+          </Link>
+          <Link
+            href="/organizations"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
+          >
+            <Building2 size={14} strokeWidth={2} />
+            Organizations
           </Link>
           <button
             onClick={signOut}

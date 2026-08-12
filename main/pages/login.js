@@ -5,6 +5,7 @@ import { createClient } from "../lib/supabase/client";
 import AuthLayout from "../components/layout/AuthLayout";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
+import OtpCodeInput from "../components/ui/OtpCodeInput";
 import { CircleAlert, CircleCheck } from "lucide-react";
 
 export default function Login() {
@@ -17,6 +18,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
   const [resending, setResending] = useState(false);
+  // Set once signup succeeds, holding the email awaiting confirmation —
+  // renders the inline code-entry form in place of the signup form. A
+  // not-yet-confirmed user can't reach a session (signInWithPassword
+  // rejects them outright, and VerifyEmailGate needs an existing session
+  // to render), so this page is the only place they can complete
+  // verification via code instead of the emailed link.
+  const [awaitingSignupOtp, setAwaitingSignupOtp] = useState("");
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpError, setOtpError] = useState("");
   const router = useRouter();
 
   async function handleSubmit(e) {
@@ -60,7 +70,7 @@ export default function Login() {
         return;
       }
       setMessage("Check your email to verify your account, then sign in.");
-      setMode("signin");
+      setAwaitingSignupOtp(email);
     }
   }
 
@@ -71,7 +81,71 @@ export default function Login() {
     setResending(false);
     setError("");
     setMessage("Verification email sent — check your inbox.");
-    setUnconfirmedEmail("");
+  }
+
+  async function verifySignupOtp(code) {
+    setOtpSubmitting(true);
+    setOtpError("");
+    const supabase = createClient();
+    const targetEmail = awaitingSignupOtp || unconfirmedEmail;
+    const { error } = await supabase.auth.verifyOtp({
+      email: targetEmail,
+      token: code,
+      type: "signup",
+    });
+    setOtpSubmitting(false);
+    if (error) {
+      setOtpError(error.message);
+      return;
+    }
+    router.push(router.query.redirectTo || "/dashboard");
+  }
+
+  async function resendSignupOtp() {
+    setResending(true);
+    const supabase = createClient();
+    await supabase.auth.resend({ type: "signup", email: awaitingSignupOtp || unconfirmedEmail });
+    setResending(false);
+    setOtpError("");
+  }
+
+  if (awaitingSignupOtp) {
+    return (
+      <AuthLayout>
+        <div className="mb-6 text-center">
+          <h1 className="text-lg font-semibold text-ink-primary">Verify your email</h1>
+          <p className="mt-1 text-sm text-ink-tertiary">
+            {message || `We sent a confirmation link and a code to ${awaitingSignupOtp}.`}
+          </p>
+        </div>
+
+        <OtpCodeInput
+          email={awaitingSignupOtp}
+          onSubmit={verifySignupOtp}
+          submitting={otpSubmitting}
+          onResend={resendSignupOtp}
+          resending={resending}
+          error={otpError}
+          sentLabel="Enter the code, or click the link in the email — either one signs you in."
+        />
+
+        <p className="mt-5 text-center text-sm text-ink-tertiary">
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              setAwaitingSignupOtp("");
+              setMode("signin");
+              setMessage("");
+              setOtpError("");
+            }}
+            className="font-medium text-accent hover:text-accent-hover"
+          >
+            Back to sign in
+          </a>
+        </p>
+      </AuthLayout>
+    );
   }
 
   return (
@@ -127,11 +201,20 @@ export default function Login() {
         )}
 
         {unconfirmedEmail && (
-          <div className="flex flex-col gap-2 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
-            <p>Wrong password, or haven't verified your email yet?</p>
-            <Button type="button" size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
-              Resend verification email
-            </Button>
+          <div className="flex flex-col gap-3 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
+            <div className="flex flex-col gap-2">
+              <p>Wrong password, or haven't verified your email yet?</p>
+              <Button type="button" size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
+                Resend verification email
+              </Button>
+            </div>
+            <OtpCodeInput
+              email={unconfirmedEmail}
+              onSubmit={verifySignupOtp}
+              submitting={otpSubmitting}
+              error={otpError}
+              sentLabel="Have a verification code instead?"
+            />
           </div>
         )}
 

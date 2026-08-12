@@ -5,6 +5,7 @@ import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
+import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import AppIcon from "../../../components/release/AppIcon";
@@ -26,6 +27,7 @@ import {
   Download as DownloadIcon,
   Smartphone,
   Mail,
+  Building2,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -115,6 +117,22 @@ export async function getServerSideProps({ params, req, res }) {
     resolved: (feedbackTasks || []).filter((t) => t.status === "done").length,
   };
 
+  // Orgs the caller admins — populates the "move to organization" select
+  // on OrgAssignmentCard. Only shown to project owners, so no extra
+  // gating needed here beyond the query itself.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: adminOrgMemberships } = user?.email
+    ? await supabase.from("org_members").select("org_id").eq("email", user.email).eq("role", "org_admin")
+    : { data: [] };
+  const adminOrgIds = (adminOrgMemberships || []).map((m) => m.org_id);
+  let myOrgs = [];
+  if (adminOrgIds.length > 0) {
+    const { data } = await supabase.from("organizations").select("id, name").in("id", adminOrgIds).order("name");
+    myOrgs = data || [];
+  }
+
   return {
     props: {
       project,
@@ -127,6 +145,7 @@ export async function getServerSideProps({ params, req, res }) {
       releases: releases || [],
       collaborators,
       activity,
+      myOrgs,
     },
   };
 }
@@ -138,6 +157,7 @@ export default function ProjectOverview({
   releases,
   collaborators,
   activity,
+  myOrgs,
   installTrend,
   versionAdoption,
   feedbackStats,
@@ -305,6 +325,7 @@ export default function ProjectOverview({
         {isOwner(role) && <ApprovalSettingsCard project={project} />}
         {isOwner(role) && <WebhookCard project={project} deliveries={deliveries} />}
         {isOwner(role) && <DigestCard project={project} />}
+        {isOwner(role) && <OrgAssignmentCard project={project} myOrgs={myOrgs} />}
       </div>
 
       <NewReleaseDialog project={project} open={dialogOpen} onClose={() => setDialogOpen(false)} />
@@ -516,6 +537,67 @@ function DigestCard({ project }) {
           </Button>
         </div>
       </div>
+    </Card>
+  );
+}
+
+function OrgAssignmentCard({ project, myOrgs }) {
+  const toast = useToast();
+  const [orgId, setOrgId] = useState(project.org_id || "");
+  const [saving, setSaving] = useState(false);
+
+  async function save(nextOrgId) {
+    setSaving(true);
+    const res = await fetch("/api/organizations/set-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, orgId: nextOrgId || null }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setOrgId(nextOrgId);
+      toast.success(nextOrgId ? "Project moved into the organization." : "Project removed from its organization.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update the organization.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Building2 size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <div>
+          <p className="text-sm font-medium text-ink-primary">Organization</p>
+          <p className="mt-0.5 text-xs text-ink-tertiary">
+            Admins of the organization get full access to this project automatically.
+          </p>
+        </div>
+      </div>
+      {myOrgs.length === 0 ? (
+        <p className="mt-3 text-xs text-ink-tertiary">
+          You're not an admin of any organization yet.{" "}
+          <a href="/organizations" className="font-medium text-accent hover:text-accent-hover">
+            Create one
+          </a>
+          .
+        </p>
+      ) : (
+        <div className="mt-3 w-full sm:w-64">
+          <Select
+            value={orgId}
+            disabled={saving}
+            onChange={(e) => save(e.target.value)}
+          >
+            <option value="">No organization</option>
+            {myOrgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
     </Card>
   );
 }

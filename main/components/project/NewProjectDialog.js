@@ -27,7 +27,22 @@ export default function NewProjectDialog({ open, onClose }) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    await supabase.from("projects").insert({ name, created_by: user.id });
+    // Generate the id client-side and insert without .select() — chaining
+    // .select() onto this insert fails RLS: the "members read projects"
+    // SELECT policy (project_role(id) is not null) is checked for the
+    // RETURNING clause before assign_project_owner()'s AFTER INSERT trigger
+    // has run within the same statement, so it sees no project_collaborators
+    // row yet (confirmed live — this is a real, pre-existing RLS/trigger
+    // ordering gap, not specific to the new org_role() work). A bare insert
+    // isn't affected, and knowing the id upfront avoids needing a follow-up
+    // query.
+    const projectId = crypto.randomUUID();
+    await supabase.from("projects").insert({ id: projectId, name, created_by: user.id });
+    await supabase.from("project_activity").insert({
+      project_id: projectId,
+      actor_email: user.email,
+      action: "project_created",
+    });
     window.location.reload();
   }
 

@@ -1,9 +1,11 @@
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
 import AuthLayout from "../components/layout/AuthLayout";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
+import OtpCodeInput from "../components/ui/OtpCodeInput";
 import { CircleAlert, MailCheck } from "lucide-react";
 
 export default function ForgotPassword() {
@@ -11,6 +13,9 @@ export default function ForgotPassword() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const router = useRouter();
 
   async function sendResetLink(e) {
     e.preventDefault();
@@ -32,6 +37,24 @@ export default function ForgotPassword() {
     setSent(true);
   }
 
+  async function verifyResetCode(code) {
+    setOtpSubmitting(true);
+    setOtpError("");
+    const supabase = createClient();
+    // The code came from signInWithOtp above, so it verifies as type
+    // "email" — a successful verify establishes a session directly
+    // (same end state as clicking the emailed link), so reset-password's
+    // existing session-polling picks it up immediately with no further
+    // token handling needed here.
+    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+    setOtpSubmitting(false);
+    if (error) {
+      setOtpError(error.message);
+      return;
+    }
+    router.push("/reset-password");
+  }
+
   return (
     <AuthLayout>
       <div className="mb-6 text-center">
@@ -49,6 +72,22 @@ export default function ForgotPassword() {
           <p className="text-sm text-ink-secondary">
             Check your email for a link to reset your password.
           </p>
+          {error && (
+            <p className="flex items-center gap-1.5 text-sm text-danger">
+              <CircleAlert size={14} />
+              {error}
+            </p>
+          )}
+          <div className="w-full text-left">
+            <OtpCodeInput
+              email={email}
+              onSubmit={verifyResetCode}
+              submitting={otpSubmitting}
+              onResend={sendResetLink}
+              resending={loading}
+              error={otpError}
+            />
+          </div>
           <p className="text-xs text-ink-tertiary">
             No email? Double-check the address or{" "}
             <a

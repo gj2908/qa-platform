@@ -3,6 +3,39 @@
 Reverse-chronological summary of what's shipped, grouped by theme. See
 `git log` for the literal commit history this is built from.
 
+## 2026-08-12 — Organizations, OTP email verification, audit exports, white-label branding
+
+- Email verification now supports an OTP code as an alternative to the
+  confirmation link, at every send point (signup, resend, forgot
+  password) — `supabase.auth.verifyOtp()` establishes a session directly
+  on a correct code, no need to leave the page or wait for the email.
+  Existing accounts that predate email verification get a one-time
+  reverification prompt (OTP only) the next time they sign in, tracked
+  independently of Supabase's own confirmation flag via
+  `profiles.needs_reverification`.
+- Switched Supabase Auth off its built-in email sender (a hard
+  2-emails/hour-per-address cap) onto a custom SMTP relay, raising the
+  configurable limit to 20/hour now that it's actually enforced.
+- Added **organizations**: a grouping layer above projects for
+  companies/teams, with email-keyed membership (`org_admin`/`member`
+  roles, mirroring `project_collaborators`' shape), an optional seat
+  limit enforced at the DB layer, and full owner-equivalent project
+  access for org admins across every project under their org (no
+  per-project collaborator row needed). Manage from `/organizations` in
+  the main app; cross-tenant visibility and a seat-limit override live in
+  admin's new `/organizations` section.
+- Added org-level **compliance/audit export** — a CSV (or `?format=json`)
+  of activity across every project in an organization, gated to org
+  admins, streamed in batches rather than buffered in memory. Closed
+  several gaps in the underlying per-project activity log: project
+  creation, settings changes, API token create/revoke, and export events
+  now all log to the same feed the Overview card and notification bell
+  already read from.
+- Added **white-label branding**: an organization can set a logo URL and
+  accent color, shown on its projects' public install/share pages
+  instead of the default QA Platform mark (v1 scope: light mode only, no
+  custom domain).
+
 ## 2026-08-12 — Admin dashboard redesign, in-app update checks, repo restructuring
 
 - Redesigned the admin app's navigation from a single overflowing top bar

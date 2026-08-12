@@ -1,5 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../../lib/supabase/server";
 import { generateToken } from "../../../../lib/apiTokens";
+import { logActivity } from "../../../../lib/logActivity";
 
 // Owner-only: generates a new CI/CD API token for a project. The raw
 // token is returned exactly once here and never retrievable again —
@@ -49,6 +50,15 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logActivity(service, {
+    projectId,
+    actorEmail: user.email,
+    action: "api_token_created",
+    detail: token.label || token.token_prefix,
+    ip: req.headers["x-forwarded-for"] || req.socket?.remoteAddress,
+    userAgent: req.headers["user-agent"],
+  });
 
   res.status(200).json({ token: raw, ...token });
 }

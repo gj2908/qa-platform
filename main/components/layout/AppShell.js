@@ -1,6 +1,7 @@
 import TopNav from "./TopNav";
 import CompleteProfileGate from "./CompleteProfileGate";
 import VerifyEmailGate from "./VerifyEmailGate";
+import ReverificationGate from "./ReverificationGate";
 import CommandPalette from "../CommandPalette";
 
 // Layout for the dashboard/account-level pages. No sidebar — matches
@@ -14,6 +15,7 @@ export default function AppShell({ children }) {
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       <CompleteProfileGate />
       <VerifyEmailGate />
+      <ReverificationGate />
       <CommandPalette />
     </div>
   );

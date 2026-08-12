@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Users,
   FolderKanban,
+  Building2,
   UploadCloud,
   HardDrive,
   LogOut,
@@ -37,6 +38,7 @@ const NAV_SECTIONS = [
     items: [
       { href: "/users", label: "Users", icon: Users },
       { href: "/projects", label: "Projects", icon: FolderKanban },
+      { href: "/organizations", label: "Organizations", icon: Building2 },
       { href: "/uploads", label: "Uploads", icon: UploadCloud },
       { href: "/storage", label: "Storage", icon: HardDrive },
     ],

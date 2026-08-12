@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServiceClient } from "../../../lib/supabase/server";
 import { resolveLatestReleases } from "../../../lib/resolveLatestRelease";
+import { getOrgBranding } from "../../../lib/orgBranding";
 import Logo from "../../../components/layout/Logo";
 import ThemeToggle from "../../../components/ThemeToggle";
 import Card from "../../../components/ui/Card";
@@ -29,20 +30,26 @@ export async function getServerSideProps({ params, req }) {
     return { redirect: { destination: `/share/${releases[0].id}`, permanent: false } };
   }
 
+  const branding = await getOrgBranding(supabase, projectId);
+
   return {
     props: {
       projectName: project.name,
       channel,
       releases: releases.map((r) => ({ id: r.id, platform: r.platform, version: r.version, build_number: r.build_number })),
+      branding,
     },
   };
 }
 
-export default function ChannelPicker({ projectName, channel, releases }) {
+export default function ChannelPicker({ projectName, channel, releases, branding }) {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
+      {branding?.accentColor && (
+        <style dangerouslySetInnerHTML={{ __html: `:root{--accent:${branding.accentColor};}` }} />
+      )}
       <div className="flex items-center justify-between px-4 py-4 sm:px-6">
-        <Logo compact />
+        <Logo compact logoUrl={branding?.logoUrl} orgName={branding?.orgName} />
         <ThemeToggle />
       </div>
       <div className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:items-center sm:pt-0">

@@ -3,6 +3,7 @@ import { createServiceClient } from "../../lib/supabase/server";
 import { activateScheduledReleaseIfDue } from "../../lib/activateScheduledRelease";
 import { isExpired, isRolledOut, needsPin } from "../../lib/shareGating";
 import { buildShareProps } from "../../lib/buildShareProps";
+import { getOrgBranding } from "../../lib/orgBranding";
 import Logo from "../../components/layout/Logo";
 import ThemeToggle from "../../components/ThemeToggle";
 import Card from "../../components/ui/Card";
@@ -25,13 +26,15 @@ export async function getServerSideProps({ params, req, res }) {
 
   if (!release) return { notFound: true };
 
+  const branding = await getOrgBranding(supabase, release.project_id);
+
   if (release.status === "scheduled") {
     release = await activateScheduledReleaseIfDue(supabase, release, req);
   }
   if (release.status !== "published") return { notFound: true };
 
   if (isExpired(release)) {
-    return { props: { gate: "expired" } };
+    return { props: { gate: "expired", branding } };
   }
   if (!isRolledOut(release, req, res)) {
     let fallback = null;
@@ -49,7 +52,7 @@ export async function getServerSideProps({ params, req, res }) {
         .maybeSingle();
       fallback = data?.id || null;
     }
-    return { props: { gate: "rollout", fallbackReleaseId: fallback } };
+    return { props: { gate: "rollout", fallbackReleaseId: fallback, branding } };
   }
   if (needsPin(release)) {
     return {
@@ -63,19 +66,23 @@ export async function getServerSideProps({ params, req, res }) {
           version: release.version,
           build_number: release.build_number,
         },
+        branding,
       },
     };
   }
 
   const { itmsLink, otherVersions } = await buildShareProps(supabase, release, req);
-  return { props: { gate: null, release, itmsLink, otherVersions } };
+  return { props: { gate: null, release, itmsLink, otherVersions, branding } };
 }
 
-function PageChrome({ children }) {
+function PageChrome({ children, branding }) {
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
+      {branding?.accentColor && (
+        <style dangerouslySetInnerHTML={{ __html: `:root{--accent:${branding.accentColor};}` }} />
+      )}
       <div className="flex items-center justify-between px-4 py-4 sm:px-6">
-        <Logo compact />
+        <Logo compact logoUrl={branding?.logoUrl} orgName={branding?.orgName} />
         <ThemeToggle />
       </div>
       <div className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:items-center sm:pt-0">
@@ -145,7 +152,7 @@ export default function SharePage(props) {
 
   if (props.gate === "expired") {
     return (
-      <PageChrome>
+      <PageChrome branding={props.branding}>
         <EmptyState icon={TimerOff} title="This link has expired" description="Ask the release owner for a new link." />
       </PageChrome>
     );
@@ -153,7 +160,7 @@ export default function SharePage(props) {
 
   if (props.gate === "rollout") {
     return (
-      <PageChrome>
+      <PageChrome branding={props.branding}>
         <EmptyState
           icon={Clock}
           title="This release is rolling out gradually"
@@ -172,7 +179,7 @@ export default function SharePage(props) {
 
   if (props.gate === "pin" && !unlocked) {
     return (
-      <PageChrome>
+      <PageChrome branding={props.branding}>
         <PinGate releaseId={props.releaseId} preview={props.preview} onUnlocked={setUnlocked} />
       </PageChrome>
     );
@@ -183,7 +190,7 @@ export default function SharePage(props) {
   const otherVersions = unlocked?.otherVersions ?? props.otherVersions ?? [];
 
   return (
-    <PageChrome>
+    <PageChrome branding={props.branding}>
       <InstallCard release={release} itmsLink={itmsLink} />
       <div className="mt-5 flex flex-col gap-5">
         {release.project_id && <ReportIssueCard releaseId={release.id} />}

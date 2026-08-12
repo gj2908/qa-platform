@@ -10,6 +10,8 @@ const ACTION_LABEL = {
   token_revoked: "revoked an API token",
   admin_added: "added a platform admin",
   admin_removed: "removed a platform admin",
+  organization_deleted: "deleted organization",
+  organization_seat_limit_updated: "updated organization seat limit",
 };
 
 export async function getServerSideProps() {
