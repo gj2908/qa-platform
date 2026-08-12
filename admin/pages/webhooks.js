@@ -1,5 +1,7 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
+import Badge from "../components/ui/Badge";
 import { createServiceClient } from "../lib/supabase";
 
 export async function getServerSideProps() {
@@ -51,32 +53,22 @@ export default function AdminWebhooks({ deliveries }) {
         </button>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Project</th>
-              <th className="px-4 py-2 font-medium">Event</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Response</th>
-              <th className="px-4 py-2 font-medium">When</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Project</th>
+            <th className="px-4 py-2 font-medium">Event</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+            <th className="px-4 py-2 font-medium">Response</th>
+            <th className="px-4 py-2 font-medium">When</th>
+          </TableHead>
+          <TableBody>
             {visible.map((d) => (
-              <tr key={d.id}>
+              <TableRow key={d.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{d.projectName}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{d.event}</td>
                 <td className="px-4 py-2.5">
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      d.status === "success"
-                        ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
-                        : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
-                    }`}
-                  >
-                    {d.status}
-                  </span>
+                  <Badge tone={d.status === "success" ? "success" : "danger"}>{d.status}</Badge>
                 </td>
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
                   {d.response_status || d.error || "—"}
@@ -84,10 +76,10 @@ export default function AdminWebhooks({ deliveries }) {
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
                   {new Date(d.created_at).toLocaleString()}
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {visible.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No deliveries.</p>}
       </div>
     </AdminShell>

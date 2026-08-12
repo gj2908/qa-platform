@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2, AlertTriangle } from "lucide-react";
 
@@ -87,23 +88,21 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
         Storage — {formatBytes(totalBytes)} total
       </h1>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Project</th>
-              <th className="px-4 py-2 font-medium">Storage used</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Project</th>
+            <th className="px-4 py-2 font-medium">Storage used</th>
+          </TableHead>
+          <TableBody>
             {perProject.map((p) => (
-              <tr key={p.id}>
+              <TableRow key={p.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{p.name}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{formatBytes(p.bytes)}</td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       <div className="mt-6 flex items-center gap-2">

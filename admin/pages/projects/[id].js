@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AdminShell from "../../components/AdminShell";
+import Badge from "../../components/ui/Badge";
 import { createServiceClient } from "../../lib/supabase";
 import { ArrowLeft } from "lucide-react";
 
@@ -115,13 +116,7 @@ export default function AdminProjectDetail({ project, collaborators, releases, d
             {deliveries.map((d) => (
               <div key={d.id} className="flex items-center justify-between px-4 py-2 text-sm">
                 <span className="text-slate-700 dark:text-slate-300">{d.event}</span>
-                <span
-                  className={`text-xs font-medium ${
-                    d.status === "success" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  {d.status}
-                </span>
+                <Badge tone={d.status === "success" ? "success" : "danger"}>{d.status}</Badge>
               </div>
             ))}
             {deliveries.length === 0 && <p className="px-4 py-3 text-sm text-slate-500">None.</p>}

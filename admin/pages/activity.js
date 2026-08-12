@@ -1,4 +1,5 @@
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 
 const ACTION_LABEL = {
@@ -32,19 +33,17 @@ export default function AdminActivity({ actions }) {
         Every destructive action taken from this panel — users, projects, uploads, and storage files.
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Admin</th>
-              <th className="px-4 py-2 font-medium">Action</th>
-              <th className="px-4 py-2 font-medium">Detail</th>
-              <th className="px-4 py-2 font-medium">When</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Admin</th>
+            <th className="px-4 py-2 font-medium">Action</th>
+            <th className="px-4 py-2 font-medium">Detail</th>
+            <th className="px-4 py-2 font-medium">When</th>
+          </TableHead>
+          <TableBody>
             {actions.map((a) => (
-              <tr key={a.id}>
+              <TableRow key={a.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{a.admin_email}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">
                   {ACTION_LABEL[a.action] || a.action}
@@ -53,10 +52,10 @@ export default function AdminActivity({ actions }) {
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
                   {new Date(a.created_at).toLocaleString()}
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {actions.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No admin actions yet.</p>}
       </div>
     </AdminShell>

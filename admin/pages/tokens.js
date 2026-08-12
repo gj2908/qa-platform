@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2 } from "lucide-react";
 
@@ -54,20 +55,18 @@ export default function AdminTokens({ tokens: initial }) {
         CI/CD tokens issued across every project.
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Project</th>
-              <th className="px-4 py-2 font-medium">Label</th>
-              <th className="px-4 py-2 font-medium">Token</th>
-              <th className="px-4 py-2 font-medium">Last used</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Project</th>
+            <th className="px-4 py-2 font-medium">Label</th>
+            <th className="px-4 py-2 font-medium">Token</th>
+            <th className="px-4 py-2 font-medium">Last used</th>
+            <th className="px-4 py-2"></th>
+          </TableHead>
+          <TableBody>
             {tokens.map((t) => (
-              <tr key={t.id}>
+              <TableRow key={t.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t.projectName}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{t.label || "Untitled token"}</td>
                 <td className="px-4 py-2.5 font-mono text-xs text-slate-500 dark:text-slate-400">
@@ -85,10 +84,10 @@ export default function AdminTokens({ tokens: initial }) {
                     <Trash2 size={14} />
                   </button>
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {tokens.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No tokens issued.</p>}
       </div>
     </AdminShell>

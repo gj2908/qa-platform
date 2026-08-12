@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2, Search } from "lucide-react";
 
@@ -65,20 +66,18 @@ export default function AdminUsers({ users: initial }) {
         />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Email</th>
-              <th className="px-4 py-2 font-medium">Name</th>
-              <th className="px-4 py-2 font-medium">Joined</th>
-              <th className="px-4 py-2 font-medium">Last sign-in</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Email</th>
+            <th className="px-4 py-2 font-medium">Name</th>
+            <th className="px-4 py-2 font-medium">Joined</th>
+            <th className="px-4 py-2 font-medium">Last sign-in</th>
+            <th className="px-4 py-2"></th>
+          </TableHead>
+          <TableBody>
             {filtered.map((u) => (
-              <tr key={u.id}>
+              <TableRow key={u.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{u.email}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{u.fullName || "—"}</td>
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
@@ -96,10 +95,10 @@ export default function AdminUsers({ users: initial }) {
                     <Trash2 size={14} />
                   </button>
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </AdminShell>
   );

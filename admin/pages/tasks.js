@@ -1,4 +1,5 @@
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 
 export async function getServerSideProps() {
@@ -38,20 +39,18 @@ export default function AdminTasks({ tasks }) {
         Open tasks (not done) past their due date, across every project.
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Project</th>
-              <th className="px-4 py-2 font-medium">Task</th>
-              <th className="px-4 py-2 font-medium">Assignee</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Overdue by</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Project</th>
+            <th className="px-4 py-2 font-medium">Task</th>
+            <th className="px-4 py-2 font-medium">Assignee</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+            <th className="px-4 py-2 font-medium">Overdue by</th>
+          </TableHead>
+          <TableBody>
             {tasks.map((t) => (
-              <tr key={t.id}>
+              <TableRow key={t.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t.projectName}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{t.title}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{t.assignee_email || "Unassigned"}</td>
@@ -61,10 +60,10 @@ export default function AdminTasks({ tasks }) {
                 <td className="px-4 py-2.5 text-red-600 dark:text-red-400">
                   {t.daysOverdue} day{t.daysOverdue === 1 ? "" : "s"}
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {tasks.length === 0 && <p className="p-6 text-center text-sm text-slate-500">Nothing overdue.</p>}
       </div>
     </AdminShell>

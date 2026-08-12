@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2, Search } from "lucide-react";
 
@@ -69,20 +70,18 @@ export default function AdminProjects({ projects: initial }) {
         />
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Project</th>
-              <th className="px-4 py-2 font-medium">Owner</th>
-              <th className="px-4 py-2 font-medium">Releases</th>
-              <th className="px-4 py-2 font-medium">Created</th>
-              <th className="px-4 py-2"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2 font-medium">Project</th>
+            <th className="px-4 py-2 font-medium">Owner</th>
+            <th className="px-4 py-2 font-medium">Releases</th>
+            <th className="px-4 py-2 font-medium">Created</th>
+            <th className="px-4 py-2"></th>
+          </TableHead>
+          <TableBody>
             {filtered.map((p) => (
-              <tr key={p.id}>
+              <TableRow key={p.id}>
                 <td className="px-4 py-2.5">
                   <Link href={`/projects/${p.id}`} className="text-slate-900 hover:underline dark:text-slate-100">
                     {p.name}
@@ -102,10 +101,10 @@ export default function AdminProjects({ projects: initial }) {
                     <Trash2 size={14} />
                   </button>
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </AdminShell>
   );

@@ -1,75 +1,112 @@
 # QA Platform
 
-Planning (kanban) + changelog + QA distribution, in one Next.js app on
-Vercel, backed by Supabase (Postgres + Auth + Storage).
+An internal QA/build-distribution tool: a kanban board, a changelog, and
+OTA install pages for iOS/Android/web builds — plus a separate admin
+panel for platform-wide oversight. Two Next.js apps, one shared Supabase
+project (Postgres + Auth + Storage).
 
-## What it does
+```
+qa-platform/
+├── main/       the product — projects, board, releases, distribution
+├── admin/      a separate app for platform operators (cross-project visibility)
+└── supabase/   migrations + schema.sql, shared by both apps
+```
 
-- **Board** (`/projects/[id]/board`) — kanban with backlog → todo →
-  in progress → review → done.
-- **Changelog** (`/projects/[id]/changelog`) — list of published releases
-  with notes, per project.
-- **New release** (`/projects/[id]/new-release`) — upload an `.ipa`/`.apk`,
-  or paste a web app URL, plus version + release notes.
-- **Distribute** (`/distribute/[releaseId]`) — the install page:
-  - **iOS**: tapping "Install" triggers OTA install directly via
-    `itms-services://`, backed by an on-the-fly `manifest.plist`
-    (`/api/manifest`) pointing at a signed, short-lived Supabase Storage URL.
-  - **Android**: "Install" downloads the APK directly (signed URL, 1 hour
-    expiry) — the OS handles the actual install/sideload from there.
-  - **Web**: "Open app" just links straight to the app's URL.
-  - Release notes are shown on the same page.
-- Everything is gated behind Supabase Auth (magic-link email login) via
-  `middleware.js` — **except** `/api/manifest`, which has to stay reachable
-  without a browser session because Apple's OS-level installer fetches it
-  directly, not through a logged-in browser. It's protected instead by the
-  release ID being an unguessable UUID and the underlying file URL expiring
-  in 5 minutes.
+See [`main/CLAUDE.md`](main/CLAUDE.md) and [`admin/CLAUDE.md`](admin/CLAUDE.md)
+for how each app is put together, and [`CHANGELOG.md`](CHANGELOG.md) for
+what's shipped. `main/` also has an in-app changelog page at `/changelog`
+sourced from the same file.
+
+## What's in `main/`
+
+- **Projects & collaborators** — Google-Drive-style roles (owner / editor
+  / commenter / viewer), invite by email, ownership transfer, bulk invite.
+- **Board** — kanban (backlog → todo → in progress → review → done),
+  drag-and-drop, priority/labels, due dates, comments with @mentions,
+  cross-project "My tasks" view.
+- **Releases & distribution** — upload an `.ipa`/`.apk` or paste a web
+  URL; iOS installs OTA via `itms-services://` + a generated
+  `manifest.plist`, Android downloads the APK directly, web just opens
+  the URL. Release channels (internal/beta/production) with pin-to-
+  channel rollback and promote-to-next-channel. Staged rollout
+  percentage, scheduled releases, share-link expiry/PIN, approval
+  workflow for non-owner publishes.
+- **Notifications** — a cross-project activity feed, a notification bell,
+  outgoing webhooks (Slack-compatible) with a delivery log and retry,
+  opt-in daily email digests, and automatic reminders when a release sits
+  in review or a task passes its due date.
+- **CI/API** — project-scoped Bearer tokens for non-interactive release
+  publishing and read access; see `/docs/api` in the running app.
+- **Public, no-login upload landing page** for quick "drop a build, get a
+  link" sharing, rate-limited to prevent abuse.
+
+## What's in `admin/`
+
+A separate, ADMIN_EMAILS-gated app (or a DB-backed allowlist, additive to
+the env var) with cross-tenant visibility via the Supabase service-role
+client: users, projects, anonymous uploads, storage usage + orphaned-file
+cleanup, webhook delivery monitoring, API token management, an overdue-
+tasks view, an admin action audit log, and configurable platform
+thresholds (reminder timing, rate limits).
 
 ## Setup
 
 ### 1. Supabase project
 
 1. Create a project at supabase.com.
-2. SQL editor → run `supabase/schema.sql`.
+2. SQL editor → run `supabase/schema.sql` (or apply `supabase/migrations/`
+   in order via `supabase db push --linked` if you're using the CLI).
 3. Storage → New bucket → name it `builds` → **Private**.
-4. Auth → Providers → make sure Email (magic link) is enabled. Auth → URL
-   Configuration → add your Vercel domain as a redirect URL.
+4. Auth → Providers → Email enabled (this app uses email + password, not
+   magic links).
 5. Copy the Project URL, `anon` key, and `service_role` key from
    Settings → API.
 
-### 2. Deploy to Vercel
+### 2. Run locally
 
-- Import this repo.
-- Set env vars (see `.env.example`):
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-- Deploy.
+Each app is independent — install and run separately:
 
-### 3. Use it
+```bash
+cd main && npm install && cp .env.example .env.local   # fill in your keys
+npm run dev   # http://localhost:3000
 
-- Visit the site → sign in with your email (magic link) → any email can
-  sign in and use it, since it's an internal tool with no invite list yet.
-- Create a project → add tasks to the board → create a release (upload
-  build or paste a web URL + notes) → share the `/distribute/...` link
-  with testers, who'll need to sign in too.
+cd admin && npm install   # create .env.local with the same 3 keys + ADMIN_EMAILS
+npm run dev -- -p 3001    # http://localhost:3001
+```
 
-## Known limitations / next steps
+**`main/.env.local`**: `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
+optionally `NEXT_PUBLIC_SITE_URL` (used to build absolute links in
+emails/webhooks), `RESEND_API_KEY` (email digests/reminders — degrades to
+manual-send-only if unset), `ANTHROPIC_API_KEY` (AI release-notes
+cleanup/feedback triage — no-ops if unset), `CRON_SECRET` (gates the
+`/api/cron/*` routes in production).
 
-- **No invite list** — right now any email can sign up via magic link.
-  If you need to restrict who can join, add an `allowed_emails` table and
-  check it in the login flow, or disable public sign-ups in Supabase Auth
-  settings and invite users manually from the dashboard.
-- **iOS UDID requirement** — Apple's ad hoc distribution rule still
-  applies: the tester's device UDID must already be registered in the
-  app's provisioning profile. Enterprise-signed builds skip this.
-- **File size** — `formidable` is capped at 500MB in `api/releases/create.js`;
-  raise `maxFileSize` if needed, and check your Vercel plan's function
-  payload/duration limits for very large uploads.
-- **Task ordering/drag-and-drop** — the board currently moves tasks between
-  columns with ←/→ buttons rather than drag-and-drop, to keep the
-  dependency list small. Swapping in `@dnd-kit` later is a small change.
-- **RLS is wide open to any signed-in user** for simplicity. If you need
-  per-project permissions later, add a `project_members` table and tighten
-  the policies in `schema.sql`.
+**`admin/.env.local`**: the same 3 Supabase keys, plus `ADMIN_EMAILS`
+(comma-separated allowlist — the permanent fallback, unioned with the
+DB-backed allowlist manageable from the admin Settings page).
+
+### 3. Deploy
+
+Each app deploys from its own directory as its own Vercel project:
+
+```bash
+cd main && vercel --prod
+cd admin && vercel --prod
+```
+
+Set the same env vars on each Vercel project (`vercel env add <NAME>
+production`). `main/vercel.json` schedules the cron routes (daily digest,
+approval/due-date reminders) — Vercel's Hobby plan only allows daily
+cron schedules.
+
+## Known limitations
+
+- **No confirmed-install tracking** — install counts are "install
+  clicks"/manifest fetches, not a verified OS-level install.
+- **iOS ad hoc distribution** still requires the tester's device UDID to
+  be registered in the provisioning profile (Apple's own constraint,
+  not this app's) — Enterprise-signed builds skip it.
+- **Staged rollout percentage** is cookie-bucketed for the web share
+  page; it isn't applied to the in-app update-check API (`/api/v1/check-update`)
+  yet, since a native app's HTTP client has no cookie to bucket by.

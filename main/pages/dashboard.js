@@ -268,6 +268,12 @@ export default function Dashboard({ projects, myUploads, stats }) {
         )}
       </div>
 
+      <div className="mt-2">
+        <Link href="/changelog-log" className="text-xs text-ink-tertiary hover:text-ink-secondary hover:underline">
+          What's new
+        </Link>
+      </div>
+
       <ConfirmDialog
         open={!!deleteTarget}
         title={

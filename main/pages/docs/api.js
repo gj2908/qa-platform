@@ -62,6 +62,44 @@ export default function ApiDocs() {
           example={`curl https://your-app/api/v1/releases/<release-id> \\
   -H "Authorization: Bearer qap_..."`}
         />
+        <Endpoint
+          method="GET"
+          path="/api/v1/check-update"
+          description="Ask whether a newer build exists for a platform+channel than the one the caller is currently running. Params: platform (ios|android|web, required), currentVersion (required), currentBuildNumber (optional, tiebreaker), channel (optional, default production). Returns { updateAvailable: false } if nothing newer, or { updateAvailable: true, latestVersion, latestBuildNumber, notes, updateUrl } — updateUrl is an itms-services:// link for iOS, a direct APK download for Android, or the app's own URL for web."
+          example={`curl "https://your-app/api/v1/check-update?platform=ios&currentVersion=1.2.0" \\
+  -H "Authorization: Bearer qap_..."`}
+        />
+
+        <div>
+          <h2 className="text-base font-semibold text-ink-primary">In-app update checks</h2>
+          <p className="mt-1 text-sm text-ink-tertiary">
+            To show a "New version available" prompt inside a distributed app: call{" "}
+            <code className="rounded bg-subtle px-1 py-0.5 text-xs">check-update</code> on launch, and if{" "}
+            <code className="rounded bg-subtle px-1 py-0.5 text-xs">updateAvailable</code> is true, confirm with the
+            user and open <code className="rounded bg-subtle px-1 py-0.5 text-xs">updateUrl</code> — that's the whole
+            flow, no SDK needed. On iOS it triggers the native OTA install prompt; on Android it downloads the APK
+            and the OS offers to install it.
+          </p>
+          <pre className="mt-3 overflow-x-auto rounded-md bg-subtle px-3.5 py-2.5 text-xs text-ink-secondary">
+{`// React Native, called once on app launch
+const res = await fetch(
+  \`https://your-app/api/v1/check-update?platform=\${Platform.OS}&currentVersion=\${appVersion}\`,
+  { headers: { Authorization: "Bearer qap_..." } }
+);
+const data = await res.json();
+
+if (data.updateAvailable) {
+  Alert.alert(
+    "Update available",
+    \`Version \${data.latestVersion} is ready. Update now?\`,
+    [
+      { text: "Later", style: "cancel" },
+      { text: "Yes", onPress: () => Linking.openURL(data.updateUrl) },
+    ]
+  );
+}`}
+          </pre>
+        </div>
       </div>
     </div>
   );

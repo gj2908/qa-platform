@@ -1,5 +1,6 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
+import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2 } from "lucide-react";
 
@@ -94,23 +95,21 @@ export default function AdminUploads({ uploads: initial }) {
         ))}
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-left text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-            <tr>
-              <th className="px-4 py-2">
-                <input type="checkbox" checked={selected.size === uploads.length && uploads.length > 0} onChange={toggleAll} />
-              </th>
-              <th className="px-4 py-2 font-medium">App</th>
-              <th className="px-4 py-2 font-medium">Platform</th>
-              <th className="px-4 py-2 font-medium">Uploader</th>
-              <th className="px-4 py-2 font-medium">Size</th>
-              <th className="px-4 py-2 font-medium">Uploaded</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
+      <div className="mt-4">
+        <Table>
+          <TableHead>
+            <th className="px-4 py-2">
+              <input type="checkbox" checked={selected.size === uploads.length && uploads.length > 0} onChange={toggleAll} />
+            </th>
+            <th className="px-4 py-2 font-medium">App</th>
+            <th className="px-4 py-2 font-medium">Platform</th>
+            <th className="px-4 py-2 font-medium">Uploader</th>
+            <th className="px-4 py-2 font-medium">Size</th>
+            <th className="px-4 py-2 font-medium">Uploaded</th>
+          </TableHead>
+          <TableBody>
             {uploads.map((u) => (
-              <tr key={u.id}>
+              <TableRow key={u.id}>
                 <td className="px-4 py-2.5">
                   <input type="checkbox" checked={selected.has(u.id)} onChange={() => toggle(u.id)} />
                 </td>
@@ -123,10 +122,10 @@ export default function AdminUploads({ uploads: initial }) {
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
-              </tr>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
         {uploads.length === 0 && <p className="p-6 text-center text-sm text-slate-500">No anonymous uploads.</p>}
       </div>
     </AdminShell>

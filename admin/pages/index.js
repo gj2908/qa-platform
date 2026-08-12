@@ -1,4 +1,5 @@
 import AdminShell from "../components/AdminShell";
+import StatCard from "../components/ui/StatCard";
 import { createServiceClient } from "../lib/supabase";
 import { Users, FolderKanban, PackageCheck, HardDrive, UploadCloud, TrendingUp } from "lucide-react";
 
@@ -53,30 +54,24 @@ export async function getServerSideProps() {
   };
 }
 
-function StatTile({ icon: Icon, label, value }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-        <Icon size={15} strokeWidth={2} />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">{value}</p>
-    </div>
-  );
-}
-
 export default function AdminOverview({ stats }) {
+  const tiles = [
+    { icon: Users, label: "Total users", value: stats.totalUsers },
+    { icon: FolderKanban, label: "Total projects", value: stats.totalProjects },
+    { icon: PackageCheck, label: "Total releases", value: stats.totalReleases },
+    { icon: UploadCloud, label: "Anonymous uploads", value: stats.publicUploads },
+    { icon: TrendingUp, label: "Releases, last 7 days", value: stats.releases7d },
+    { icon: TrendingUp, label: "Releases, last 30 days", value: stats.releases30d },
+    { icon: HardDrive, label: "Storage used", value: formatBytes(stats.totalBytes) },
+  ];
+
   return (
     <AdminShell>
       <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Platform overview</h1>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <StatTile icon={Users} label="Total users" value={stats.totalUsers} />
-        <StatTile icon={FolderKanban} label="Total projects" value={stats.totalProjects} />
-        <StatTile icon={PackageCheck} label="Total releases" value={stats.totalReleases} />
-        <StatTile icon={UploadCloud} label="Anonymous uploads" value={stats.publicUploads} />
-        <StatTile icon={TrendingUp} label="Releases, last 7 days" value={stats.releases7d} />
-        <StatTile icon={TrendingUp} label="Releases, last 30 days" value={stats.releases30d} />
-        <StatTile icon={HardDrive} label="Storage used" value={formatBytes(stats.totalBytes)} />
+        {tiles.map((t, i) => (
+          <StatCard key={t.label} {...t} index={i} />
+        ))}
       </div>
     </AdminShell>
   );
