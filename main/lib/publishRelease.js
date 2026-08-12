@@ -49,7 +49,12 @@ export async function publishRelease({
   if (platform !== "web") {
     if (uploaded) {
       const buffer = fs.readFileSync(uploaded.filepath);
-      filePath = `${projectId}/${Date.now()}-${uploaded.originalFilename}`;
+      // Same sanitization as the interactive upload path
+      // (pages/api/releases/sign-upload.js) — an unsanitized CI filename
+      // (spaces, unicode, path-like characters) could otherwise produce a
+      // broken storage key.
+      const safeName = String(uploaded.originalFilename).replace(/[^\w.\- ]/g, "_").slice(0, 120);
+      filePath = `${projectId}/${Date.now()}-${safeName}`;
 
       const { error: uploadError } = await service.storage
         .from("builds")

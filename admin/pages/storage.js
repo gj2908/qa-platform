@@ -2,7 +2,15 @@ import { useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
 import { createServiceClient } from "../lib/supabase";
+import { relativeTime } from "../lib/format";
 import { Trash2, AlertTriangle } from "lucide-react";
+
+// Files this fresh might still be mid-upload — for an interactive
+// upload, the file lands in Storage (pre-signed direct upload) *before*
+// the releases row is inserted, which only happens after downloading it
+// back and running analyzeIpa/analyzeAppBinary (can take several
+// seconds). Never offer something this new for one-click deletion.
+const MIN_ORPHAN_AGE_MS = 10 * 60 * 1000;
 
 function formatBytes(bytes) {
   if (!bytes) return "0 MB";
@@ -41,15 +49,23 @@ export async function getServerSideProps() {
     const { data: files } = await service.storage.from("builds").list(entry.name, { limit: 1000 });
     for (const f of files || []) {
       const fullPath = `${entry.name}/${f.name}`;
-      if (!knownPaths.has(fullPath)) {
+      const ageMs = f.created_at ? Date.now() - new Date(f.created_at).getTime() : Infinity;
+      if (!knownPaths.has(fullPath) && ageMs >= MIN_ORPHAN_AGE_MS) {
         // The path's first segment is either a project id or the
         // "public" prefix used by anonymous uploads — resolve it so
         // "orphaned" doesn't read as "unrelated to anything."
         const isPublicPrefix = entry.name === "public";
         const projectName = isPublicPrefix ? null : projectNameById[entry.name] || null;
         const ownerEmail = isPublicPrefix ? null : ownerByProject[entry.name] || null;
+        // Uploads are named `${Date.now()}-${filename}` — strip the
+        // epoch-ms prefix so near-duplicate uploads (e.g. two abandoned
+        // "App.ipa" picks) show a readable filename + upload time
+        // instead of two indistinguishable raw path strings.
+        const displayName = f.name.replace(/^\d+-/, "");
         orphaned.push({
           path: fullPath,
+          displayName,
+          createdAt: f.created_at,
           size: f.metadata?.size || 0,
           projectName,
           ownerEmail,
@@ -67,16 +83,18 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
   const [busy, setBusy] = useState(null);
   const totalBytes = perProject.reduce((sum, p) => sum + p.bytes, 0);
 
-  async function removeOrphan(path) {
-    setBusy(path);
+  async function removeOrphan(o) {
+    const projectLabel = o.isPublicPrefix ? "an anonymous upload" : o.projectName ? `"${o.projectName}"` : "an unknown project";
+    if (!confirm(`Permanently delete "${o.displayName}" (${projectLabel})? This can't be undone.`)) return;
+    setBusy(o.path);
     const res = await fetch("/api/storage/remove-orphan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path: o.path }),
     });
     setBusy(null);
     if (res.ok) {
-      setOrphaned((o) => o.filter((x) => x.path !== path));
+      setOrphaned((prev) => prev.filter((x) => x.path !== o.path));
     } else {
       alert("Couldn't remove that file.");
     }
@@ -113,7 +131,8 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
         Files in storage no longer referenced by any release row — usually abandoned uploads
-        (a file is saved as soon as it's picked, before the release is actually published). Safe to remove.
+        (a file is saved as soon as it's picked, before the release is actually published). Uploads younger
+        than 10 minutes are held back from this list in case one is still mid-publish. Safe to remove otherwise.
       </p>
       {orphaned.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">None found.</p>
@@ -126,7 +145,11 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
               className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5 text-sm last:border-0 dark:border-slate-800 dark:bg-slate-900"
             >
               <div className="min-w-0">
-                <span className="block truncate font-mono text-xs text-slate-600 dark:text-slate-400">{o.path}</span>
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{o.displayName}</span>
+                  <span className="shrink-0 text-xs text-slate-500 dark:text-slate-500">uploaded {relativeTime(o.createdAt)}</span>
+                </div>
+                <span className="block truncate font-mono text-xs text-slate-500 dark:text-slate-500">{o.path}</span>
                 <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-500">
                   {o.isPublicPrefix
                     ? "Anonymous upload — no project"
@@ -138,7 +161,7 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
               <div className="flex shrink-0 items-center gap-3">
                 <span className="text-xs text-slate-500">{formatBytes(o.size)}</span>
                 <button
-                  onClick={() => removeOrphan(o.path)}
+                  onClick={() => removeOrphan(o)}
                   disabled={busy === o.path}
                   title="Remove file"
                   aria-label="Remove file"
