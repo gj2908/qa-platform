@@ -15,12 +15,15 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
+  const [resending, setResending] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
     setMessage("");
+    setUnconfirmedEmail("");
     setLoading(true);
     const supabase = createClient();
     const redirectTo = router.query.redirectTo || "/dashboard";
@@ -31,8 +34,14 @@ export default function Login() {
         password,
       });
       if (error) {
-        setError(error.message);
         setLoading(false);
+        setError(error.message);
+        // Supabase intentionally returns the same generic "Invalid login
+        // credentials" for a wrong password AND an unconfirmed account
+        // (avoids leaking confirmation status) — there's no way to tell
+        // which one this is from the error alone, so a failed sign-in
+        // always offers a resend rather than trying to guess.
+        setUnconfirmedEmail(email);
         return;
       }
       router.push(redirectTo);
@@ -50,9 +59,19 @@ export default function Login() {
         setError(error.message);
         return;
       }
-      setMessage("Account created. You can now sign in.");
+      setMessage("Check your email to verify your account, then sign in.");
       setMode("signin");
     }
+  }
+
+  async function resendVerification() {
+    setResending(true);
+    const supabase = createClient();
+    await supabase.auth.resend({ type: "signup", email: unconfirmedEmail });
+    setResending(false);
+    setError("");
+    setMessage("Verification email sent — check your inbox.");
+    setUnconfirmedEmail("");
   }
 
   return (
@@ -107,6 +126,15 @@ export default function Login() {
           </p>
         )}
 
+        {unconfirmedEmail && (
+          <div className="flex flex-col gap-2 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
+            <p>Wrong password, or haven't verified your email yet?</p>
+            <Button type="button" size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
+              Resend verification email
+            </Button>
+          </div>
+        )}
+
         <Button type="submit" loading={loading} className="mt-1 w-full">
           {mode === "signin" ? "Sign in" : "Create account"}
         </Button>
@@ -123,6 +151,7 @@ export default function Login() {
                 setMode("signup");
                 setError("");
                 setMessage("");
+                setUnconfirmedEmail("");
               }}
               className="font-medium text-accent hover:text-accent-hover"
             >
@@ -143,6 +172,7 @@ export default function Login() {
                 setMode("signin");
                 setError("");
                 setMessage("");
+                setUnconfirmedEmail("");
               }}
               className="font-medium text-accent hover:text-accent-hover"
             >
