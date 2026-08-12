@@ -22,12 +22,13 @@ export default function ForgotPassword() {
     setError("");
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: `${window.location.origin}/reset-password`,
-      },
+    // resetPasswordForEmail (not signInWithOtp) — this is Supabase's
+    // dedicated password-recovery flow, with its own "recovery" email
+    // type/template, kept genuinely separate from the reverification
+    // gate's magic-link flow rather than sharing one template between two
+    // different-sounding purposes.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setLoading(false);
     if (error) {
@@ -41,12 +42,12 @@ export default function ForgotPassword() {
     setOtpSubmitting(true);
     setOtpError("");
     const supabase = createClient();
-    // The code came from signInWithOtp above, so it verifies as type
-    // "email" — a successful verify establishes a session directly
-    // (same end state as clicking the emailed link), so reset-password's
-    // existing session-polling picks it up immediately with no further
-    // token handling needed here.
-    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+    // type must match resetPasswordForEmail's own email type ("recovery"),
+    // not the generic "email" type used elsewhere — a successful verify
+    // establishes a session directly (same end state as clicking the
+    // emailed link), so reset-password's existing session-polling picks it
+    // up immediately with no further token handling needed here.
+    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "recovery" });
     setOtpSubmitting(false);
     if (error) {
       setOtpError(error.message);

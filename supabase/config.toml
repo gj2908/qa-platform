@@ -258,9 +258,12 @@ sender_name = "QA Platform"
 # Default templates only show a "click this link" button — no visible code
 # at all — which makes the OTP-code entry UI (main/'s OtpCodeInput) useless
 # since there's nothing for a user to type in. These show the code
-# prominently, with the link kept as a fallback. magic_link covers
-# signInWithOtp() (existing-user reverification + forgot-password);
-# confirmation covers signUp()/resend() (new-signup verification).
+# prominently, with the link kept as a fallback. Three genuinely separate
+# flows, three separate templates: magic_link covers signInWithOtp()
+# (existing-user reverification only); confirmation covers
+# signUp()/resend() (new-signup verification); recovery covers
+# resetPasswordForEmail() (forgot password) — kept off magic_link
+# specifically so its wording/subject never collides with reverification's.
 [auth.email.template.magic_link]
 subject = "Your QA Platform verification code"
 content_path = "./supabase/templates/magic_link.html"
@@ -268,6 +271,10 @@ content_path = "./supabase/templates/magic_link.html"
 [auth.email.template.confirmation]
 subject = "Verify your QA Platform email"
 content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your QA Platform password"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
