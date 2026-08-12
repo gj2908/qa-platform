@@ -1,5 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/requireAdmin";
+import { logAdminAction } from "../../../lib/logAdminAction";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -24,6 +25,13 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logAdminAction(service, {
+    adminEmail: admin.email,
+    action: "orphan_file_removed",
+    targetType: "storage_file",
+    targetId: path,
+  });
 
   res.status(200).json({ ok: true });
 }

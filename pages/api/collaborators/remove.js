@@ -58,7 +58,8 @@ export default async function handler(req, res) {
     if (project?.webhook_url) {
       await sendWebhookNotification(
         project.webhook_url,
-        buildCollaboratorPayload({ email: email.trim().toLowerCase(), role: null, action: "removed" })
+        buildCollaboratorPayload({ email: email.trim().toLowerCase(), role: null, action: "removed" }),
+        { service, projectId, event: "collaborator_removed" }
       );
     }
   } catch (e) {

@@ -46,15 +46,22 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState(null);
+  const [labelFilter, setLabelFilter] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const canEdit = canManageBoard(role);
 
-  const visibleTasks = search.trim()
-    ? tasks.filter((t) => {
-        const q = search.trim().toLowerCase();
-        return t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q);
-      })
-    : tasks;
+  const allLabels = [...new Set(tasks.flatMap((t) => t.labels || []))].sort();
+
+  const visibleTasks = tasks.filter((t) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      if (!t.title.toLowerCase().includes(q) && !(t.description || "").toLowerCase().includes(q)) return false;
+    }
+    if (priorityFilter && t.priority !== priorityFilter) return false;
+    if (labelFilter && !(t.labels || []).includes(labelFilter)) return false;
+    return true;
+  });
 
   async function addTask(e) {
     e.preventDefault();
@@ -164,6 +171,37 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
             )}
           </div>
         </div>
+
+        {(allLabels.length > 0 || tasks.some((t) => t.priority)) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {["low", "medium", "high", "urgent"].map((p) => (
+              <button
+                key={p}
+                onClick={() => setPriorityFilter(priorityFilter === p ? null : p)}
+                className={`rounded-full border px-2 py-0.5 text-xs font-medium capitalize transition-colors ${
+                  priorityFilter === p
+                    ? "border-accent bg-accent-subtle text-accent-subtle-fg"
+                    : "border-border text-ink-tertiary hover:bg-hover"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+            {allLabels.map((label) => (
+              <button
+                key={label}
+                onClick={() => setLabelFilter(labelFilter === label ? null : label)}
+                className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                  labelFilter === label
+                    ? "border-accent bg-accent-subtle text-accent-subtle-fg"
+                    : "border-border text-ink-tertiary hover:bg-hover"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-x-auto pb-1 thin-scrollbar">
           <div className="flex h-full min-w-max gap-3 lg:grid lg:min-w-0 lg:grid-cols-5">

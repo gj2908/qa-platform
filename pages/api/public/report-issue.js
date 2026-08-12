@@ -1,6 +1,7 @@
 import { createServiceClient } from "../../../lib/supabase/server";
 import { triageFeedback } from "../../../lib/aiClient";
 import { sendWebhookNotification, buildFeedbackPayload } from "../../../lib/webhookNotify";
+import { checkRateLimit, clientIp } from "../../../lib/rateLimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_FEEDBACK_LENGTH = 5000;
@@ -39,6 +40,13 @@ export default async function handler(req, res) {
   }
 
   const service = createServiceClient();
+
+  const rate = await checkRateLimit(service, `report-issue:${clientIp(req)}`, { maxAttempts: 20, windowMinutes: 60 });
+  if (!rate.allowed) {
+    res.status(429).json({ error: "Too many reports from this connection. Please try again in an hour." });
+    return;
+  }
+
   const { data: release } = await service
     .from("releases")
     .select("id, project_id, app_name, version, build_number, platform")
@@ -107,7 +115,8 @@ export default async function handler(req, res) {
           feedback: trimmedFeedback,
           reporterEmail: email,
           boardUrl: `${protocol}://${host}/projects/${release.project_id}/board`,
-        })
+        }),
+        { service, projectId: release.project_id, event: "tester_feedback" }
       );
     }
   } catch (e) {

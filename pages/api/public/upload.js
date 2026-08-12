@@ -4,6 +4,7 @@ import { createServiceClient } from "../../../lib/supabase/server";
 import { analyzeIpa } from "../../../lib/ipaAnalyzer";
 import { analyzeAppBinary } from "../../../lib/appAnalyzer";
 import { fetchWebAppInfo } from "../../../lib/faviconFetcher";
+import { checkRateLimit } from "../../../lib/rateLimit";
 
 export const config = {
   api: { bodyParser: false },
@@ -52,6 +53,13 @@ export default async function handler(req, res) {
   }
 
   const service = createServiceClient();
+
+  const rate = await checkRateLimit(service, `upload:${email}`, { maxAttempts: 10, windowMinutes: 60 });
+  if (!rate.allowed) {
+    res.status(429).json({ error: "Too many uploads from this email. Please try again in an hour." });
+    return;
+  }
+
   const uploaded = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
   let filePath = null;

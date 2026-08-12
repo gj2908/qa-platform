@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { House } from "lucide-react";
+import { House, ListChecks } from "lucide-react";
 import ThemeToggle from "../ThemeToggle";
 import UserMenu from "./UserMenu";
 import NotificationBell from "./NotificationBell";
@@ -38,6 +38,14 @@ export default function TopNav({ crumb, center }) {
 
       <div className="flex flex-1 shrink-0 items-center justify-end gap-3">
         <ThemeToggle />
+        <Link
+          href="/my-tasks"
+          title="My tasks"
+          aria-label="My tasks"
+          className="flex shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
+        >
+          <ListChecks size={17} strokeWidth={2} />
+        </Link>
         <NotificationBell />
         <div className="h-5 w-px bg-border" />
         <UserMenu />

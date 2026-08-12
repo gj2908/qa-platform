@@ -10,6 +10,7 @@ import PlatformBadge from "../../../components/ui/PlatformBadge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
+import CompareDialog from "../../../components/release/CompareDialog";
 import Input from "../../../components/ui/Input";
 import { useToast } from "../../../components/ui/ToastProvider";
 import {
@@ -25,6 +26,7 @@ import {
   CircleAlert,
   Trash2,
   X,
+  GitCompare,
 } from "lucide-react";
 import { relativeTime } from "../../../lib/format";
 import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
@@ -164,7 +166,7 @@ function StatusBadges({ release }) {
   );
 }
 
-function ChangelogRow({ release, onDelete, canEdit }) {
+function ChangelogRow({ release, onDelete, canEdit, compareMode, selected, onToggleCompare }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = release.notes && release.notes.length > 180;
 
@@ -172,6 +174,14 @@ function ChangelogRow({ release, onDelete, canEdit }) {
     <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
+          {compareMode && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleCompare(release)}
+              className="h-4 w-4 shrink-0 rounded border-border accent-accent"
+            />
+          )}
           <AppIcon src={release.app_icon} fallbackLabel={release.app_name} size={28} />
           <PlatformBadge platform={release.platform} />
           <span className="text-sm font-semibold text-ink-primary">
@@ -328,6 +338,23 @@ export default function Changelog({ project, role, releases, scheduled, pending 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [platformFilter, setPlatformFilter] = useState(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSelection, setCompareSelection] = useState([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+
+  function toggleCompare(release) {
+    setCompareSelection((prev) => {
+      if (prev.some((r) => r.id === release.id)) return prev.filter((r) => r.id !== release.id);
+      // Only releases of the same platform can be meaningfully compared.
+      const filtered = prev.filter((r) => r.platform === release.platform);
+      return [...filtered, release].slice(-2);
+    });
+  }
+
+  function exitCompareMode() {
+    setCompareMode(false);
+    setCompareSelection([]);
+  }
 
   const filteredReleases = releases.filter((r) => {
     if (platformFilter && r.platform !== platformFilter) return false;
@@ -373,13 +400,34 @@ export default function Changelog({ project, role, releases, scheduled, pending 
             <h1 className="text-xl font-semibold text-ink-primary">Changelog</h1>
             <p className="mt-1 text-sm text-ink-tertiary">Published releases for {project.name}.</p>
           </div>
-          {canEdit && (
-            <Button onClick={() => setDialogOpen(true)}>
-              <Rocket size={15} strokeWidth={2.25} />
-              New release
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {releases.length > 1 && (
+              <Button variant={compareMode ? "primary" : "secondary"} onClick={() => (compareMode ? exitCompareMode() : setCompareMode(true))}>
+                <GitCompare size={15} strokeWidth={2.25} />
+                {compareMode ? "Cancel compare" : "Compare"}
+              </Button>
+            )}
+            {canEdit && (
+              <Button onClick={() => setDialogOpen(true)}>
+                <Rocket size={15} strokeWidth={2.25} />
+                New release
+              </Button>
+            )}
+          </div>
         </div>
+
+        {compareMode && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-accent/40 bg-accent-subtle px-3.5 py-2.5">
+            <p className="text-sm text-accent-subtle-fg">
+              {compareSelection.length === 0 && "Select two releases of the same platform to compare."}
+              {compareSelection.length === 1 && "Select one more release (same platform) to compare."}
+              {compareSelection.length === 2 && "Ready to compare."}
+            </p>
+            <Button size="sm" disabled={compareSelection.length !== 2} onClick={() => setCompareOpen(true)}>
+              Compare selected
+            </Button>
+          </div>
+        )}
 
         {deleteError && (
           <p className="rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
@@ -461,7 +509,15 @@ export default function Changelog({ project, role, releases, scheduled, pending 
                   </div>
                   <div className="divide-y divide-border rounded-lg border border-border bg-surface">
                     {group.map((r) => (
-                      <ChangelogRow key={r.id} release={r} onDelete={setDeleteTarget} canEdit={canEdit} />
+                      <ChangelogRow
+                        key={r.id}
+                        release={r}
+                        onDelete={setDeleteTarget}
+                        canEdit={canEdit}
+                        compareMode={compareMode}
+                        selected={compareSelection.some((c) => c.id === r.id)}
+                        onToggleCompare={toggleCompare}
+                      />
                     ))}
                   </div>
                 </div>
@@ -482,6 +538,8 @@ export default function Changelog({ project, role, releases, scheduled, pending 
       />
 
       <NewReleaseDialog project={project} open={dialogOpen} onClose={() => setDialogOpen(false)} />
+
+      <CompareDialog releases={compareSelection} open={compareOpen} onClose={() => setCompareOpen(false)} />
     </ProjectShell>
   );
 }

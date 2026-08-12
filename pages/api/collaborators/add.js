@@ -66,7 +66,8 @@ export default async function handler(req, res) {
     if (project?.webhook_url) {
       await sendWebhookNotification(
         project.webhook_url,
-        buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" })
+        buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" }),
+        { service, projectId, event: "collaborator_added" }
       );
     }
   } catch (e) {

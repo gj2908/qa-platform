@@ -89,7 +89,8 @@ export default async function handler(req, res) {
           buildNumber: updated.build_number,
           platform: updated.platform,
           installUrl: `${protocol}://${host}/distribute/${updated.id}`,
-        })
+        }),
+        { service, projectId: release.project_id, event: "release_published" }
       );
     }
   } catch (e) {

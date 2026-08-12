@@ -1,4 +1,4 @@
-import { createServerSupabase } from "../../../lib/supabase/server";
+import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { sendWebhookNotification } from "../../../lib/webhookNotify";
 
 // Sends a real test payload to the project's saved webhook and reports
@@ -42,9 +42,11 @@ export default async function handler(req, res) {
     return;
   }
 
-  const result = await sendWebhookNotification(project.webhook_url, {
-    text: "✅ Test notification from your QA platform project — this webhook is wired up correctly.",
-  });
+  const result = await sendWebhookNotification(
+    project.webhook_url,
+    { text: "✅ Test notification from your QA platform project — this webhook is wired up correctly." },
+    { service: createServiceClient(), projectId, event: "test" }
+  );
 
   if (!result.ok) {
     res.status(502).json({ error: result.error || `Endpoint responded with status ${result.status}` });

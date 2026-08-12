@@ -9,6 +9,7 @@ create table projects (
   description text,
   webhook_url text, -- optional Slack-incoming-webhook-compatible URL, notified on publish
   require_approval boolean not null default false, -- non-owner publishes land as pending_review
+  digest_enabled boolean not null default false, -- lib/buildDigest.js / pages/api/cron/digest.js
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -43,6 +44,8 @@ create table tasks (
   source text not null default 'manual' check (source in ('manual', 'tester_feedback')),
   ai_category text check (ai_category is null or ai_category in ('bug', 'feature', 'question')),
   ai_severity text check (ai_severity is null or ai_severity in ('low', 'medium', 'high')),
+  priority text check (priority is null or priority in ('low', 'medium', 'high', 'urgent')),
+  labels text[] not null default '{}',
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -203,6 +206,47 @@ create table install_events (
 
 create index install_events_project_created_idx on install_events (project_id, created_at);
 
+-- ── Webhook deliveries ───────────────────────────────────────
+-- Records every outgoing webhook attempt so a failed delivery isn't
+-- silently swallowed — "Recent deliveries" list + retry on the project
+-- Overview page.
+create table webhook_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  event text not null,
+  payload jsonb,
+  status text not null check (status in ('success', 'failed')),
+  response_status int,
+  error text,
+  created_at timestamptz default now()
+);
+
+create index webhook_deliveries_project_created_idx on webhook_deliveries (project_id, created_at desc);
+
+-- ── Admin audit log ──────────────────────────────────────────
+-- Written by the separate admin/ app's service-role client only — no RLS
+-- policies, just enabled for defense-in-depth like every other table.
+create table admin_actions (
+  id uuid primary key default gen_random_uuid(),
+  admin_email text not null,
+  action text not null,
+  target_type text not null,
+  target_id text,
+  detail text,
+  created_at timestamptz default now()
+);
+
+-- ── Rate limiting ────────────────────────────────────────────
+-- DB-backed throttle for anonymous public POST endpoints — a row per
+-- attempt, keyed by "<endpoint>:<ip-or-email>". See lib/rateLimit.js.
+create table rate_limit_events (
+  id uuid primary key default gen_random_uuid(),
+  key text not null,
+  created_at timestamptz default now()
+);
+
+create index rate_limit_events_key_created_idx on rate_limit_events (key, created_at desc);
+
 -- ── Role lookup helper ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
 -- queries) so this bypasses project_collaborators' own RLS instead of
@@ -296,6 +340,14 @@ alter table project_favorites enable row level security;
 alter table registered_devices enable row level security;
 alter table release_installs enable row level security;
 alter table install_events enable row level security;
+alter table webhook_deliveries enable row level security;
+alter table admin_actions enable row level security;
+alter table rate_limit_events enable row level security;
+
+create policy "members read webhook deliveries" on webhook_deliveries
+  for select using (project_role(project_id) is not null);
+-- admin_actions and rate_limit_events get no policies at all —
+-- service-role only, same as project_activity's write side.
 
 create policy "members read devices" on registered_devices
   for select using (project_role(project_id) is not null);

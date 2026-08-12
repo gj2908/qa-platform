@@ -14,6 +14,8 @@ export default function TaskDetailDialog({ task, collaborators, editable, open, 
   const [description, setDescription] = useState(task?.description || "");
   const [assigneeEmail, setAssigneeEmail] = useState(task?.assignee_email || "");
   const [dueDate, setDueDate] = useState(task?.due_date || "");
+  const [priority, setPriority] = useState(task?.priority || "");
+  const [labels, setLabels] = useState((task?.labels || []).join(", "));
   const [saving, setSaving] = useState(false);
 
   if (!open || !task) return null;
@@ -24,6 +26,11 @@ export default function TaskDetailDialog({ task, collaborators, editable, open, 
       description: description.trim() || null,
       assignee_email: assigneeEmail || null,
       due_date: dueDate || null,
+      priority: priority || null,
+      labels: labels
+        .split(",")
+        .map((l) => l.trim())
+        .filter(Boolean),
     });
     setSaving(false);
     onClose();
@@ -77,6 +84,32 @@ export default function TaskDetailDialog({ task, collaborators, editable, open, 
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                disabled={!editable}
+              />
+            </FormField>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Priority" htmlFor="taskPriority">
+              <Select
+                id="taskPriority"
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                disabled={!editable}
+              >
+                <option value="">None</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </Select>
+            </FormField>
+            <FormField label="Labels" htmlFor="taskLabels">
+              <Input
+                id="taskLabels"
+                placeholder="ui, regression…"
+                value={labels}
+                onChange={(e) => setLabels(e.target.value)}
                 disabled={!editable}
               />
             </FormField>

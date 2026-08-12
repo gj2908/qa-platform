@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Download as DownloadIcon,
   Smartphone,
+  Mail,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -95,6 +96,13 @@ export async function getServerSideProps({ params, req, res }) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
 
+  const { data: deliveries } = await supabase
+    .from("webhook_deliveries")
+    .select("id, event, status, response_status, error, created_at")
+    .eq("project_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
   // Feedback-analytics: tester-reported tasks, open vs. resolved.
   const { data: feedbackTasks } = await supabase
     .from("tasks")
@@ -113,6 +121,7 @@ export async function getServerSideProps({ params, req, res }) {
       installTrend,
       versionAdoption,
       feedbackStats,
+      deliveries: deliveries || [],
       role,
       tasks: tasks || [],
       releases: releases || [],
@@ -132,6 +141,7 @@ export default function ProjectOverview({
   installTrend,
   versionAdoption,
   feedbackStats,
+  deliveries,
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const canEdit = canManageReleases(role);
@@ -293,7 +303,8 @@ export default function ProjectOverview({
         {activity.length > 0 && <ActivityCard activity={activity} projectId={project.id} isOwner={isOwner(role)} />}
 
         {isOwner(role) && <ApprovalSettingsCard project={project} />}
-        {isOwner(role) && <WebhookCard project={project} />}
+        {isOwner(role) && <WebhookCard project={project} deliveries={deliveries} />}
+        {isOwner(role) && <DigestCard project={project} />}
       </div>
 
       <NewReleaseDialog project={project} open={dialogOpen} onClose={() => setDialogOpen(false)} />
@@ -443,12 +454,99 @@ function ApprovalSettingsCard({ project }) {
   );
 }
 
-function WebhookCard({ project }) {
+function DigestCard({ project }) {
+  const toast = useToast();
+  const [digestEnabled, setDigestEnabled] = useState(project.digest_enabled);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  async function toggle() {
+    const next = !digestEnabled;
+    setSaving(true);
+    const res = await fetch("/api/projects/digest-toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, digestEnabled: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setDigestEnabled(next);
+      toast.success(next ? "Daily digest enabled." : "Daily digest disabled.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update this setting.");
+    }
+  }
+
+  async function sendTest() {
+    setSending(true);
+    const res = await fetch("/api/projects/send-digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id }),
+    });
+    setSending(false);
+    if (res.ok) {
+      toast.success("Test digest sent to your email.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't send a test digest — is email configured?");
+    }
+  }
+
+  return (
+    <Card className="p-5" data-testid="digest-card">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Mail size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Daily email digest</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              A daily summary of new feedback, releases, pending approvals, and expiring profiles, sent to every
+              collaborator.
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="secondary" size="sm" loading={sending} onClick={sendTest}>
+            Send test
+          </Button>
+          <Button variant={digestEnabled ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
+            {digestEnabled ? "On" : "Off"}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function WebhookCard({ project, deliveries: initialDeliveries }) {
   const toast = useToast();
   const [url, setUrl] = useState(project.webhook_url || "");
   const [savedUrl, setSavedUrl] = useState(project.webhook_url || "");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [deliveries, setDeliveries] = useState(initialDeliveries);
+  const [retryingId, setRetryingId] = useState(null);
+
+  async function retry(deliveryId) {
+    setRetryingId(deliveryId);
+    const res = await fetch("/api/projects/webhook-retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deliveryId }),
+    });
+    setRetryingId(null);
+    if (res.ok) {
+      toast.success("Retry succeeded.");
+      setDeliveries((d) =>
+        d.map((x) => (x.id === deliveryId ? { ...x, status: "success", error: null } : x))
+      );
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Retry failed.");
+    }
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -485,7 +583,7 @@ function WebhookCard({ project }) {
   }
 
   return (
-    <Card className="p-5">
+    <Card className="p-5" data-testid="webhook-card">
       <div className="flex items-center gap-2">
         <Webhook size={15} strokeWidth={2.25} className="text-ink-secondary" />
         <h2 className="text-sm font-semibold text-ink-primary">Release notifications</h2>
@@ -522,6 +620,32 @@ function WebhookCard({ project }) {
           </Button>
         </div>
       </form>
+
+      {deliveries.length > 0 && (
+        <div className="mt-4 flex flex-col gap-1.5 border-t border-border pt-4">
+          <p className="text-xs font-medium text-ink-secondary">Recent deliveries</p>
+          {deliveries.map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${d.status === "success" ? "bg-success" : "bg-danger"}`}
+                />
+                <span className="truncate text-ink-secondary">{d.event}</span>
+                <span className="shrink-0 text-ink-tertiary">{relativeTime(d.created_at)}</span>
+              </div>
+              {d.status === "failed" && (
+                <button
+                  onClick={() => retry(d.id)}
+                  disabled={retryingId === d.id}
+                  className="shrink-0 font-medium text-accent hover:text-accent-hover disabled:opacity-50"
+                >
+                  {retryingId === d.id ? "Retrying…" : "Retry"}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

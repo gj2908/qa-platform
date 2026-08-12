@@ -1,5 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/requireAdmin";
+import { logAdminAction } from "../../../lib/logAdminAction";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -20,6 +21,7 @@ export default async function handler(req, res) {
 
   const service = createServiceClient();
 
+  const { data: projectRow } = await service.from("projects").select("name").eq("id", projectId).single();
   const { data: releases } = await service.from("releases").select("file_path").eq("project_id", projectId);
   const filePaths = (releases || []).map((r) => r.file_path).filter(Boolean);
   if (filePaths.length > 0) {
@@ -31,6 +33,14 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logAdminAction(service, {
+    adminEmail: admin.email,
+    action: "project_deleted",
+    targetType: "project",
+    targetId: projectId,
+    detail: projectRow?.name || null,
+  });
 
   res.status(200).json({ ok: true });
 }

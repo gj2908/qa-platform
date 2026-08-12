@@ -8,6 +8,13 @@ const AI_CATEGORY_TONE = {
   question: "bg-subtle text-ink-tertiary",
 };
 
+const PRIORITY_TONE = {
+  low: "bg-subtle text-ink-tertiary",
+  medium: "bg-accent-subtle text-accent-subtle-fg",
+  high: "bg-warning-subtle text-warning-subtle-fg",
+  urgent: "bg-danger-subtle text-danger-subtle-fg",
+};
+
 function dueDateStatus(dueDate) {
   if (!dueDate) return null;
   const daysLeft = Math.ceil((new Date(dueDate + "T00:00:00").getTime() - Date.now()) / 86_400_000);
@@ -61,6 +68,26 @@ export default function TaskCard({ task, assigneeName, onMove, onDelete, onOpen,
           {task.ai_category}
           {task.ai_severity ? ` · ${task.ai_severity}` : ""}
         </span>
+      )}
+
+      {(task.priority || (task.labels && task.labels.length > 0)) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {task.priority && (
+            <span
+              className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${PRIORITY_TONE[task.priority] || PRIORITY_TONE.low}`}
+            >
+              {task.priority}
+            </span>
+          )}
+          {(task.labels || []).map((label) => (
+            <span
+              key={label}
+              className="inline-flex w-fit items-center rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-ink-tertiary"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
       )}
 
       {(task.assignee_email || dueStatus) && (

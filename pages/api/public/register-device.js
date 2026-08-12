@@ -1,4 +1,5 @@
 import { createServiceClient } from "../../../lib/supabase/server";
+import { checkRateLimit, clientIp } from "../../../lib/rateLimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,6 +26,13 @@ export default async function handler(req, res) {
   }
 
   const service = createServiceClient();
+
+  const rate = await checkRateLimit(service, `register-device:${clientIp(req)}`, { maxAttempts: 10, windowMinutes: 60 });
+  if (!rate.allowed) {
+    res.status(429).json({ error: "Too many device registrations from this connection. Please try again in an hour." });
+    return;
+  }
+
   const { data: project } = await service.from("projects").select("id").eq("id", projectId).single();
   if (!project) {
     res.status(404).json({ error: "Project not found" });

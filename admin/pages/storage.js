@@ -15,6 +15,8 @@ export async function getServerSideProps() {
 
   const { data: projects } = await service.from("projects").select("id, name");
   const { data: releases } = await service.from("releases").select("project_id, file_path, file_size_bytes");
+  const { data: owners } = await service.from("project_collaborators").select("project_id, email").eq("role", "owner");
+  const ownerByProject = Object.fromEntries((owners || []).map((o) => [o.project_id, o.email]));
 
   const byProject = {};
   const knownPaths = new Set();
@@ -39,7 +41,19 @@ export async function getServerSideProps() {
     for (const f of files || []) {
       const fullPath = `${entry.name}/${f.name}`;
       if (!knownPaths.has(fullPath)) {
-        orphaned.push({ path: fullPath, size: f.metadata?.size || 0 });
+        // The path's first segment is either a project id or the
+        // "public" prefix used by anonymous uploads — resolve it so
+        // "orphaned" doesn't read as "unrelated to anything."
+        const isPublicPrefix = entry.name === "public";
+        const projectName = isPublicPrefix ? null : projectNameById[entry.name] || null;
+        const ownerEmail = isPublicPrefix ? null : ownerByProject[entry.name] || null;
+        orphaned.push({
+          path: fullPath,
+          size: f.metadata?.size || 0,
+          projectName,
+          ownerEmail,
+          isPublicPrefix,
+        });
       }
     }
   }
@@ -99,20 +113,36 @@ export default function AdminStorage({ perProject, orphaned: initialOrphaned }) 
         </h2>
       </div>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-        Files in storage no longer referenced by any release row — safe to remove.
+        Files in storage no longer referenced by any release row — usually abandoned uploads
+        (a file is saved as soon as it's picked, before the release is actually published). Safe to remove.
       </p>
       {orphaned.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">None found.</p>
       ) : (
         <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
           {orphaned.map((o) => (
-            <div key={o.path} className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5 text-sm last:border-0 dark:border-slate-800 dark:bg-slate-900">
-              <span className="truncate font-mono text-xs text-slate-600 dark:text-slate-400">{o.path}</span>
+            <div
+              key={o.path}
+              data-testid={`orphan-row-${o.path}`}
+              className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5 text-sm last:border-0 dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="min-w-0">
+                <span className="block truncate font-mono text-xs text-slate-600 dark:text-slate-400">{o.path}</span>
+                <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-500">
+                  {o.isPublicPrefix
+                    ? "Anonymous upload — no project"
+                    : o.projectName
+                      ? `Project: ${o.projectName}${o.ownerEmail ? ` · Owner: ${o.ownerEmail}` : ""}`
+                      : "No matching project — likely from a deleted project"}
+                </span>
+              </div>
               <div className="flex shrink-0 items-center gap-3">
                 <span className="text-xs text-slate-500">{formatBytes(o.size)}</span>
                 <button
                   onClick={() => removeOrphan(o.path)}
                   disabled={busy === o.path}
+                  title="Remove file"
+                  aria-label="Remove file"
                   className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-950"
                 >
                   <Trash2 size={13} />

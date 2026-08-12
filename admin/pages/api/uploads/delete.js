@@ -1,5 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase";
 import { requireAdmin } from "../../../lib/requireAdmin";
+import { logAdminAction } from "../../../lib/logAdminAction";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -30,6 +31,14 @@ export default async function handler(req, res) {
     res.status(500).json({ error: error.message });
     return;
   }
+
+  await logAdminAction(service, {
+    adminEmail: admin.email,
+    action: "uploads_deleted",
+    targetType: "upload",
+    targetId: releaseIds.join(","),
+    detail: `${releaseIds.length} upload(s)`,
+  });
 
   res.status(200).json({ ok: true });
 }
