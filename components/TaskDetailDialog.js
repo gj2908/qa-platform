@@ -1,16 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FormField from "./ui/FormField";
 import Textarea from "./ui/Textarea";
 import Select from "./ui/Select";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
-import { Trash2, X } from "lucide-react";
+import { Trash2, X, Send } from "lucide-react";
+import { createClient } from "../lib/supabase/client";
+import { useCurrentUser } from "../lib/useCurrentUser";
+import { getAvatarColor } from "../lib/avatarColor";
+import { relativeTime } from "../lib/format";
 
 // Opened by clicking a task card body (not the drag handle or the
 // quick status/delete controls) — the quick "New task title" add form
 // on the board stays as the fast-capture path; this is where the
-// richer fields (description, assignee, due date) get set.
-export default function TaskDetailDialog({ task, collaborators, editable, open, onClose, onSave, onDelete }) {
+// richer fields (description, assignee, due date) and the comment
+// thread live.
+export default function TaskDetailDialog({ task, collaborators, nameByEmail, editable, open, onClose, onSave, onDelete }) {
   const [description, setDescription] = useState(task?.description || "");
   const [assigneeEmail, setAssigneeEmail] = useState(task?.assignee_email || "");
   const [dueDate, setDueDate] = useState(task?.due_date || "");
@@ -18,7 +23,61 @@ export default function TaskDetailDialog({ task, collaborators, editable, open, 
   const [labels, setLabels] = useState((task?.labels || []).join(", "));
   const [saving, setSaving] = useState(false);
 
+  const [comments, setComments] = useState([]);
+  const [commentBody, setCommentBody] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+  const currentUser = useCurrentUser();
+
+  useEffect(() => {
+    if (!task?.id) return;
+    setComments([]);
+    const supabase = createClient();
+    supabase
+      .from("task_comments")
+      .select("*")
+      .eq("task_id", task.id)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => setComments(data || []));
+  }, [task?.id]);
+
   if (!open || !task) return null;
+
+  async function postComment() {
+    const body = commentBody.trim();
+    if (!body || !currentUser?.email) return;
+    setPostingComment(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("task_comments")
+      .insert({ task_id: task.id, project_id: task.project_id, author_email: currentUser.email, body })
+      .select()
+      .single();
+    setPostingComment(false);
+    if (error || !data) return;
+    setComments((c) => [...c, data]);
+    setCommentBody("");
+
+    // Best-effort @mention detection — logs to project_activity so a
+    // mentioned collaborator sees it in the shared activity feed/bell,
+    // same visibility level as every other event in this app (not a
+    // targeted per-user notification).
+    try {
+      const mentioned = collaborators.filter((c) => c.email !== currentUser.email && body.includes(c.email));
+      const excerpt = body.length > 80 ? `${body.slice(0, 77)}...` : body;
+      await Promise.all(
+        mentioned.map((c) =>
+          supabase.from("project_activity").insert({
+            project_id: task.project_id,
+            actor_email: currentUser.email,
+            action: "task_mentioned",
+            detail: `${c.email} in "${task.title}": ${excerpt}`,
+          })
+        )
+      );
+    } catch (e) {
+      // ignored
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -113,6 +172,57 @@ export default function TaskDetailDialog({ task, collaborators, editable, open, 
                 disabled={!editable}
               />
             </FormField>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <p className="text-xs font-medium text-ink-secondary">
+              Comments{comments.length > 0 ? ` (${comments.length})` : ""}
+            </p>
+            {comments.length > 0 && (
+              <div className="flex max-h-48 flex-col gap-2.5 overflow-y-auto thin-scrollbar">
+                {comments.map((c) => {
+                  const color = getAvatarColor(c.author_email);
+                  const displayName = nameByEmail?.[c.author_email] || c.author_email;
+                  return (
+                    <div key={c.id} className="flex items-start gap-2">
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${color.bg} ${color.text}`}
+                      >
+                        {displayName[0].toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-ink-primary">{displayName}</span>
+                          <span className="text-[11px] text-ink-tertiary">{relativeTime(c.created_at)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary">{c.body}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {editable && (
+              <div className="flex items-end gap-2">
+                <Textarea
+                  rows={2}
+                  placeholder="Add a comment…"
+                  value={commentBody}
+                  onChange={(e) => setCommentBody(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={postComment}
+                  loading={postingComment}
+                  disabled={!commentBody.trim()}
+                  aria-label="Post comment"
+                >
+                  <Send size={13} strokeWidth={2.25} />
+                </Button>
+              </div>
+            )}
           </div>
 
           {editable && (

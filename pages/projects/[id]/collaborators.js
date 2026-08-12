@@ -4,6 +4,7 @@ import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
+import Textarea from "../../../components/ui/Textarea";
 import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
@@ -69,6 +70,9 @@ export default function Collaborators({ project, role: myRole, collaborators: in
     [...initial].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
   );
   const [email, setEmail] = useState("");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkEmails, setBulkEmails] = useState("");
+  const [bulkResults, setBulkResults] = useState(null);
   const [role, setRole] = useState("viewer");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
@@ -80,9 +84,36 @@ export default function Collaborators({ project, role: myRole, collaborators: in
 
   async function addCollaborator(e) {
     e.preventDefault();
+    setError("");
+    setBulkResults(null);
+
+    if (bulkMode) {
+      const list = bulkEmails
+        .split("\n")
+        .map((e) => e.trim())
+        .filter(Boolean);
+      if (list.length === 0) return;
+      setAdding(true);
+      const res = await fetch("/api/collaborators/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, emails: list, role }),
+      });
+      setAdding(false);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBulkResults(data.results || []);
+        if ((data.results || []).some((r) => r.ok)) {
+          setTimeout(() => window.location.reload(), 3000);
+        }
+      } else {
+        setError(data.error || "Couldn't add those collaborators.");
+      }
+      return;
+    }
+
     if (!email.trim()) return;
     setAdding(true);
-    setError("");
     const res = await fetch("/api/collaborators/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -154,9 +185,31 @@ export default function Collaborators({ project, role: myRole, collaborators: in
 
         {isOwner && (
           <Card className="p-5">
-            <h2 className="text-sm font-semibold text-ink-primary">Add a collaborator</h2>
-            <form onSubmit={addCollaborator} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-ink-primary">Add a collaborator</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkMode((b) => !b);
+                  setBulkResults(null);
+                  setError("");
+                }}
+                className="text-xs font-medium text-accent hover:text-accent-hover"
+              >
+                {bulkMode ? "Add one at a time" : "Add several at once"}
+              </button>
+            </div>
+            <form onSubmit={addCollaborator} className="mt-4 flex flex-col gap-3">
+              {bulkMode ? (
+                <FormField label="Emails" hint="One per line">
+                  <Textarea
+                    rows={4}
+                    placeholder={"teammate1@company.com\nteammate2@company.com"}
+                    value={bulkEmails}
+                    onChange={(e) => setBulkEmails(e.target.value)}
+                  />
+                </FormField>
+              ) : (
                 <FormField label="Email">
                   <Input
                     type="email"
@@ -165,23 +218,39 @@ export default function Collaborators({ project, role: myRole, collaborators: in
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </FormField>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="w-full sm:w-40">
+                  <FormField label="Role">
+                    <Select value={role} onChange={(e) => setRole(e.target.value)}>
+                      {ASSIGNABLE_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {ROLE_META[r].label}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                </div>
+                <Button
+                  type="submit"
+                  loading={adding}
+                  disabled={bulkMode ? !bulkEmails.trim() : !email.trim()}
+                >
+                  <UserPlus size={15} strokeWidth={2.25} />
+                  {bulkMode ? "Add all" : "Add"}
+                </Button>
               </div>
-              <div className="w-full sm:w-40">
-                <FormField label="Role">
-                  <Select value={role} onChange={(e) => setRole(e.target.value)}>
-                    {ASSIGNABLE_ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {ROLE_META[r].label}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-              </div>
-              <Button type="submit" loading={adding} disabled={!email.trim()}>
-                <UserPlus size={15} strokeWidth={2.25} />
-                Add
-              </Button>
             </form>
+            {bulkResults && (
+              <div className="mt-3 rounded-md bg-subtle px-3.5 py-2.5 text-xs text-ink-secondary">
+                {bulkResults.filter((r) => r.ok).length} added
+                {bulkResults.some((r) => !r.ok) &&
+                  `, ${bulkResults.filter((r) => !r.ok).length} failed: ${bulkResults
+                    .filter((r) => !r.ok)
+                    .map((r) => `${r.email} (${r.error})`)
+                    .join(", ")}`}
+              </div>
+            )}
             <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-ink-tertiary sm:grid-cols-3">
               <div>
                 <dt className="font-medium text-ink-secondary">Viewer</dt>

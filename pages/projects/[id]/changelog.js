@@ -27,6 +27,8 @@ import {
   Trash2,
   X,
   GitCompare,
+  Pin,
+  ArrowRight,
 } from "lucide-react";
 import { relativeTime } from "../../../lib/format";
 import { PLATFORM_META } from "../../../components/ui/PlatformBadge";
@@ -36,6 +38,8 @@ import { activateScheduledReleaseIfDue } from "../../../lib/activateScheduledRel
 import { createServiceClient } from "../../../lib/supabase/server";
 
 const PLATFORM_ORDER = ["ios", "android", "web"];
+const CHANNEL_ORDER = ["internal", "beta", "production"];
+const NEXT_CHANNEL = { internal: "beta", beta: "production" };
 
 function groupReleasesByPlatform(releases) {
   const groups = {};
@@ -89,6 +93,11 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("status", "pending_review")
     .order("created_at", { ascending: false });
 
+  const { data: channelPins } = await supabase
+    .from("channel_pins")
+    .select("channel, platform, release_id")
+    .eq("project_id", params.id);
+
   return {
     props: {
       project,
@@ -96,6 +105,7 @@ export async function getServerSideProps({ params, req, res }) {
       releases: releases || [],
       scheduled: scheduled || [],
       pending: pending || [],
+      channelPins: channelPins || [],
     },
   };
 }
@@ -166,12 +176,37 @@ function StatusBadges({ release }) {
   );
 }
 
-function ChangelogRow({ release, onDelete, canEdit, compareMode, selected, onToggleCompare }) {
+function ChangelogRow({
+  release,
+  onDelete,
+  canEdit,
+  compareMode,
+  selected,
+  onToggleCompare,
+  isProjectOwner,
+  isLatestForPlatform,
+  channelPins,
+  onPin,
+  onUnpin,
+  pinBusy,
+}) {
   const [expanded, setExpanded] = useState(false);
   const isLong = release.notes && release.notes.length > 180;
 
+  // Which channels this release is the effective build for — either
+  // explicitly pinned, or (if unpinned) simply the latest for its
+  // platform, which is what /channel/[id]/[channel] falls back to.
+  const pinnedChannels = new Set(channelPins.filter((p) => p.release_id === release.id).map((p) => p.channel));
+  const pinnedElsewhere = new Set(
+    channelPins.filter((p) => p.platform === release.platform && p.release_id !== release.id).map((p) => p.channel)
+  );
+  const activeChannels = CHANNEL_ORDER.filter(
+    (c) => pinnedChannels.has(c) || (isLatestForPlatform && !pinnedElsewhere.has(c))
+  );
+  const promoteTarget = activeChannels.map((c) => NEXT_CHANNEL[c]).find((next) => next && !activeChannels.includes(next));
+
   return (
-    <div className="flex flex-col gap-3 px-4 py-4 sm:px-5">
+    <div data-testid={`release-row-${release.id}`} className="flex flex-col gap-3 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
           {compareMode && (
@@ -210,6 +245,43 @@ function ChangelogRow({ release, onDelete, canEdit, compareMode, selected, onTog
       </div>
 
       <StatusBadges release={release} />
+
+      {isProjectOwner && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {CHANNEL_ORDER.map((c) => {
+            const isPinned = pinnedChannels.has(c);
+            const isActive = activeChannels.includes(c);
+            return (
+              <button
+                key={c}
+                data-testid={`channel-pin-${release.id}-${c}`}
+                disabled={pinBusy}
+                onClick={() => (isPinned ? onUnpin(release, c) : onPin(release, c))}
+                title={isPinned ? `Pinned to ${c} — click to unpin` : `Pin this build to ${c}`}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium capitalize transition-colors disabled:opacity-50 ${
+                  isActive
+                    ? "border-accent bg-accent-subtle text-accent-subtle-fg"
+                    : "border-border text-ink-tertiary hover:bg-hover"
+                }`}
+              >
+                {isPinned ? <Pin size={10} strokeWidth={2.25} /> : null}
+                {c}
+              </button>
+            );
+          })}
+          {promoteTarget && (
+            <button
+              data-testid={`channel-promote-${release.id}`}
+              disabled={pinBusy}
+              onClick={() => onPin(release, promoteTarget)}
+              className="flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-medium capitalize text-ink-tertiary transition-colors hover:bg-hover disabled:opacity-50"
+            >
+              Promote to {promoteTarget}
+              <ArrowRight size={10} strokeWidth={2.25} />
+            </button>
+          )}
+        </div>
+      )}
 
       {release.notes && (
         <div>
@@ -329,8 +401,9 @@ function ScheduledSection({ scheduled }) {
   );
 }
 
-export default function Changelog({ project, role, releases, scheduled, pending }) {
+export default function Changelog({ project, role, releases, scheduled, pending, channelPins: initialChannelPins }) {
   const router = useRouter();
+  const toast = useToast();
   const canEdit = canManageReleases(role);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -341,6 +414,53 @@ export default function Changelog({ project, role, releases, scheduled, pending 
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelection, setCompareSelection] = useState([]);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [channelPins, setChannelPins] = useState(initialChannelPins);
+  const [pinBusy, setPinBusy] = useState(false);
+
+  // The true latest release per platform, from the full (unfiltered)
+  // releases list — search/platform filters must never change which
+  // release the pin controls consider "latest".
+  const latestReleaseIdByPlatform = {};
+  for (const r of releases) {
+    if (!latestReleaseIdByPlatform[r.platform]) latestReleaseIdByPlatform[r.platform] = r.id;
+  }
+
+  async function handlePin(release, channel) {
+    setPinBusy(true);
+    const res = await fetch("/api/releases/pin-channel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ releaseId: release.id, channel }),
+    });
+    setPinBusy(false);
+    if (res.ok) {
+      setChannelPins((prev) => [
+        ...prev.filter((p) => !(p.channel === channel && p.platform === release.platform)),
+        { channel, platform: release.platform, release_id: release.id },
+      ]);
+      toast.success(`Pinned v${release.version} to ${channel}.`);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't pin this release.");
+    }
+  }
+
+  async function handleUnpin(release, channel) {
+    setPinBusy(true);
+    const res = await fetch("/api/releases/unpin-channel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, channel, platform: release.platform }),
+    });
+    setPinBusy(false);
+    if (res.ok) {
+      setChannelPins((prev) => prev.filter((p) => !(p.channel === channel && p.platform === release.platform)));
+      toast.success(`Unpinned ${channel} — back to latest.`);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't unpin this channel.");
+    }
+  }
 
   function toggleCompare(release) {
     setCompareSelection((prev) => {
@@ -517,6 +637,12 @@ export default function Changelog({ project, role, releases, scheduled, pending 
                         compareMode={compareMode}
                         selected={compareSelection.some((c) => c.id === r.id)}
                         onToggleCompare={toggleCompare}
+                        isProjectOwner={isOwner(role)}
+                        isLatestForPlatform={latestReleaseIdByPlatform[r.platform] === r.id}
+                        channelPins={channelPins}
+                        onPin={handlePin}
+                        onUnpin={handleUnpin}
+                        pinBusy={pinBusy}
                       />
                     ))}
                   </div>

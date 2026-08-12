@@ -46,10 +46,24 @@ create table tasks (
   ai_severity text check (ai_severity is null or ai_severity in ('low', 'medium', 'high')),
   priority text check (priority is null or priority in ('low', 'medium', 'high', 'urgent')),
   labels text[] not null default '{}',
+  due_reminder_sent_at timestamptz, -- see pages/api/cron/task-due-check.js, fires once
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- ── Task comments ────────────────────────────────────────────
+-- A discussion thread per task. RLS mirrors tasks' own policies.
+create table task_comments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references tasks(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  author_email text not null,
+  body text not null,
+  created_at timestamptz default now()
+);
+
+create index task_comments_task_id_idx on task_comments (task_id, created_at);
 
 -- ── Releases (changelog + QA distribution) ─────────────────
 create table releases (
@@ -78,8 +92,23 @@ create table releases (
   approved_at timestamptz,
   status text not null default 'published'
     check (status in ('draft', 'published', 'scheduled', 'pending_review')),
+  approval_reminder_sent_at timestamptz, -- see pages/api/cron/pending-review-check.js, fires once
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
+);
+
+-- ── Channel pins ─────────────────────────────────────────────
+-- Holds a channel+platform to a specific release instead of always
+-- resolving to "latest published" — see pages/channel/[projectId]/[channel].js.
+create table channel_pins (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  channel text not null check (channel in ('internal', 'beta', 'production')),
+  platform text not null check (platform in ('ios', 'android', 'web')),
+  release_id uuid not null references releases(id) on delete cascade,
+  pinned_by uuid references auth.users(id) on delete set null,
+  pinned_at timestamptz default now(),
+  unique (project_id, channel, platform)
 );
 
 -- ── Profiles ─────────────────────────────────────────────────
@@ -247,6 +276,27 @@ create table rate_limit_events (
 
 create index rate_limit_events_key_created_idx on rate_limit_events (key, created_at desc);
 
+-- ── Platform settings ────────────────────────────────────────
+-- Key/value overrides for thresholds that would otherwise be hardcoded
+-- constants (approval-reminder hours, rate-limit caps). Read by
+-- lib/rateLimit.js and the cron routes, edited from admin/pages/settings.js.
+-- Service-role only, same as admin_actions.
+create table platform_settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz default now()
+);
+
+-- ── Admin allowlist ──────────────────────────────────────────
+-- DB-backed admin allowlist, additive to the ADMIN_EMAILS env var (union
+-- of both grants access — see admin/lib/supabase.js's isAdminEmail()).
+-- Service-role only, same as admin_actions.
+create table admin_allowlist (
+  email text primary key,
+  added_by text not null,
+  added_at timestamptz default now()
+);
+
 -- ── Role lookup helper ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
 -- queries) so this bypasses project_collaborators' own RLS instead of
@@ -343,11 +393,27 @@ alter table install_events enable row level security;
 alter table webhook_deliveries enable row level security;
 alter table admin_actions enable row level security;
 alter table rate_limit_events enable row level security;
+alter table task_comments enable row level security;
+alter table channel_pins enable row level security;
+alter table platform_settings enable row level security;
+alter table admin_allowlist enable row level security;
 
 create policy "members read webhook deliveries" on webhook_deliveries
   for select using (project_role(project_id) is not null);
--- admin_actions and rate_limit_events get no policies at all —
--- service-role only, same as project_activity's write side.
+-- admin_actions, rate_limit_events, platform_settings, and
+-- admin_allowlist get no policies at all — service-role only, same as
+-- project_activity's write side.
+
+create policy "members read task comments" on task_comments
+  for select using (project_role(project_id) is not null);
+create policy "commenter+ write task comments" on task_comments
+  for insert with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
+
+create policy "members read channel pins" on channel_pins
+  for select using (project_role(project_id) is not null);
+create policy "owner write channel pins" on channel_pins
+  for all using (project_role(project_id) = 'owner')
+  with check (project_role(project_id) = 'owner');
 
 create policy "members read devices" on registered_devices
   for select using (project_role(project_id) is not null);
@@ -383,8 +449,13 @@ create policy "self manage favorites" on project_favorites
 
 create policy "members read activity" on project_activity
   for select using (project_role(project_id) is not null);
--- No insert/update/delete policy for normal clients — rows are only ever
--- written by trusted server routes via the service-role client.
+-- Release/collaborator/webhook events are still only ever written by
+-- trusted server routes via the service-role client. This insert policy
+-- additionally lets project members log their own task events (created/
+-- assigned/completed/overdue/mentioned) directly from the browser client,
+-- the same way board.js already writes `tasks` itself.
+create policy "members log task activity" on project_activity
+  for insert with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
 
 create policy "authenticated read profiles" on profiles
   for select using (auth.role() = 'authenticated');

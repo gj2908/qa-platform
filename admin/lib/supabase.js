@@ -14,10 +14,26 @@ export function createServiceClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-export function isAdminEmail(email) {
+// ADMIN_EMAILS (env var) union admin_allowlist (DB table, managed from
+// admin/pages/settings.js) — either grants access. The env var is kept
+// as a permanent "break-glass" fallback: a bad edit in the settings UI
+// (e.g. removing the last DB-added admin) can never fully lock everyone
+// out, since env-var admins are unaffected by the DB table.
+export async function isAdminEmail(email) {
+  if (!email) return false;
+  const normalized = email.toLowerCase();
+
   const allowlist = (process.env.ADMIN_EMAILS || "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
-  return !!email && allowlist.includes(email.toLowerCase());
+  if (allowlist.includes(normalized)) return true;
+
+  try {
+    const service = createServiceClient();
+    const { data } = await service.from("admin_allowlist").select("email").eq("email", normalized).maybeSingle();
+    return !!data;
+  } catch (e) {
+    return false;
+  }
 }

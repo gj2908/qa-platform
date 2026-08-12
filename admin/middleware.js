@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isAdminEmail } from "./lib/supabase";
 
 // Gates every page except /login behind: a valid Supabase session AND
 // that session's email being in the ADMIN_EMAILS allowlist. Not tied to
@@ -27,11 +28,7 @@ export async function middleware(req) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const allowlist = (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  const isAdmin = !!user?.email && allowlist.includes(user.email.toLowerCase());
+  const isAdmin = await isAdminEmail(user?.email);
 
   const isLoginPage = req.nextUrl.pathname.startsWith("/login");
 

@@ -54,7 +54,11 @@ export default async function handler(req, res) {
 
   const service = createServiceClient();
 
-  const rate = await checkRateLimit(service, `upload:${email}`, { maxAttempts: 10, windowMinutes: 60 });
+  const rate = await checkRateLimit(service, `upload:${email}`, {
+    maxAttempts: 10,
+    windowMinutes: 60,
+    settingsKeyPrefix: "upload",
+  });
   if (!rate.allowed) {
     res.status(429).json({ error: "Too many uploads from this email. Please try again in an hour." });
     return;

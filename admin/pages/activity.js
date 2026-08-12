@@ -6,6 +6,9 @@ const ACTION_LABEL = {
   project_deleted: "deleted project",
   uploads_deleted: "deleted upload(s)",
   orphan_file_removed: "removed orphaned file",
+  token_revoked: "revoked an API token",
+  admin_added: "added a platform admin",
+  admin_removed: "removed a platform admin",
 };
 
 export async function getServerSideProps() {

@@ -2,7 +2,21 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
 import { createClientBrowser } from "../lib/supabase";
-import { LayoutDashboard, Users, FolderKanban, UploadCloud, HardDrive, LogOut, ShieldAlert, Activity, Search } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  FolderKanban,
+  UploadCloud,
+  HardDrive,
+  LogOut,
+  ShieldAlert,
+  Activity,
+  Search,
+  Webhook,
+  Key,
+  ListChecks,
+  Settings,
+} from "lucide-react";
 
 const TABS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -10,7 +24,11 @@ const TABS = [
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/uploads", label: "Uploads", icon: UploadCloud },
   { href: "/storage", label: "Storage", icon: HardDrive },
+  { href: "/webhooks", label: "Webhooks", icon: Webhook },
+  { href: "/tokens", label: "Tokens", icon: Key },
+  { href: "/tasks", label: "Overdue", icon: ListChecks },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 function GlobalSearch() {

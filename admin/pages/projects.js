@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Link from "next/link";
 import AdminShell from "../components/AdminShell";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2, Search } from "lucide-react";
@@ -82,7 +83,11 @@ export default function AdminProjects({ projects: initial }) {
           <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-800 dark:bg-slate-900">
             {filtered.map((p) => (
               <tr key={p.id}>
-                <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{p.name}</td>
+                <td className="px-4 py-2.5">
+                  <Link href={`/projects/${p.id}`} className="text-slate-900 hover:underline dark:text-slate-100">
+                    {p.name}
+                  </Link>
+                </td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{p.ownerEmail}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{p.releaseCount}</td>
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">

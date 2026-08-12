@@ -41,7 +41,11 @@ export default async function handler(req, res) {
 
   const service = createServiceClient();
 
-  const rate = await checkRateLimit(service, `report-issue:${clientIp(req)}`, { maxAttempts: 20, windowMinutes: 60 });
+  const rate = await checkRateLimit(service, `report-issue:${clientIp(req)}`, {
+    maxAttempts: 20,
+    windowMinutes: 60,
+    settingsKeyPrefix: "report_issue",
+  });
   if (!rate.allowed) {
     res.status(429).json({ error: "Too many reports from this connection. Please try again in an hour." });
     return;

@@ -58,6 +58,11 @@ export default function AdminUploads({ uploads: initial }) {
     }
   }
 
+  function selectOlderThan(days) {
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    setSelected(new Set(uploads.filter((u) => new Date(u.created_at).getTime() < cutoff).map((u) => u.id)));
+  }
+
   return (
     <AdminShell>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -74,6 +79,19 @@ export default function AdminUploads({ uploads: initial }) {
             Delete {selected.size} selected
           </button>
         )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 text-xs">
+        <span className="text-slate-500 dark:text-slate-400">Select uploads older than:</span>
+        {[30, 60, 90].map((days) => (
+          <button
+            key={days}
+            onClick={() => selectOlderThan(days)}
+            className="rounded-full border border-slate-300 px-2.5 py-1 font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            {days} days
+          </button>
+        ))}
       </div>
 
       <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">

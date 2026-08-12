@@ -38,6 +38,21 @@ export async function getServerSideProps({ params, req }) {
   for (const r of published) {
     if (!latestByPlatform[r.platform]) latestByPlatform[r.platform] = r;
   }
+
+  // A pin (see channel_pins / changelog.js's "Pin to channel") overrides
+  // "latest published" for whichever platform it targets — if the pinned
+  // release has since been deleted or unpublished, it's simply ignored
+  // and that platform falls back to latest, no error state needed.
+  const { data: pins } = await supabase
+    .from("channel_pins")
+    .select("platform, release_id")
+    .eq("project_id", projectId)
+    .eq("channel", channel);
+  for (const pin of pins || []) {
+    const pinnedRelease = published.find((r) => r.id === pin.release_id);
+    if (pinnedRelease) latestByPlatform[pin.platform] = pinnedRelease;
+  }
+
   const releases = Object.values(latestByPlatform);
 
   if (releases.length === 0) return { notFound: true };

@@ -44,12 +44,15 @@ export async function middleware(req) {
   // The public read API is also Bearer-token authenticated, not cookie-
   // based — see pages/api/v1/releases/*.
   const isPublicV1Api = req.nextUrl.pathname.startsWith("/api/v1/");
+  // Cron routes are invoked by Vercel Cron with a CRON_SECRET bearer
+  // header, not a session cookie — see pages/api/cron/*.
+  const isCronApi = req.nextUrl.pathname.startsWith("/api/cron/");
   // /reset-password is reached by clicking the email link, which creates the
   // session in the browser after the page loads — so anonymous visitors must
   // be allowed through and signed-in visitors must not be bounced away.
   const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
 
-  if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi || isPublicV1Api) return res;
+  if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi || isPublicV1Api || isCronApi) return res;
 
   if (isPublicLanding) {
     // Signed-in users have no need for the anonymous landing — send them
@@ -78,13 +81,14 @@ export async function middleware(req) {
   return res;
 }
 
-// NOTE: /api/manifest, /api/release-icon, /share/*, /api/public/*, and "/"
-// itself are excluded from the login gate on purpose. /api/manifest and
-// /api/release-icon are fetched directly by Apple's OS-level installer,
+// NOTE: /api/manifest, /api/release-icon, /share/*, /api/public/*, "/",
+// and /api/cron/* are excluded from the login gate on purpose. /api/manifest
+// and /api/release-icon are fetched directly by Apple's OS-level installer,
 // which carries no browser auth cookies. /share/* is the public,
 // anyone-with-the-link install page. "/" is the public upload landing, and
 // /api/public/* is the endpoint it posts to — both meant to be reachable
-// without signing in.
+// without signing in. /api/cron/* is invoked by Vercel Cron itself, which
+// has no session cookie either.
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|api/manifest|api/release-icon|api/download|share/).*)",

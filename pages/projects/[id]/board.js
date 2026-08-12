@@ -51,6 +51,29 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
   const [selectedTask, setSelectedTask] = useState(null);
   const canEdit = canManageBoard(role);
 
+  // Best-effort — never blocks the real mutation it's attached to, same
+  // rule as every other activity-logging call site in this app. Fetches
+  // the user directly rather than via useCurrentUser()'s async state, so
+  // this can't silently no-op if a mutation happens before that hook's
+  // getUser() round-trip has resolved.
+  async function logTaskActivity(action, detail) {
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user?.email) return;
+      await supabase.from("project_activity").insert({
+        project_id: project.id,
+        actor_email: user.email,
+        action,
+        detail,
+      });
+    } catch (e) {
+      // ignored
+    }
+  }
+
   const allLabels = [...new Set(tasks.flatMap((t) => t.labels || []))].sort();
 
   const visibleTasks = tasks.filter((t) => {
@@ -79,12 +102,16 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
     setTasks([...tasks, data]);
     setTitle("");
     setAdding(false);
+    logTaskActivity("task_created", title);
   }
 
   async function moveTask(task, newStatus) {
     const supabase = createClient();
     setTasks(tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)));
     await supabase.from("tasks").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", task.id);
+    if (newStatus === "done" && task.status !== "done") {
+      logTaskActivity("task_completed", task.title);
+    }
   }
 
   // Reorders within a column by renumbering that column's tasks in steps
@@ -111,6 +138,9 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
         supabase.from("tasks").update({ position: u.position, status: columnKey }).eq("id", u.id)
       )
     );
+    if (columnKey === "done" && moved.status !== "done") {
+      logTaskActivity("task_completed", moved.title);
+    }
   }
 
   async function deleteTask(task) {
@@ -124,6 +154,9 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
     const supabase = createClient();
     setTasks(tasks.map((t) => (t.id === task.id ? { ...t, ...fields } : t)));
     await supabase.from("tasks").update(fields).eq("id", task.id);
+    if (fields.assignee_email && fields.assignee_email !== task.assignee_email) {
+      logTaskActivity("task_assigned", `${task.title} → ${fields.assignee_email}`);
+    }
   }
 
   function handleDrop(e, columnKey) {
@@ -272,6 +305,7 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
       <TaskDetailDialog
         task={selectedTask}
         collaborators={collaborators}
+        nameByEmail={nameByEmail}
         editable={canEdit}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}

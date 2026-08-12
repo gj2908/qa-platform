@@ -6,7 +6,10 @@ const VALID_ROLES = ["viewer", "commenter", "editor"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Also used to change an existing collaborator's role — the unique
-// (project_id, email) constraint makes this an upsert.
+// (project_id, email) constraint makes this an upsert. Accepts either a
+// single `email` (existing shape, unchanged response) or an `emails`
+// array (bulk invite from collaborators.js, returns a per-email result
+// list instead of a single ok/error).
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).end();
@@ -22,11 +25,12 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { projectId, email, role } = req.body || {};
-  const normalizedEmail = (email || "").trim().toLowerCase();
+  const { projectId, email, emails, role } = req.body || {};
+  const isBulk = Array.isArray(emails);
+  const rawList = isBulk ? emails : [email];
 
-  if (!projectId || !EMAIL_RE.test(normalizedEmail) || !VALID_ROLES.includes(role)) {
-    res.status(400).json({ error: "A project, a valid email, and a role are required." });
+  if (!projectId || rawList.length === 0 || !VALID_ROLES.includes(role)) {
+    res.status(400).json({ error: "A project, at least one email, and a role are required." });
     return;
   }
 
@@ -36,43 +40,61 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (normalizedEmail === user.email) {
-    res.status(400).json({ error: "You're already the owner of this project" });
-    return;
-  }
-
-  const { error } = await authSupabase
-    .from("project_collaborators")
-    .upsert(
-      { project_id: projectId, email: normalizedEmail, role },
-      { onConflict: "project_id,email" }
-    );
-
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-
   const service = createServiceClient();
-  await logActivity(service, {
-    projectId,
-    actorEmail: user.email,
-    action: "collaborator_added",
-    detail: `${normalizedEmail} as ${role}`,
-  });
+  const { data: project } = await service.from("projects").select("webhook_url").eq("id", projectId).single();
 
-  try {
-    const { data: project } = await service.from("projects").select("webhook_url").eq("id", projectId).single();
-    if (project?.webhook_url) {
-      await sendWebhookNotification(
-        project.webhook_url,
-        buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" }),
-        { service, projectId, event: "collaborator_added" }
-      );
+  const results = [];
+  for (const raw of rawList) {
+    const normalizedEmail = (raw || "").trim().toLowerCase();
+    if (!EMAIL_RE.test(normalizedEmail)) {
+      results.push({ email: raw, ok: false, error: "Not a valid email address" });
+      continue;
     }
-  } catch (e) {
-    // ignored
+    if (normalizedEmail === user.email) {
+      results.push({ email: normalizedEmail, ok: false, error: "You're already the owner of this project" });
+      continue;
+    }
+
+    const { error } = await authSupabase
+      .from("project_collaborators")
+      .upsert({ project_id: projectId, email: normalizedEmail, role }, { onConflict: "project_id,email" });
+
+    if (error) {
+      results.push({ email: normalizedEmail, ok: false, error: error.message });
+      continue;
+    }
+
+    results.push({ email: normalizedEmail, ok: true });
+
+    await logActivity(service, {
+      projectId,
+      actorEmail: user.email,
+      action: "collaborator_added",
+      detail: `${normalizedEmail} as ${role}`,
+    });
+
+    try {
+      if (project?.webhook_url) {
+        await sendWebhookNotification(
+          project.webhook_url,
+          buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" }),
+          { service, projectId, event: "collaborator_added" }
+        );
+      }
+    } catch (e) {
+      // ignored
+    }
   }
 
-  res.status(200).json({ ok: true });
+  if (!isBulk) {
+    const only = results[0];
+    if (!only.ok) {
+      res.status(400).json({ error: only.error });
+      return;
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  res.status(200).json({ results });
 }

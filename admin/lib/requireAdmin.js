@@ -19,6 +19,6 @@ export async function requireAdmin(req, res) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!isAdminEmail(user?.email)) return null;
+  if (!(await isAdminEmail(user?.email))) return null;
   return user;
 }
