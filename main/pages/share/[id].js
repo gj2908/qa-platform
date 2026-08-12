@@ -4,6 +4,7 @@ import { activateScheduledReleaseIfDue } from "../../lib/activateScheduledReleas
 import { isExpired, isRolledOut, needsPin } from "../../lib/shareGating";
 import { buildShareProps } from "../../lib/buildShareProps";
 import { getOrgBranding } from "../../lib/orgBranding";
+import { parseUserAgent } from "../../lib/parseUserAgent";
 import Logo from "../../components/layout/Logo";
 import ThemeToggle from "../../components/ThemeToggle";
 import Card from "../../components/ui/Card";
@@ -69,6 +70,21 @@ export async function getServerSideProps({ params, req, res }) {
         branding,
       },
     };
+  }
+
+  // Funnel's "viewed" stage, best-effort/fire-and-forget — same pattern as
+  // manifest.js/download.js's install_events insert. Anonymous/no-project
+  // releases aren't tracked (project_id is NOT NULL), matching
+  // install_events' existing behavior.
+  if (release.project_id) {
+    const { osName, osVersion, deviceModel } = parseUserAgent(req.headers["user-agent"]);
+    supabase
+      .from("page_view_events")
+      .insert({ release_id: release.id, project_id: release.project_id, os_name: osName, os_version: osVersion, device_model: deviceModel })
+      .then(
+        () => {},
+        () => {}
+      );
   }
 
   const { itmsLink, otherVersions } = await buildShareProps(supabase, release, req);

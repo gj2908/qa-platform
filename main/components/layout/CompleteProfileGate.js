@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import FormField from "../ui/FormField";
@@ -47,8 +48,19 @@ export default function CompleteProfileGate() {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto p-4 pb-10 pt-8 sm:items-center sm:pt-4">
-      <div className="absolute inset-0 bg-neutral-950/50" aria-hidden="true" />
-      <div className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.12 }}
+        className="absolute inset-0 bg-neutral-950/50"
+        aria-hidden="true"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.15 }}
+        className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
+      >
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-5 py-4">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
             <User size={14} strokeWidth={2.25} />
@@ -75,7 +87,7 @@ export default function CompleteProfileGate() {
             Continue
           </Button>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

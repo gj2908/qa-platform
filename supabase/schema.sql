@@ -249,6 +249,53 @@ create table install_events (
 
 create index install_events_project_created_idx on install_events (project_id, created_at);
 
+-- ── Page view events ─────────────────────────────────────────
+-- Funnel's "viewed" stage, sitting above install_events' "installed"
+-- stage. Written from share/[id].js on a successful (non-gated) render,
+-- where a real browser User-Agent is available — unlike manifest.js/
+-- download.js's install-click endpoints, which are hit by OS-level
+-- installer processes with much less useful UA strings. Also the source
+-- of device/OS breakdown data, for the same reason.
+create table page_view_events (
+  id uuid primary key default gen_random_uuid(),
+  release_id uuid not null references releases(id) on delete cascade,
+  project_id uuid not null references projects(id) on delete cascade,
+  device_model text,
+  os_name text,
+  os_version text,
+  created_at timestamptz default now()
+);
+
+create index page_view_events_project_created_idx on page_view_events (project_id, created_at);
+
+-- ── Crash reports ────────────────────────────────────────────
+-- MVP scope, no automatic symbolication — see main/CLAUDE.md. Apps
+-- distributed through this platform POST caught exceptions to a public
+-- endpoint (pages/api/public/crash-report.js), same unauthenticated/
+-- releaseId-scoped trust model as pages/api/public/report-issue.js.
+-- `signature` groups reports for dedup — computed app-side as a hash of
+-- exception_type + the stack trace's first line (a simple, honestly-
+-- scoped grouping heuristic, not real fingerprinting across varying
+-- iOS/Android/JS stack formats).
+create table crash_reports (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  release_id uuid references releases(id) on delete set null,
+  platform text not null,
+  app_version text,
+  build_number text,
+  exception_type text not null,
+  message text,
+  stack_trace text,
+  device_model text,
+  os_version text,
+  signature text not null,
+  created_at timestamptz default now()
+);
+
+create index crash_reports_project_signature_idx on crash_reports (project_id, signature);
+create index crash_reports_project_created_idx on crash_reports (project_id, created_at desc);
+
 -- ── Webhook deliveries ───────────────────────────────────────
 -- Records every outgoing webhook attempt so a failed delivery isn't
 -- silently swallowed — "Recent deliveries" list + retry on the project
@@ -552,6 +599,8 @@ alter table project_favorites enable row level security;
 alter table registered_devices enable row level security;
 alter table release_installs enable row level security;
 alter table install_events enable row level security;
+alter table page_view_events enable row level security;
+alter table crash_reports enable row level security;
 alter table webhook_deliveries enable row level security;
 alter table admin_actions enable row level security;
 alter table rate_limit_events enable row level security;
@@ -610,6 +659,12 @@ create policy "members read install clicks" on release_installs
   );
 
 create policy "members read install events" on install_events
+  for select using (project_role(project_id) is not null);
+
+create policy "members read page views" on page_view_events
+  for select using (project_role(project_id) is not null);
+
+create policy "members read crash reports" on crash_reports
   for select using (project_role(project_id) is not null);
 
 create policy "self read own read-state" on notification_read_state

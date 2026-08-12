@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { LayoutDashboard, Kanban, ClipboardList, Users } from "lucide-react";
+import { LayoutDashboard, Kanban, ClipboardList, Users, Bug } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
 import CompleteProfileGate from "./CompleteProfileGate";
@@ -12,6 +12,7 @@ const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
   { key: "board", path: "/board", label: "Board", icon: Kanban },
   { key: "changelog", path: "/changelog", label: "Changelog", icon: ClipboardList },
+  { key: "crashes", path: "/crashes", label: "Crashes", icon: Bug },
   { key: "collaborators", path: "/collaborators", label: "Collaborators", icon: Users },
 ];
 

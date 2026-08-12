@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import OtpCodeInput from "../ui/OtpCodeInput";
@@ -90,8 +91,19 @@ export default function ReverificationGate() {
 
   return (
     <div className="fixed inset-0 z-[95] flex items-start justify-center overflow-y-auto p-4 pb-10 pt-8 sm:items-center sm:pt-4">
-      <div className="absolute inset-0 bg-neutral-950/50" aria-hidden="true" />
-      <div className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.12 }}
+        className="absolute inset-0 bg-neutral-950/50"
+        aria-hidden="true"
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.15 }}
+        className="relative flex w-full max-w-sm flex-col overflow-hidden rounded-lg border border-border bg-surface-raised shadow-lg"
+      >
         {needsReverification === null ? (
           <div className="flex items-center justify-center px-5 py-10">
             <LoaderCircle size={20} className="animate-spin text-ink-tertiary" />
@@ -133,7 +145,7 @@ export default function ReverificationGate() {
             </div>
           </>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

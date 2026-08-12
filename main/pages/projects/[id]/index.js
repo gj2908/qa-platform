@@ -98,6 +98,29 @@ export async function getServerSideProps({ params, req, res }) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
 
+  // Funnel (share page view → install click) + device/OS breakdown, last
+  // 30 days — page_view_events has the more reliable UA data (a real
+  // browser hit), install_events covers the "installed" stage.
+  const { data: pageViewsRaw } = await supabase
+    .from("page_view_events")
+    .select("os_name, device_model, created_at")
+    .eq("project_id", params.id)
+    .gte("created_at", since);
+  const pageViews = pageViewsRaw || [];
+  const funnel = [
+    { label: "Viewed", value: pageViews.length },
+    { label: "Installed", value: installEvents.length },
+  ];
+  const osBuckets = {};
+  for (const v of pageViews) {
+    const label = v.os_name || "Unknown";
+    osBuckets[label] = (osBuckets[label] || 0) + 1;
+  }
+  const deviceBreakdown = Object.entries(osBuckets)
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+
   const { data: deliveries } = await supabase
     .from("webhook_deliveries")
     .select("id, event, status, response_status, error, created_at")
@@ -138,6 +161,8 @@ export async function getServerSideProps({ params, req, res }) {
       project,
       installTrend,
       versionAdoption,
+      funnel,
+      deviceBreakdown,
       feedbackStats,
       deliveries: deliveries || [],
       role,
@@ -160,6 +185,8 @@ export default function ProjectOverview({
   myOrgs,
   installTrend,
   versionAdoption,
+  funnel,
+  deviceBreakdown,
   feedbackStats,
   deliveries,
 }) {
@@ -318,7 +345,13 @@ export default function ProjectOverview({
           </div>
         </div>
 
-        <InsightsCard installTrend={installTrend} versionAdoption={versionAdoption} feedbackStats={feedbackStats} />
+        <InsightsCard
+          installTrend={installTrend}
+          versionAdoption={versionAdoption}
+          funnel={funnel}
+          deviceBreakdown={deviceBreakdown}
+          feedbackStats={feedbackStats}
+        />
 
         {activity.length > 0 && <ActivityCard activity={activity} projectId={project.id} isOwner={isOwner(role)} />}
 
@@ -333,8 +366,9 @@ export default function ProjectOverview({
   );
 }
 
-function InsightsCard({ installTrend, versionAdoption, feedbackStats }) {
+function InsightsCard({ installTrend, versionAdoption, funnel, deviceBreakdown, feedbackStats }) {
   const totalInstalls = installTrend.reduce((sum, d) => sum + d.value, 0);
+  const funnelTotal = Math.max(funnel[0]?.value || 0, 1);
 
   return (
     <Card className="p-5">
@@ -368,6 +402,47 @@ function InsightsCard({ installTrend, versionAdoption, feedbackStats }) {
                   <span className="w-9 shrink-0 text-right text-ink-tertiary">{v.pct}%</span>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-ink-secondary">Install funnel (last 30 days)</p>
+          <div className="mt-2 flex flex-col gap-1.5">
+            {funnel.map((f) => {
+              const pct = Math.round((f.value / funnelTotal) * 100);
+              return (
+                <div key={f.label} className="flex items-center gap-2 text-xs">
+                  <span className="w-16 shrink-0 truncate text-ink-secondary">{f.label}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-subtle">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                  <span className="w-9 shrink-0 text-right text-ink-tertiary">{f.value}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-ink-secondary">Device/OS (last 30 days)</p>
+          {deviceBreakdown.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-tertiary">Not enough data yet.</p>
+          ) : (
+            <div className="mt-2 flex flex-col gap-1.5">
+              {deviceBreakdown.map((d) => {
+                const total = deviceBreakdown.reduce((sum, x) => sum + x.value, 0);
+                const pct = Math.round((d.value / Math.max(total, 1)) * 100);
+                return (
+                  <div key={d.label} className="flex items-center gap-2 text-xs">
+                    <span className="w-16 shrink-0 truncate text-ink-secondary">{d.label}</span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-subtle">
+                      <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="w-9 shrink-0 text-right text-ink-tertiary">{d.value}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

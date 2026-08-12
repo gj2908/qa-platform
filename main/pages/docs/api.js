@@ -69,6 +69,22 @@ export default function ApiDocs() {
           example={`curl "https://your-app/api/v1/check-update?platform=ios&currentVersion=1.2.0" \\
   -H "Authorization: Bearer qap_..."`}
         />
+        <Endpoint
+          method="POST"
+          path="/api/public/crash-report"
+          description="Report a caught exception from a distributed app. No auth token — a release id is unguessable, same trust model as the tester feedback endpoint. Required: releaseId, exceptionType. Optional: message, stackTrace, deviceModel, osVersion. Reports are grouped by exceptionType + the stack trace's first line — no automatic symbolication, so send a human-readable stack (e.g. a JS Error.stack, or your own de-obfuscated trace) rather than raw addresses if you want it to mean anything on the Crashes tab."
+          example={`fetch("https://your-app/api/public/crash-report", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    releaseId: "<release-id>",
+    exceptionType: error.name,
+    message: error.message,
+    stackTrace: error.stack,
+    osVersion: Platform.Version?.toString(),
+  }),
+});`}
+        />
 
         <div>
           <h2 className="text-base font-semibold text-ink-primary">In-app update checks</h2>

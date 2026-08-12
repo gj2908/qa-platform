@@ -3,6 +3,11 @@
 Repo-level orientation. For the details of a specific app, read that
 app's own `CLAUDE.md` first — this file is just the map.
 
+At the end of a work session that introduced a new table, cross-cutting
+pattern, or gotcha, run the `update-claude-md` skill
+(`.claude/skills/update-claude-md/SKILL.md`) to keep these three files
+from drifting out of sync with the codebase.
+
 ## Shape of the repo
 
 Two independent Next.js (Pages Router) apps, one shared Supabase project:
@@ -36,6 +41,13 @@ since cross-tenant visibility is the whole point of that app. A handful
 of tables (`admin_actions`, `rate_limit_events`, `platform_settings`,
 `admin_allowlist`) have RLS enabled with **no policies at all** —
 service-role-only by design, documented inline in `schema.sql` each time.
+
+Auth email templates (signup confirmation, magic-link/reverification,
+password recovery) are also shared infra at the root: `supabase/templates/
+*.html`, wired via `[auth.email.template.*]` in `supabase/config.toml`,
+pushed with `supabase config push --project-ref <ref>` (not `--linked` —
+that form has been blocked before; always diff the push output, since it
+replaces the *entire* remote auth config, not just the changed keys).
 
 ## Cross-app touchpoints
 

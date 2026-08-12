@@ -54,3 +54,13 @@ the two auth checks above, not in the database layer.
   (vs. the much newer version `main/` uses) — always grep
   `node_modules/lucide-react/dist/esm/icons/` before importing a new icon
   name here rather than assuming parity with `main/`'s icon set.
+- **`/organizations`** gives cross-tenant visibility into `organizations`/
+  `org_members` (member/project counts, a `seat_limit` override), same
+  shape as `/projects`. Deleting an org here (`api/organizations/delete.js`)
+  cascades to `org_members` — this used to be silently impossible (a
+  trigger meant to stop removing an org's *last* org_admin also fired
+  during that cascade, since every org always has ≥1 admin by design; the
+  trigger now checks whether the `organizations` row itself is gone
+  first). If a future guard trigger needs to protect an invariant on a
+  row that can also be deleted via a parent's cascade, remember to add
+  the same "is the parent already gone" escape hatch.
