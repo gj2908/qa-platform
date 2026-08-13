@@ -6,6 +6,18 @@ import OtpCodeInput from "../ui/OtpCodeInput";
 import Button from "../ui/Button";
 import { ShieldCheck, LoaderCircle } from "lucide-react";
 
+// Module-level (not React state) so the answer survives this gate
+// unmounting/remounting on every page navigation — ProjectShell/AppShell
+// aren't persistent layouts in the Pages Router, they're rendered fresh
+// per page, so without this cache the DB check (and its blocking loading
+// state) re-ran and re-flashed on every single navigation, even after the
+// user had already verified this session. A real browser refresh clears
+// this (it's just a JS variable), so the refresh-can't-escape-the-gate
+// fix stays intact — only same-session client-side navigations skip the
+// re-check. Keyed by user id in case of a sign-out/sign-in as someone else
+// without a full page reload.
+let verifiedThisSession = null; // { userId, needsReverification }
+
 // One-time reverification for accounts that existed before email
 // verification was added — their email_confirmed_at is already set (they
 // were auto-confirmed under the old config), so unlike VerifyEmailGate this
@@ -20,8 +32,12 @@ export default function ReverificationGate() {
   // of real content before the DB check resolves — the other two gates get
   // their answer synchronously from the already-available user object — this
   // one needs an extra network round-trip, so it's the one actually at risk
-  // of that gap.
-  const [needsReverification, setNeedsReverification] = useState(null);
+  // of that gap. Seeded from the module-level cache when it already has an
+  // answer for this user, so repeat navigations skip both the round-trip
+  // and the loading flash entirely.
+  const [needsReverification, setNeedsReverification] = useState(
+    user && verifiedThisSession?.userId === user.id ? verifiedThisSession.needsReverification : null
+  );
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -29,6 +45,10 @@ export default function ReverificationGate() {
 
   useEffect(() => {
     if (!user) return;
+    if (verifiedThisSession?.userId === user.id) {
+      setNeedsReverification(verifiedThisSession.needsReverification);
+      return;
+    }
     let cancelled = false;
     const supabase = createClient();
     supabase
@@ -37,7 +57,9 @@ export default function ReverificationGate() {
       .eq("id", user.id)
       .single()
       .then(({ data }) => {
-        if (!cancelled) setNeedsReverification(!!data?.needs_reverification);
+        const result = !!data?.needs_reverification;
+        verifiedThisSession = { userId: user.id, needsReverification: result };
+        if (!cancelled) setNeedsReverification(result);
       });
     return () => {
       cancelled = true;
@@ -86,6 +108,7 @@ export default function ReverificationGate() {
       setError(profileError.message);
       return;
     }
+    verifiedThisSession = { userId: user.id, needsReverification: false };
     setNeedsReverification(false);
   }
 
