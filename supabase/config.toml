@@ -240,19 +240,16 @@ otp_expiry = 3600
 
 # Resend SMTP relay — removes the built-in sender's 2-emails/hour-per-address
 # cap that OTP verification (signup/reverify/forgot-password) would otherwise
-# hit quickly. NOTE: RESEND_API_KEY's account has no verified sending domain
-# yet, so admin_email is Resend's shared sandbox domain (resend.dev) rather
-# than a custom domain — deliverability to arbitrary real recipient domains
-# depends entirely on that account's Resend sandbox behavior, not something
-# this config can control. Verify a real domain in the Resend dashboard and
-# swap admin_email to it the moment that's done.
+# hit quickly. admin_email is on itsgj.email, a verified Resend sending
+# domain (swapped from the resend.dev sandbox domain, which only ever
+# delivered to the Resend account's own address).
 [auth.email.smtp]
 enabled = true
 host = "smtp.resend.com"
 port = 465
 user = "resend"
 pass = "env(RESEND_API_KEY)"
-admin_email = "notifications@resend.dev"
+admin_email = "notifications@itsgj.email"
 sender_name = "QA Platform"
 
 # Default templates only show a "click this link" button — no visible code
