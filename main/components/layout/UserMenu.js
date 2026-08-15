@@ -4,6 +4,7 @@ import { LogOut, Settings, Building2, ListChecks } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import { getAvatarColor } from "../../lib/avatarColor";
+import ThemeToggle from "../ThemeToggle";
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
@@ -52,6 +53,10 @@ export default function UserMenu() {
             ) : (
               <p className="truncate text-xs text-ink-tertiary">{email || "Loading…"}</p>
             )}
+          </div>
+          <div className="mt-1 flex items-center justify-between gap-2 px-2.5 py-1.5">
+            <span className="text-sm text-ink-secondary">Theme</span>
+            <ThemeToggle />
           </div>
           <Link
             href="/my-tasks"
