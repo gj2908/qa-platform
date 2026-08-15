@@ -84,17 +84,28 @@ export async function publishRelease({
 
   if (platform !== "web" && filePath) {
     let buildBuffer = null;
-    try {
-      if (uploaded) {
+    if (uploaded) {
+      try {
         buildBuffer = fs.readFileSync(uploaded.filepath);
-      } else {
-        const { data, error: downloadError } = await service.storage.from("builds").download(filePath);
-        if (!downloadError && data) {
-          buildBuffer = Buffer.from(await data.arrayBuffer());
-        }
+      } catch (e) {
+        buildBuffer = null;
       }
-    } catch (e) {
-      buildBuffer = null;
+    } else {
+      // providedFilePath means the interactive dialog uploaded the build
+      // directly from the browser via a signed URL — this download is the
+      // only server-side confirmation that upload actually succeeded. A
+      // missing/failed object here must hard-fail the publish rather than
+      // silently skip metadata extraction and continue on to "published"
+      // with a file_path that points at nothing.
+      const { data, error: downloadError } = await service.storage.from("builds").download(filePath);
+      if (downloadError || !data) {
+        return {
+          ok: false,
+          status: 400,
+          body: { error: "Uploaded build file was not found in storage. Please re-upload and try again." },
+        };
+      }
+      buildBuffer = Buffer.from(await data.arrayBuffer());
     }
 
     if (buildBuffer) {

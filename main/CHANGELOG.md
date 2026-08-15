@@ -3,6 +3,22 @@
 Reverse-chronological summary of what's shipped, grouped by theme. See
 `git log` for the literal commit history this is built from.
 
+## 2026-08-15 — Fix publishing a release with a failed signed-URL upload
+
+- `publishRelease.js` could mark a release `published` with a `file_path`
+  pointing at a build that was never actually written to the `builds`
+  storage bucket. The interactive "New Release" dialog uploads the build
+  directly from the browser via a signed URL, then submits a separate
+  request carrying only the resulting storage path — if that upload
+  failed or was interrupted, the publish step still trusted the path and
+  continued (the one place that touched storage afterward, a download
+  for icon/metadata extraction, silently swallowed a missing-object error
+  instead of aborting). Result: a live install link that 404s from
+  Supabase Storage. Now a missing/failed object at that step hard-fails
+  the publish with a "re-upload and try again" error instead of
+  continuing. The direct-upload path (CI token endpoint) was never
+  affected — it already checked the upload error before proceeding.
+
 ## 2026-08-12 — Organizations, OTP email verification, audit exports, white-label branding
 
 - Email verification now supports an OTP code as an alternative to the
