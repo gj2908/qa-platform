@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, Settings, Building2 } from "lucide-react";
+import { LogOut, Settings, Building2, ListChecks } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import { getAvatarColor } from "../../lib/avatarColor";
@@ -53,6 +53,14 @@ export default function UserMenu() {
               <p className="truncate text-xs text-ink-tertiary">{email || "Loading…"}</p>
             )}
           </div>
+          <Link
+            href="/my-tasks"
+            onClick={() => setOpen(false)}
+            className="mt-1 flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary sm:hidden"
+          >
+            <ListChecks size={14} strokeWidth={2} />
+            My tasks
+          </Link>
           <Link
             href="/settings"
             onClick={() => setOpen(false)}

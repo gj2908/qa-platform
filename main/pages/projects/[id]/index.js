@@ -28,6 +28,7 @@ import {
   Smartphone,
   Mail,
   Building2,
+  BookOpen,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -339,6 +340,12 @@ export default function ProjectOverview({
                 <Button variant="secondary" className="w-full justify-start">
                   <Smartphone size={14} strokeWidth={2} />
                   Device registration link
+                </Button>
+              </a>
+              <a href="/docs/api" target="_blank" rel="noreferrer">
+                <Button variant="secondary" className="w-full justify-start">
+                  <BookOpen size={14} strokeWidth={2} />
+                  Documentation
                 </Button>
               </a>
             </div>
