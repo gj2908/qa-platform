@@ -8,8 +8,9 @@ import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { getAvatarColor } from "../../../lib/avatarColor";
-import { UserPlus, Trash2, CircleAlert, Users, FolderKanban, Palette, Download } from "lucide-react";
+import { UserPlus, Trash2, CircleAlert, Users, FolderKanban, Palette, Download, FolderPlus } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -31,7 +32,27 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("org_id", params.id)
     .order("name");
 
-  return { props: { org, role, members: members || [], projects: projects || [] } };
+  // Projects the current user owns that aren't already in this org —
+  // populates the "Add project" picker, admins only (cheap to skip the
+  // query otherwise).
+  let ownedUnattached = [];
+  if (role === "org_admin") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data: owned } = await supabase
+      .from("project_collaborators")
+      .select("projects(id, name, org_id)")
+      .eq("email", user.email)
+      .eq("role", "owner");
+    ownedUnattached = (owned || [])
+      .map((row) => row.projects)
+      .filter((p) => p && p.org_id !== params.id);
+  }
+
+  return {
+    props: { org, role, members: members || [], projects: projects || [], ownedUnattached },
+  };
 }
 
 const ROLE_META = {
@@ -39,27 +60,33 @@ const ROLE_META = {
   member: { label: "Member", tone: "neutral" },
 };
 
-export default function OrganizationDetail({ org, role: myRole, members: initial, projects }) {
+export default function OrganizationDetail({ org, role: myRole, members: initial, projects: initialProjects, ownedUnattached }) {
+  const toast = useToast();
   const [members, setMembers] = useState(initial);
+  const [projects, setProjects] = useState(initialProjects);
+  const [unattached, setUnattached] = useState(ownedUnattached || []);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [removeTarget, setRemoveTarget] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [addProjectId, setAddProjectId] = useState("");
+  const [addingProject, setAddingProject] = useState(false);
 
   const isAdmin = myRole === "org_admin";
   const seatsUsed = members.length;
 
   async function addMember(e) {
     e.preventDefault();
-    if (!email.trim()) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
     setAdding(true);
     setError("");
     const res = await fetch("/api/organizations/members/add", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: org.id, email: email.trim(), role }),
+      body: JSON.stringify({ orgId: org.id, email: normalizedEmail, role }),
     });
     setAdding(false);
     const data = await res.json().catch(() => ({}));
@@ -67,7 +94,34 @@ export default function OrganizationDetail({ org, role: myRole, members: initial
       setError(data.error || "Couldn't add that member.");
       return;
     }
-    window.location.reload();
+    setMembers((m) => {
+      const withoutExisting = m.filter((x) => x.email !== normalizedEmail);
+      return [...withoutExisting, { email: normalizedEmail, role, created_at: new Date().toISOString() }];
+    });
+    setEmail("");
+    toast.success(data.invited ? "Member added — invite email sent." : "Member added.");
+  }
+
+  async function addProject(e) {
+    e.preventDefault();
+    if (!addProjectId) return;
+    setAddingProject(true);
+    const target = unattached.find((p) => p.id === addProjectId);
+    const res = await fetch("/api/organizations/set-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: addProjectId, orgId: org.id }),
+    });
+    setAddingProject(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Couldn't add that project.");
+      return;
+    }
+    setUnattached((u) => u.filter((p) => p.id !== addProjectId));
+    if (target) setProjects((p) => [...p, { id: target.id, name: target.name }].sort((a, b) => a.name.localeCompare(b.name)));
+    setAddProjectId("");
+    toast.success("Project added to the organization.");
   }
 
   async function confirmRemove() {
@@ -121,9 +175,31 @@ export default function OrganizationDetail({ org, role: myRole, members: initial
               </a>
             )}
           </div>
+
+          {isAdmin && unattached.length > 0 && (
+            <form onSubmit={addProject} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <FormField label="Add one of your projects">
+                  <Select value={addProjectId} onChange={(e) => setAddProjectId(e.target.value)}>
+                    <option value="">Choose a project…</option>
+                    {unattached.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+              </div>
+              <Button type="submit" loading={addingProject} disabled={!addProjectId}>
+                <FolderPlus size={15} strokeWidth={2.25} />
+                Add
+              </Button>
+            </form>
+          )}
+
           {projects.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-tertiary">
-              No projects assigned yet — add this organization from a project's settings.
+            <p className="mt-3 text-sm text-ink-tertiary">
+              No projects assigned yet — add one above, or from a project's own settings.
             </p>
           ) : (
             <div className="mt-3 divide-y divide-border border-t border-border">

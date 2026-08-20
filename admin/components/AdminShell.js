@@ -337,7 +337,9 @@ export default function AdminShell({ children }) {
             >
               <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <CheckmarkMark size={18} className="text-primary-600 dark:text-primary-400" />
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                    <CheckmarkMark size={16} className="text-primary-600 dark:text-primary-400" />
+                  </span>
                   <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Vrsnify Admin</span>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -357,7 +359,9 @@ export default function AdminShell({ children }) {
         className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex"
       >
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
-          <CheckmarkMark size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            <CheckmarkMark size={16} className="text-primary-600 dark:text-primary-400" />
+          </span>
           {!collapsed && <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">Vrsnify Admin</span>}
         </div>
         {collapsed ? (

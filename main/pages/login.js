@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
@@ -34,6 +34,17 @@ export default function Login() {
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpError, setOtpError] = useState("");
   const router = useRouter();
+
+  // Lets an "add to org/project" invite email link straight into the
+  // signup form, pre-filled — e.g. /login?mode=signup&email=... from
+  // organizations/members/add.js's invite email. router.query is only
+  // populated once the router is ready, so this can't just seed
+  // useState() above without risking a signin-then-signup flash.
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.mode === "signup") setMode("signup");
+    if (typeof router.query.email === "string") setEmail(router.query.email);
+  }, [router.isReady, router.query.mode, router.query.email]);
 
   async function handleSubmit(e) {
     e.preventDefault();
