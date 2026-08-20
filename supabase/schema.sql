@@ -415,13 +415,19 @@ create table organizations (
   -- Flat typed columns, matching projects.webhook_url's precedent.
   logo_url text,
   accent_color text,
-  domain text, -- display-only, e.g. "acme.com" — not verified, not used for auto-join
+  domain text, -- display-only unless connected; see handle_new_user() for the domain-verified auto-join it then enables
   domain_status text check (domain_status in ('pending', 'connected')), -- null = display-only; set when an admin requests real connection, see admin/'s fulfillment flow
   default_webhook_url text, -- applied to a project on org attach only if it has no webhook_url of its own yet
   default_require_approval boolean not null default false,
+  -- Self-serve invite link (org_admin toggles on/off, can regenerate to
+  -- invalidate previously shared links). Distinct from domain-verified
+  -- auto-join above: no DNS/domain ownership required, works instantly.
+  invite_token uuid not null default gen_random_uuid(),
+  invite_enabled boolean not null default false,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
+create unique index organizations_invite_token_idx on organizations (invite_token);
 
 create table org_members (
   id uuid primary key default gen_random_uuid(),

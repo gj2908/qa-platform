@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../../../lib/supabase/server";
+import { getRequestOrigin } from "../../../lib/getRequestOrigin";
 import AppShell from "../../../components/layout/AppShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
@@ -10,7 +11,7 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert, Link2, Copy, RefreshCw } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -20,10 +21,10 @@ export async function getServerSideProps({ params, req, res }) {
   const { data: role } = await supabase.rpc("org_role", { p_org_id: params.id });
   if (role !== "org_admin") return { notFound: true };
 
-  return { props: { org } };
+  return { props: { org, siteOrigin: getRequestOrigin(req) } };
 }
 
-export default function OrganizationSettings({ org }) {
+export default function OrganizationSettings({ org, siteOrigin }) {
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -40,10 +41,113 @@ export default function OrganizationSettings({ org }) {
 
         <BrandingCard org={org} />
         <DomainCard org={org} />
+        <InviteLinkCard org={org} siteOrigin={siteOrigin} />
         <DefaultsCard org={org} />
         <DangerZoneCard org={org} />
       </div>
     </AppShell>
+  );
+}
+
+function InviteLinkCard({ org, siteOrigin }) {
+  const toast = useToast();
+  const [enabled, setEnabled] = useState(org.invite_enabled);
+  const [token, setToken] = useState(org.invite_token);
+  const [toggling, setToggling] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [confirmingRegen, setConfirmingRegen] = useState(false);
+
+  const link = `${siteOrigin}/join-org/${token}`;
+
+  async function callInviteLink(action) {
+    const res = await fetch("/api/organizations/invite-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Couldn't update the invite link.");
+      return null;
+    }
+    return data;
+  }
+
+  async function toggle() {
+    setToggling(true);
+    const data = await callInviteLink(enabled ? "disable" : "enable");
+    setToggling(false);
+    if (!data) return;
+    setEnabled(data.inviteEnabled);
+  }
+
+  async function regenerate() {
+    setRegenerating(true);
+    const data = await callInviteLink("regenerate");
+    setRegenerating(false);
+    setConfirmingRegen(false);
+    if (!data) return;
+    setToken(data.inviteToken);
+    setEnabled(data.inviteEnabled);
+    toast.success("Invite link regenerated — the old link no longer works.");
+  }
+
+  function copyLink() {
+    navigator.clipboard.writeText(link);
+    toast.success("Link copied.");
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Link2 size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Invite link</h2>
+        {enabled && <Badge tone="success">Enabled</Badge>}
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Anyone signed in with this link joins {org.name} as a member — no need to invite each person
+        by email. Works under whatever domain this page is loaded from.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-3">
+        {enabled && (
+          <div className="flex items-center gap-2">
+            <Input readOnly value={link} onFocus={(e) => e.target.select()} className="font-mono text-xs" />
+            <Button type="button" variant="secondary" size="sm" onClick={copyLink} className="shrink-0">
+              <Copy size={13} strokeWidth={2.25} />
+              Copy
+            </Button>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <Button type="button" variant={enabled ? "secondary" : "primary"} loading={toggling} onClick={toggle} className="w-fit">
+            {enabled ? "Disable link" : "Enable link"}
+          </Button>
+          {enabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmingRegen(true)}
+              className="w-fit"
+            >
+              <RefreshCw size={13} strokeWidth={2.25} />
+              Regenerate
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmingRegen}
+        title="Regenerate invite link?"
+        description="The current link stops working immediately — anyone you've already shared it with will need the new one."
+        confirmLabel="Regenerate"
+        loading={regenerating}
+        onConfirm={regenerate}
+        onCancel={() => setConfirmingRegen(false)}
+      />
+    </Card>
   );
 }
 
@@ -158,7 +262,7 @@ function DomainCard({ org }) {
       setError(data.error || "Couldn't save the domain.");
       return;
     }
-    setStatus(requestDomain ? "pending" : domain.trim() === org.domain ? org.domain_status : null);
+    setStatus(requestDomain ? data.domainStatus ?? "pending" : domain.trim() === org.domain ? org.domain_status : null);
     setSaved(true);
   }
 

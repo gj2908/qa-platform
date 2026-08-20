@@ -42,6 +42,7 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
   const [saved, setSaved] = useState(false);
   const [domainStatus, setDomainStatus] = useState(org.domain_status);
   const [domainSaving, setDomainSaving] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   async function saveSeatLimit() {
     setSaving(true);
@@ -72,6 +73,23 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
     } else {
       alert("Couldn't update the domain status.");
     }
+  }
+
+  async function checkNow() {
+    setChecking(true);
+    const res = await fetch("/api/organizations/check-domain-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id }),
+    });
+    setChecking(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || "Couldn't check the domain.");
+      return;
+    }
+    setDomainStatus(data.domainStatus);
+    if (data.domainStatus !== "connected") alert(data.detail || "Not connected yet — DNS may still be propagating.");
   }
 
   return (
@@ -122,10 +140,19 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
               </div>
               <p className="text-xs text-slate-400">
                 {domainStatus === "pending"
-                  ? "Requested by an org admin — once vercel domains add has been run and DNS resolves, mark it connected below."
+                  ? "Requested by an org admin — auto-provisioned on Vercel if configured, and rechecked daily. \"Check now\" runs that check immediately; \"Mark connected\" is a manual override if you've confirmed it yourself."
                   : "No connection requested, or already handled."}
               </p>
               <div className="flex items-center gap-2">
+                {domainStatus === "pending" && (
+                  <button
+                    onClick={checkNow}
+                    disabled={checking}
+                    className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {checking ? "Checking…" : "Check now"}
+                  </button>
+                )}
                 <button
                   onClick={() => setDomain("connected")}
                   disabled={domainSaving || domainStatus === "connected"}

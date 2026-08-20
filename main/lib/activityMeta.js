@@ -1,4 +1,4 @@
-import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X } from "lucide-react";
+import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw } from "lucide-react";
 
 // Shared between the project Overview "Recent activity" card, the
 // top-bar notification bell, and the org dashboard's activity feed —
@@ -25,10 +25,15 @@ export const ACTIVITY_META = {
   org_member_removed: { icon: UserMinus, label: "removed a member" },
   org_branding_updated: { icon: Palette, label: "updated branding" },
   org_domain_requested: { icon: Globe, label: "requested a domain connection" },
+  org_domain_connected: { icon: Check, label: "connected the domain" },
   org_project_attached: { icon: FolderPlus, label: "added a project to the org" },
   org_creation_requested: { icon: Building2, label: "requested this organization" },
   org_creation_approved: { icon: Check, label: "approved the organization" },
   org_closure_requested: { icon: X, label: "requested to close the organization" },
+  org_invite_link_enabled: { icon: Link2, label: "enabled the invite link" },
+  org_invite_link_disabled: { icon: Link2, label: "disabled the invite link" },
+  org_invite_link_regenerated: { icon: RefreshCw, label: "regenerated the invite link" },
+  org_member_joined_via_link: { icon: UserPlus, label: "joined via invite link" },
 };
 
 export function activityMetaFor(action) {

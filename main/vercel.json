@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/task-due-check",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/check-domain-connections",
+      "schedule": "0 16 * * *"
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { createServerSupabase, createServiceClient } from "../../../../lib/supabase/server";
 import { sendEmail, renderEmail, escapeHtml, EMAIL_STYLES } from "../../../../lib/emailClient";
 import { logOrgActivity } from "../../../../lib/logOrgActivity";
+import { getRequestOrigin } from "../../../../lib/getRequestOrigin";
 
 const VALID_ROLES = ["org_admin", "member"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -80,9 +81,7 @@ export default async function handler(req, res) {
         const { data: org } = await service.from("organizations").select("name").eq("id", orgId).single();
         const inviterName = user.user_metadata?.full_name || user.email;
         const orgName = org?.name || "the team";
-        const protocol = req.headers["x-forwarded-proto"] || "https";
-        const host = req.headers.host;
-        const signupUrl = `${protocol}://${host}/login?mode=signup&email=${encodeURIComponent(normalizedEmail)}`;
+        const signupUrl = `${getRequestOrigin(req)}/login?mode=signup&email=${encodeURIComponent(normalizedEmail)}`;
 
         const result = await sendEmail({
           to: normalizedEmail,

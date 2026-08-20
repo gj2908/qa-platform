@@ -63,16 +63,61 @@ plain `transition-colors` for hover states, which is correct for those.
 
 ## Patterns that repeat everywhere
 
+- **Building a domain-correct absolute URL server-side: use
+  `lib/getRequestOrigin.js`'s `getRequestOrigin(req)`** (proto +
+  `req.headers.host`), not `process.env.NEXT_PUBLIC_SITE_URL`. It's
+  unset by default (absent from `.env.example`), so anything reading it
+  directly with no fallback silently produces a broken/empty-origin
+  link on any deploy that didn't set it — a real gap in
+  `lib/buildDigest.js` and the `pages/api/cron/*` reminder emails as of
+  this writing. `getRequestOrigin` sidesteps the env var entirely and
+  always matches whatever domain actually served the request (prod
+  `.com` domain, a connected org domain, or `*.vercel.app`), the same
+  way `pages/api/organizations/members/add.js`'s invite-signup link and
+  `pages/organizations/[id]/settings.js`'s invite-link card already do.
+  Client components needing the same thing just read
+  `window.location.origin` directly (see `pages/distribute/[id].js`'s
+  release share link) — no helper needed there since it's already
+  request-accurate by definition.
+- **An unguessable token can stand in for an RLS role check when the
+  caller doesn't have one yet.** `pages/api/organizations/join.js`
+  (self-serve org invite links, `organizations.invite_token`) reads and
+  writes through the service-role client specifically because the
+  visitor isn't an org member yet, so `org_role()`-backed policies can't
+  authorize them — possession of the token *is* the authorization,
+  mirroring `/share/[id].js`'s unguessable release id. Reach for this
+  shape (service client + token-as-capability) instead of a real RLS
+  policy whenever the actor legitimately has no row-level identity yet.
 - **Best-effort, never block the real mutation.** Webhook sends
   (`lib/webhookNotify.js`), activity logging (`lib/logActivity.js`),
   email (`lib/emailClient.js`), AI calls (`lib/aiClient.js`) are all
   wrapped in try/catch that swallows errors, so a release publish/task
   update/etc. never fails because a secondary side-effect did. Follow
   this shape for any new notification/logging/integration code.
-- **Optional external providers degrade to no-ops.** `ANTHROPIC_API_KEY`
-  and `RESEND_API_KEY` being unset doesn't break anything — the relevant
-  functions just return `{ ok: false }` and callers already handle that.
-  Don't add hard failures if one of these keys is missing.
+- **Optional external providers degrade to no-ops.** `ANTHROPIC_API_KEY`,
+  `RESEND_API_KEY`, and `VERCEL_API_TOKEN`/`VERCEL_PROJECT_ID` being unset
+  doesn't break anything — the relevant functions just return
+  `{ ok: false }` (or `{ ok: false, skipped: true }` for
+  `lib/vercelClient.js`) and callers already handle that. Don't add hard
+  failures if one of these keys is missing.
+- **Automatic domain provisioning**: requesting a domain connection
+  (`pages/api/organizations/branding.js`, `requestDomain: true`) calls
+  the Vercel REST API (`lib/vercelClient.js`) to add the domain to this
+  project directly, rather than requiring a platform operator to run
+  `vercel domains add` by hand. `pages/api/cron/check-domain-connections.js`
+  (daily — matches this app's other crons' cadence) rechecks every
+  `domain_status = 'pending'` org until Vercel reports both `verified`
+  (ownership — only actually contested if the domain's already attached
+  elsewhere on Vercel) and not `misconfigured` (the org's own DNS
+  actually resolving to Vercel), then flips it to `'connected'` and logs
+  `org_domain_connected`. When `VERCEL_API_TOKEN`/`VERCEL_PROJECT_ID`
+  aren't set, this silently falls back to the original manual flow:
+  `domain_status` just goes straight to `'pending'` and a platform
+  operator fulfills it from `admin/`'s org detail page (which also has
+  its own on-demand "Check now" button, `admin/pages/api/organizations/
+  check-domain-status.js`, duplicating a small piece of the same Vercel
+  client rather than importing across apps — see repo-root CLAUDE.md on
+  why the two apps never share code directly).
 - **`project_activity` is the shared activity log** behind the Overview
   feed, the notification bell, and the CSV export — all three read it
   generically, so a new event type only needs an `ACTIVITY_META` entry

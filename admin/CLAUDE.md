@@ -54,6 +54,17 @@ the two auth checks above, not in the database layer.
   (vs. the much newer version `main/` uses) — always grep
   `node_modules/lucide-react/dist/esm/icons/` before importing a new icon
   name here rather than assuming parity with `main/`'s icon set.
+- **Domain connections mostly resolve themselves now.** `main/`'s
+  `branding.js`/its daily cron auto-provision and auto-verify a
+  requested domain via the Vercel API when `VERCEL_API_TOKEN`/
+  `VERCEL_PROJECT_ID` are set on `main/` (not `admin/` — `main/` is
+  where the actual Vercel project lives). `/organizations/[id]`'s
+  "Check now" button (`api/organizations/check-domain-status.js`,
+  `lib/vercelClient.js` — a small intentional duplicate of `main/`'s
+  copy) triggers the same check on demand; "Mark connected"/"Clear
+  status" (`api/organizations/set-domain-status.js`) remain as the
+  manual fallback for when Vercel isn't configured, or for anything the
+  automatic check can't resolve on its own.
 - **`/organizations`** gives cross-tenant visibility into `organizations`/
   `org_members` (member/project counts, a `seat_limit` override), same
   shape as `/projects`. Deleting an org here (`api/organizations/delete.js`)

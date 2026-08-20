@@ -3,6 +3,46 @@
 Reverse-chronological summary of what's shipped, grouped by theme. See
 `git log` for the literal commit history this is built from.
 
+## 2026-08-21 — Automatic domain provisioning
+
+- Requesting a custom domain connection (org settings → Domain →
+  "Request connection") now calls the Vercel REST API directly
+  (`main/lib/vercelClient.js`) to add the domain to the project, instead
+  of only ever landing on a platform operator's manual queue. A new
+  daily cron (`main/pages/api/cron/check-domain-connections.js`)
+  rechecks every still-`pending` domain until Vercel confirms both
+  ownership and that the org's DNS actually resolves, then flips
+  `domain_status` to `'connected'` on its own — if DNS was already set
+  up before the request, this can go straight to `'connected'` with no
+  wait at all.
+- Changing or clearing a previously-requested domain now also removes
+  it from the Vercel project (best-effort, never blocks the save).
+- Requires `VERCEL_API_TOKEN`/`VERCEL_PROJECT_ID` (optional
+  `VERCEL_TEAM_ID`) set on `main/`; unset, this degrades exactly to the
+  prior manual flow — `admin/`'s org detail page still has "Mark
+  connected"/"Clear status" for that case, plus a new "Check now" button
+  that runs the same Vercel check on demand instead of waiting for the
+  next cron tick.
+
+## 2026-08-21 — Organization invite links
+
+- Org admins can now share a single link (`/join-org/[token]`,
+  org settings → Invite link) that lets anyone signed in join the org
+  as a plain member instantly — no per-email invite, no domain
+  ownership/DNS required (that's what the existing domain-verified
+  auto-join is for). Toggle on/off or regenerate to invalidate a
+  previously shared link; regenerating rotates `organizations.invite_token`.
+  The link is built from the request's own `Host` header
+  (`lib/getRequestOrigin.js`, also now used by the org-member invite
+  email), so it's correct whether the app is served from its production
+  domain or a `*.vercel.app` deployment — nothing to configure per
+  environment.
+- Joining via the link goes through the service-role client rather than
+  the RLS client, since a non-member can't pass `org_role()`-gated
+  policies yet — possession of the unguessable `invite_token` is the
+  permission check instead, the same reasoning `/share/[id].js` already
+  uses for public release pages.
+
 ## 2026-08-21 — Organization lifecycle governance
 
 - Self-serve org creation is gone — a user now files a create or close

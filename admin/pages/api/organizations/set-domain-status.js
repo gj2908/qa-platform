@@ -4,10 +4,14 @@ import { logAdminAction } from "../../../lib/logAdminAction";
 
 const VALID_STATUSES = ["pending", "connected", null];
 
-// Marks a domain connection request as fulfilled (or clears it) once a
-// platform operator has manually run `vercel domains add` and confirmed
-// DNS resolves — see main/'s DomainCard for the request side. No
-// automatic Vercel provisioning happens anywhere in this app.
+// Manual override/fallback for marking a domain connection request
+// fulfilled (or clearing it) — main/'s branding.js auto-provisions via
+// the Vercel API when VERCEL_API_TOKEN/VERCEL_PROJECT_ID are set (see
+// lib/vercelClient.js), and a daily cron + this page's "Check now"
+// button (api/organizations/check-domain-status.js) recheck a pending
+// domain automatically. This route stays as the last resort for when
+// Vercel isn't configured, or a domain needs to be marked/cleared by
+// hand for any other reason.
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).end();
