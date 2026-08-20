@@ -51,5 +51,5 @@ export function usePwaInstall() {
   const needsIOSInstructions = env.isIOS && env.isSafari && !deferredPrompt;
   const canShowInstall = isMobile && !isStandalone && (canPromptInstall || needsIOSInstructions);
 
-  return { canShowInstall, canPromptInstall, needsIOSInstructions, promptInstall };
+  return { canShowInstall, canPromptInstall, needsIOSInstructions, isStandalone, promptInstall };
 }

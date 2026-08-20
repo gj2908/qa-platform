@@ -8,8 +8,10 @@ import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useToast } from "../components/ui/ToastProvider";
-import { CircleAlert, CircleCheck, Bell, BadgeCheck, ShieldCheck, ShieldOff, Copy, BellOff, Mail } from "lucide-react";
+import { CircleAlert, CircleCheck, Bell, BadgeCheck, ShieldCheck, ShieldOff, Copy, BellOff, Mail, Download } from "lucide-react";
 import { isPushSupported, getPushSubscriptionState, subscribeToPush, unsubscribeFromPush } from "../lib/pushSubscribe";
+import { usePwaInstall } from "../lib/usePwaInstall";
+import PwaInstallInstructions from "../components/layout/PwaInstallInstructions";
 
 function ProfileCard() {
   const toast = useToast();
@@ -310,6 +312,54 @@ function PushNotificationsCard() {
   );
 }
 
+function InstallAppCard() {
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  const { isStandalone, canPromptInstall, needsIOSInstructions, promptInstall } = usePwaInstall();
+  const isSupported = canPromptInstall || needsIOSInstructions;
+
+  async function handleInstall() {
+    if (canPromptInstall) {
+      await promptInstall();
+    } else if (needsIOSInstructions) {
+      setShowIOSInstructions(true);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Download size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Install app</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              {isStandalone
+                ? "You're using the installed app on this device."
+                : "Add Vrsnify to your home screen or dock for quicker access."}
+            </p>
+          </div>
+        </div>
+        {isStandalone ? (
+          <Badge tone="success" icon={CircleCheck}>
+            Installed
+          </Badge>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isSupported}
+            title={isSupported ? undefined : "Not available in this browser"}
+            onClick={handleInstall}
+          >
+            Install
+          </Button>
+        )}
+      </div>
+      <PwaInstallInstructions open={showIOSInstructions} onClose={() => setShowIOSInstructions(false)} />
+    </Card>
+  );
+}
+
 function NotificationPreferencesCard() {
   const toast = useToast();
   const user = useCurrentUser();
@@ -455,6 +505,8 @@ export default function Settings() {
         <TwoFactorCard />
 
         <PushNotificationsCard />
+
+        <InstallAppCard />
 
         <NotificationPreferencesCard />
 
