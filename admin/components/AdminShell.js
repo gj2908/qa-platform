@@ -18,6 +18,7 @@ import {
   Key,
   ListChecks,
   Settings,
+  Inbox,
   PanelLeft,
   Menu,
   X,
@@ -56,6 +57,7 @@ const NAV_SECTIONS = [
       { href: "/users", label: "Users", icon: Users },
       { href: "/projects", label: "Projects", icon: FolderKanban },
       { href: "/organizations", label: "Organizations", icon: Building2 },
+      { href: "/organizations/requests", label: "Org requests", icon: Inbox },
       { href: "/uploads", label: "Uploads", icon: UploadCloud },
       { href: "/storage", label: "Storage", icon: HardDrive },
     ],
@@ -77,9 +79,19 @@ const NAV_SECTIONS = [
 const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 const SIDEBAR_COLLAPSE_KEY = "qa-admin-sidebar-collapsed";
 
+// Two nav items can share a path prefix (e.g. "/organizations" and
+// "/organizations/requests") — only the longest matching href should
+// light up, or a requests-page visit would highlight both.
+function activeHref(pathname) {
+  const matches = ALL_ITEMS.filter(
+    (item) => item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`)
+  );
+  if (matches.length === 0) return null;
+  return matches.reduce((longest, item) => (item.href.length > longest.href.length ? item : longest)).href;
+}
+
 function isActive(pathname, href) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return activeHref(pathname) === href;
 }
 
 function GlobalSearch() {

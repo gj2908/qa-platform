@@ -136,16 +136,31 @@ create table profiles (
 
 -- Auto-create a profile row whenever someone signs up. Reads full_name
 -- from the signup-time options.data payload; null if not provided.
+-- Also auto-joins the new signup into any organization whose domain
+-- matches their email, but only if that org's domain has actually been
+-- connected (domain_status = 'connected') — never for a purely
+-- display-only domain, which is the whole reason domain_status exists
+-- as a separate field.
 create or replace function handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  email_domain text;
 begin
   insert into profiles (id, email, full_name)
   values (new.id, new.email, new.raw_user_meta_data->>'full_name')
   on conflict (id) do nothing;
+
+  email_domain := split_part(new.email, '@', 2);
+  insert into org_members (org_id, email, role)
+  select id, new.email, 'member'
+  from organizations
+  where domain = email_domain and domain_status = 'connected'
+  on conflict (org_id, email) do nothing;
+
   return new;
 end;
 $$;
@@ -402,6 +417,8 @@ create table organizations (
   accent_color text,
   domain text, -- display-only, e.g. "acme.com" — not verified, not used for auto-join
   domain_status text check (domain_status in ('pending', 'connected')), -- null = display-only; set when an admin requests real connection, see admin/'s fulfillment flow
+  default_webhook_url text, -- applied to a project on org attach only if it has no webhook_url of its own yet
+  default_require_approval boolean not null default false,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -414,6 +431,38 @@ create table org_members (
   created_at timestamptz default now(),
   unique (org_id, email)
 );
+
+-- Org creation/closure is admin-fulfilled, not self-serve — a user
+-- files a request here, a platform operator reviews it in admin/.
+-- Mirrors the domain_status request/fulfill shape.
+create table organization_requests (
+  id uuid primary key default gen_random_uuid(),
+  requester_email text not null,
+  type text not null check (type in ('create', 'close')),
+  org_name text,
+  -- set null (not cascade) so the request row survives the org's
+  -- deletion — approving a 'close' request must not erase its own
+  -- audit trail from the admin queue.
+  org_id uuid references organizations(id) on delete set null,
+  reason text,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  requested_at timestamptz not null default now(),
+  resolved_by text,
+  resolved_at timestamptz
+);
+
+-- Org-level audit trail — member/branding/domain/lifecycle changes.
+-- Kept separate from project_activity (not-null project_id, scoped to
+-- one project by design) rather than loosening that column's contract.
+create table org_activity (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  actor_email text not null,
+  action text not null,
+  detail text,
+  created_at timestamptz not null default now()
+);
+create index org_activity_org_id_idx on org_activity (org_id, created_at desc);
 
 -- set null (not cascade): deleting an org must not delete its member
 -- projects, only ungroup them.
@@ -645,16 +694,34 @@ create policy "members read orgs" on organizations
   for select using (org_role(id) is not null);
 create policy "org_admin update orgs" on organizations
   for update using (org_role(id) = 'org_admin') with check (org_role(id) = 'org_admin');
-create policy "authenticated create orgs" on organizations
-  for insert with check (auth.role() = 'authenticated');
--- No delete policy for regular users — org deletion isn't exposed in
--- main/'s UI; admin/'s service-role client can do it if ever needed.
+-- No insert policy for regular users as of the organization_requests
+-- change below — org creation is admin-fulfilled, not self-serve, so
+-- this is now enforced at the RLS layer too, not just by removing the
+-- UI button (a direct Supabase insert from an authenticated session
+-- must fail here, not just be inconvenient to reach). admin/'s
+-- service-role client bypasses RLS entirely and is unaffected.
+-- No delete policy for regular users either — org deletion isn't
+-- exposed in main/'s UI; admin/'s service-role client can do it.
 
 create policy "members read org members" on org_members
   for select using (org_role(org_id) is not null);
 create policy "org_admin manages org members" on org_members
   for all using (org_role(org_id) = 'org_admin')
   with check (org_role(org_id) = 'org_admin');
+
+alter table organization_requests enable row level security;
+create policy "self read own org requests" on organization_requests
+  for select using (auth.jwt() ->> 'email' = requester_email);
+create policy "self create org requests" on organization_requests
+  for insert with check (auth.jwt() ->> 'email' = requester_email);
+-- No update/delete policy for regular users — resolving a request only
+-- ever happens from admin/'s service-role client.
+
+alter table org_activity enable row level security;
+create policy "members read org activity" on org_activity
+  for select using (org_role(org_id) is not null);
+create policy "members write org activity" on org_activity
+  for insert with check (org_role(org_id) is not null);
 
 create policy "members read webhook deliveries" on webhook_deliveries
   for select using (project_role(project_id) is not null);

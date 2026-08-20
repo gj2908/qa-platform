@@ -1,4 +1,5 @@
 import { createServerSupabase } from "../../../lib/supabase/server";
+import { logOrgActivity } from "../../../lib/logOrgActivity";
 
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -62,6 +63,22 @@ export default async function handler(req, res) {
   if (error) {
     res.status(500).json({ error: error.message });
     return;
+  }
+
+  if (requestDomain) {
+    await logOrgActivity(authSupabase, {
+      orgId,
+      actorEmail: user.email,
+      action: "org_domain_requested",
+      detail: normalizedDomain,
+    });
+  } else {
+    await logOrgActivity(authSupabase, {
+      orgId,
+      actorEmail: user.email,
+      action: "org_branding_updated",
+      detail: null,
+    });
   }
 
   res.status(200).json({ ok: true });

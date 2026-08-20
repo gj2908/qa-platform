@@ -5,9 +5,12 @@ import AppShell from "../../../components/layout/AppShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
+import Textarea from "../../../components/ui/Textarea";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
-import { ArrowLeft, Palette, Globe } from "lucide-react";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import { useToast } from "../../../components/ui/ToastProvider";
+import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -37,6 +40,8 @@ export default function OrganizationSettings({ org }) {
 
         <BrandingCard org={org} />
         <DomainCard org={org} />
+        <DefaultsCard org={org} />
+        <DangerZoneCard org={org} />
       </div>
     </AppShell>
   );
@@ -219,6 +224,131 @@ function DomainCard({ org }) {
           </div>
         )}
       </div>
+    </Card>
+  );
+}
+
+function DefaultsCard({ org }) {
+  const [webhookUrl, setWebhookUrl] = useState(org.default_webhook_url || "");
+  const [requireApproval, setRequireApproval] = useState(org.default_require_approval || false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+    const res = await fetch("/api/organizations/set-defaults", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orgId: org.id,
+        defaultWebhookUrl: webhookUrl.trim() || null,
+        defaultRequireApproval: requireApproval,
+      }),
+    });
+    setSaving(false);
+    if (res.ok) setSaved(true);
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Webhook size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Project defaults</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Applied to a project only when it's attached to this org and doesn't already have its own
+        value set — never overwrites an existing per-project choice.
+      </p>
+
+      <form onSubmit={save} className="mt-4 flex flex-col gap-3">
+        <FormField label="Default release webhook" hint="Slack-incoming-webhook-compatible URL">
+          <Input
+            type="url"
+            placeholder="https://hooks.slack.com/services/…"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+          />
+        </FormField>
+        <label className="flex items-center gap-2 text-sm text-ink-secondary">
+          <input
+            type="checkbox"
+            checked={requireApproval}
+            onChange={(e) => setRequireApproval(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          Require approval to publish, by default, for newly attached projects
+        </label>
+        <div className="flex items-center gap-3">
+          <Button type="submit" loading={saving} className="w-fit">
+            Save defaults
+          </Button>
+          {saved && <span className="text-sm text-success">Saved</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function DangerZoneCard({ org }) {
+  const toast = useToast();
+  const [reason, setReason] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [requested, setRequested] = useState(false);
+
+  async function confirmRequestClosure() {
+    setRequesting(true);
+    const res = await fetch("/api/organizations/request-closure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, reason: reason.trim() }),
+    });
+    setRequesting(false);
+    setConfirming(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Couldn't submit the closure request.");
+      return;
+    }
+    setRequested(true);
+    toast.success("Closure requested — a platform admin will review it.");
+  }
+
+  return (
+    <Card className="border-danger/30 p-5">
+      <div className="flex items-center gap-2">
+        <TriangleAlert size={15} strokeWidth={2.25} className="text-danger" />
+        <h2 className="text-sm font-semibold text-ink-primary">Danger zone</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Organizations are closed by a platform admin, not deleted directly — this submits a request
+        for review rather than closing it immediately.
+      </p>
+
+      {requested ? (
+        <p className="mt-4 text-sm text-ink-secondary">Closure requested. You'll be notified once it's reviewed.</p>
+      ) : (
+        <div className="mt-4 flex flex-col gap-3">
+          <FormField label="Reason" hint="Optional — helps the admin review faster">
+            <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+          </FormField>
+          <Button variant="destructive" onClick={() => setConfirming(true)} className="w-fit">
+            Request closure
+          </Button>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={confirming}
+        title={`Request closure of ${org.name}?`}
+        description="A platform admin will review this request. The organization stays active until they approve it."
+        confirmLabel="Request closure"
+        loading={requesting}
+        onConfirm={confirmRequestClosure}
+        onCancel={() => setConfirming(false)}
+      />
     </Card>
   );
 }

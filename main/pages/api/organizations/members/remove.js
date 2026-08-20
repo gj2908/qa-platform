@@ -1,4 +1,5 @@
 import { createServerSupabase } from "../../../../lib/supabase/server";
+import { logOrgActivity } from "../../../../lib/logOrgActivity";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -27,11 +28,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
   const { error } = await authSupabase
     .from("org_members")
     .delete()
     .eq("org_id", orgId)
-    .eq("email", email.trim().toLowerCase());
+    .eq("email", normalizedEmail);
 
   if (error) {
     // Surfaces trg_guard_last_org_admin's raised exception (can't remove
@@ -39,6 +41,13 @@ export default async function handler(req, res) {
     res.status(400).json({ error: error.message });
     return;
   }
+
+  await logOrgActivity(authSupabase, {
+    orgId,
+    actorEmail: user.email,
+    action: "org_member_removed",
+    detail: normalizedEmail,
+  });
 
   res.status(200).json({ ok: true });
 }

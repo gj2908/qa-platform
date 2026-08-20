@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useRouter } from "next/router";
 import Link from "next/link";
 import { createServerSupabase } from "../../lib/supabase/server";
 import AppShell from "../../components/layout/AppShell";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
+import Textarea from "../../components/ui/Textarea";
 import FormField from "../../components/ui/FormField";
 import EmptyState from "../../components/ui/EmptyState";
+import { useToast } from "../../components/ui/ToastProvider";
 import { Building2, Plus, Users } from "lucide-react";
 
 export async function getServerSideProps({ req, res }) {
@@ -39,30 +40,35 @@ export async function getServerSideProps({ req, res }) {
 }
 
 export default function Organizations({ orgs: initial }) {
-  const router = useRouter();
-  const [orgs, setOrgs] = useState(initial);
+  const toast = useToast();
+  const [orgs] = useState(initial);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [requested, setRequested] = useState(false);
 
-  async function createOrg(e) {
+  async function requestOrg(e) {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
     setError("");
-    const res = await fetch("/api/organizations/create", {
+    const res = await fetch("/api/organizations/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim() }),
+      body: JSON.stringify({ name: name.trim(), reason: reason.trim() }),
     });
     setSaving(false);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setError(data.error || "Couldn't create that organization.");
+      setError(data.error || "Couldn't submit that request.");
       return;
     }
-    router.push(`/organizations/${data.org.id}`);
+    setRequested(true);
+    setName("");
+    setReason("");
+    toast.success("Request submitted — a platform admin will review it.");
   }
 
   return (
@@ -75,30 +81,54 @@ export default function Organizations({ orgs: initial }) {
               Group projects under a company or team, with shared membership and seats.
             </p>
           </div>
-          <Button onClick={() => setCreating((c) => !c)}>
+          <Button
+            onClick={() => {
+              setCreating((c) => !c);
+              setRequested(false);
+            }}
+          >
             <Plus size={15} strokeWidth={2.25} />
-            New organization
+            Request an organization
           </Button>
         </div>
 
         {creating && (
           <Card className="p-5">
-            <form onSubmit={createOrg} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <FormField label="Organization name" error={error}>
-                  <Input
-                    placeholder="Acme Inc."
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    error={!!error}
-                    autoFocus
-                  />
-                </FormField>
-              </div>
-              <Button type="submit" loading={saving} disabled={!name.trim()}>
-                Create
-              </Button>
-            </form>
+            {requested ? (
+              <p className="text-sm text-ink-secondary">
+                Request submitted. A platform admin will review it and set you up as the organization's
+                admin once approved.
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-ink-tertiary">
+                  Organizations are set up by a platform admin — submit a request and you'll be made the
+                  admin of it once approved.
+                </p>
+                <form onSubmit={requestOrg} className="flex flex-col gap-3">
+                  <FormField label="Organization name" error={error}>
+                    <Input
+                      placeholder="Acme Inc."
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      error={!!error}
+                      autoFocus
+                    />
+                  </FormField>
+                  <FormField label="Reason" hint="Optional — helps the admin review faster">
+                    <Textarea
+                      rows={2}
+                      placeholder="What's this organization for?"
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                    />
+                  </FormField>
+                  <Button type="submit" loading={saving} disabled={!name.trim()} className="w-fit">
+                    Submit request
+                  </Button>
+                </form>
+              </>
+            )}
           </Card>
         )}
 

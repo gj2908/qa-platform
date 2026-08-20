@@ -1,5 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../../lib/supabase/server";
 import { sendEmail, renderEmail, escapeHtml, EMAIL_STYLES } from "../../../../lib/emailClient";
+import { logOrgActivity } from "../../../../lib/logOrgActivity";
 
 const VALID_ROLES = ["org_admin", "member"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,6 +52,15 @@ export default async function handler(req, res) {
     // Surfaces trg_guard_seat_limit's raised exception as a friendly message.
     res.status(400).json({ error: error.message });
     return;
+  }
+
+  if (isNewMember) {
+    await logOrgActivity(authSupabase, {
+      orgId,
+      actorEmail: user.email,
+      action: "org_member_added",
+      detail: `${normalizedEmail} (${role})`,
+    });
   }
 
   let invited = false;

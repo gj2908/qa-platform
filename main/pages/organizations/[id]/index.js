@@ -53,7 +53,7 @@ export async function getServerSideProps({ params, req, res }) {
   // to bulk export, not a hard permission boundary).
   const projectIds = (projects || []).map((p) => p.id);
   const nameById = Object.fromEntries((projects || []).map((p) => [p.id, p.name]));
-  let activity = [];
+  let projectActivity = [];
   if (projectIds.length > 0) {
     const { data: activityRows } = await supabase
       .from("project_activity")
@@ -61,8 +61,23 @@ export async function getServerSideProps({ params, req, res }) {
       .in("project_id", projectIds)
       .order("created_at", { ascending: false })
       .limit(20);
-    activity = (activityRows || []).map((a) => ({ ...a, project_name: nameById[a.project_id] || null }));
+    projectActivity = (activityRows || []).map((a) => ({ ...a, project_name: nameById[a.project_id] || null }));
   }
+
+  // Org-level governance events (member/branding/domain/lifecycle) live
+  // in a separate table from project activity — merge the two feeds by
+  // timestamp so "Recent activity" reads as one unified org history.
+  const { data: orgActivityRows } = await supabase
+    .from("org_activity")
+    .select("id, actor_email, action, detail, created_at")
+    .eq("org_id", params.id)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const orgActivity = (orgActivityRows || []).map((a) => ({ ...a, project_name: null }));
+
+  const activity = [...projectActivity, ...orgActivity]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 20);
 
   // Projects the current user owns that aren't already in this org —
   // populates the "Add project" picker, admins only (cheap to skip the

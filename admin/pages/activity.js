@@ -13,6 +13,8 @@ const ACTION_LABEL = {
   organization_deleted: "deleted organization",
   organization_seat_limit_updated: "updated organization seat limit",
   organization_domain_status_updated: "updated organization domain status",
+  organization_request_approved: "approved an organization request",
+  organization_request_rejected: "rejected an organization request",
 };
 
 export async function getServerSideProps() {
