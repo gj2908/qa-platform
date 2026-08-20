@@ -11,7 +11,7 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert, Link2, Copy, RefreshCw } from "lucide-react";
+import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert, Link2, Copy, RefreshCw, ShieldCheck } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -43,6 +43,7 @@ export default function OrganizationSettings({ org, siteOrigin }) {
         <DomainCard org={org} />
         <InviteLinkCard org={org} siteOrigin={siteOrigin} />
         <DefaultsCard org={org} />
+        <SecurityCard org={org} />
         <DangerZoneCard org={org} />
       </div>
     </AppShell>
@@ -391,6 +392,49 @@ function DefaultsCard({ org }) {
           {saved && <span className="text-sm text-success">Saved</span>}
         </div>
       </form>
+    </Card>
+  );
+}
+
+function SecurityCard({ org }) {
+  const toast = useToast();
+  const [mfaRequired, setMfaRequired] = useState(org.mfa_required);
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    const next = !mfaRequired;
+    setSaving(true);
+    const res = await fetch("/api/organizations/set-mfa-policy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, mfaRequired: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setMfaRequired(next);
+      toast.success(next ? "Two-factor authentication is now required for every member." : "Two-factor auth requirement removed.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update this setting.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Require two-factor authentication</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              Every member is blocked from the app until they set up an authenticator app in their own Settings.
+            </p>
+          </div>
+        </div>
+        <Button variant={mfaRequired ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
+          {mfaRequired ? "On" : "Off"}
+        </Button>
+      </div>
     </Card>
   );
 }

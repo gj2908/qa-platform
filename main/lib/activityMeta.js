@@ -1,4 +1,4 @@
-import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw } from "lucide-react";
+import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff } from "lucide-react";
 
 // Shared between the project Overview "Recent activity" card, the
 // top-bar notification bell, and the org dashboard's activity feed —
@@ -34,6 +34,8 @@ export const ACTIVITY_META = {
   org_invite_link_disabled: { icon: Link2, label: "disabled the invite link" },
   org_invite_link_regenerated: { icon: RefreshCw, label: "regenerated the invite link" },
   org_member_joined_via_link: { icon: UserPlus, label: "joined via invite link" },
+  org_mfa_required_enabled: { icon: ShieldCheck, label: "required two-factor auth for all members" },
+  org_mfa_required_disabled: { icon: ShieldOff, label: "removed the two-factor auth requirement" },
 };
 
 export function activityMetaFor(action) {

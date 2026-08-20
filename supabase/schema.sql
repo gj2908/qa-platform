@@ -11,6 +11,7 @@ create table projects (
   require_approval boolean not null default false, -- non-owner publishes land as pending_review
   digest_enabled boolean not null default false, -- lib/buildDigest.js / pages/api/cron/digest.js
   release_emails_enabled boolean not null default false, -- real-time email on release_published, separate from the digest
+  legal_hold boolean not null default false, -- blocks deletion, see guard_legal_hold() below
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -523,6 +524,12 @@ create table organizations (
   -- auto-join above: no DNS/domain ownership required, works instantly.
   invite_token uuid not null default gen_random_uuid(),
   invite_enabled boolean not null default false,
+  -- Org-wide policy: every member must have a verified TOTP factor to
+  -- use the app at all, checked client-side by
+  -- components/layout/RequireMfaGate.js (Supabase Auth's MFA enrollment
+  -- itself is a free-tier feature; this column is just the org's policy
+  -- switch on top of it).
+  mfa_required boolean not null default false,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -704,6 +711,27 @@ $$;
 create trigger trg_guard_seat_limit
   before insert on org_members
   for each row execute function guard_seat_limit();
+
+-- Belt-and-suspenders like guard_seat_limit() above — the UI already
+-- hides the delete action for a held project, but a direct RLS-permitted
+-- delete (owner role) must fail here too.
+create or replace function guard_legal_hold()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.legal_hold then
+    raise exception 'This project is under legal hold and cannot be deleted';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger trg_guard_legal_hold
+  before delete on projects
+  for each row execute function guard_legal_hold();
 
 -- Auto-assign the creator as owner whenever a project is created.
 create or replace function assign_project_owner()

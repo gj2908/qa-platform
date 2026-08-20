@@ -444,6 +444,56 @@ function NotificationPreferencesCard() {
   );
 }
 
+function AccountCard() {
+  const toast = useToast();
+  const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function signOutEverywhere() {
+    setSigningOutEverywhere(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signOut({ scope: "global" });
+    setSigningOutEverywhere(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    window.location.href = "/login";
+  }
+
+  async function exportData() {
+    setExporting(true);
+    const res = await fetch("/api/account/export-data");
+    setExporting(false);
+    if (!res.ok) {
+      toast.error("Couldn't export your data.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "my-data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink-primary">Account</h2>
+      <p className="mt-1 text-sm text-ink-tertiary">Manage where you're signed in and export a copy of your data.</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="secondary" size="sm" loading={exporting} onClick={exportData}>
+          Export my data
+        </Button>
+        <Button variant="secondary" size="sm" loading={signingOutEverywhere} onClick={signOutEverywhere}>
+          Sign out of all devices
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -574,6 +624,8 @@ export default function Settings() {
             </div>
           </form>
         </Card>
+
+        <AccountCard />
       </div>
     </AppShell>
   );

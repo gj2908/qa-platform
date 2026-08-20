@@ -38,12 +38,37 @@ export function buildTaskOverduePayload({ appName, taskTitle, assigneeEmail, boa
   };
 }
 
+// Microsoft Teams incoming webhooks (whether the legacy Office 365
+// Connector or a Workflows-based one) don't render the {text} shape or
+// Slack's *bold* markdown — they expect a MessageCard. Detected by URL
+// host rather than a project-level setting, so an org can point
+// webhook_url at either provider with zero extra configuration.
+function isTeamsWebhook(url) {
+  try {
+    return /(^|\.)(office\.com|office365\.com|logic\.azure\.com)$/i.test(new URL(url).hostname);
+  } catch (e) {
+    return false;
+  }
+}
+
+function toTeamsMessageCard(payload) {
+  const text = (payload.text || "").replace(/\*(.+?)\*/g, "$1");
+  return {
+    "@type": "MessageCard",
+    "@context": "http://schema.org/extensions",
+    summary: text.split("\n")[0]?.slice(0, 100) || "Notification",
+    text,
+  };
+}
+
 // The optional third arg logs the attempt to webhook_deliveries so a
 // failure isn't silently swallowed — pass it wherever the caller already
 // has a service-role client and knows which project/event this is for.
 // Logging itself is best-effort: a failure to write the log row never
 // throws or affects the returned result.
 export async function sendWebhookNotification(url, payload, log) {
+  const body = isTeamsWebhook(url) ? toTeamsMessageCard(payload) : payload;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let result;
@@ -51,7 +76,7 @@ export async function sendWebhookNotification(url, payload, log) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     result = { ok: res.ok, status: res.status };
@@ -66,7 +91,7 @@ export async function sendWebhookNotification(url, payload, log) {
       await log.service.from("webhook_deliveries").insert({
         project_id: log.projectId,
         event: log.event,
-        payload,
+        payload: body,
         status: result.ok ? "success" : "failed",
         response_status: result.status ?? null,
         error: result.error || (result.ok ? null : `Endpoint responded with status ${result.status}`),

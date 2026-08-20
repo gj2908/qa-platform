@@ -4,6 +4,7 @@ import TopNav from "./TopNav";
 import NavTab from "./NavTab";
 import CompleteProfileGate from "./CompleteProfileGate";
 import VerifyEmailGate from "./VerifyEmailGate";
+import RequireMfaGate from "./RequireMfaGate";
 import CommandPalette from "../CommandPalette";
 import { addRecentlyViewed } from "../../lib/recentlyViewed";
 import { createClient } from "../../lib/supabase/client";
@@ -68,6 +69,7 @@ export default function ProjectShell({ project, active, children }) {
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       <CompleteProfileGate />
       <VerifyEmailGate />
+      <RequireMfaGate />
       <CommandPalette />
     </div>
   );

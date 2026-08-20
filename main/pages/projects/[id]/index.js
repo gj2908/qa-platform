@@ -29,6 +29,7 @@ import {
   Mail,
   Building2,
   BookOpen,
+  Scale,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -363,6 +364,7 @@ export default function ProjectOverview({
         {activity.length > 0 && <ActivityCard activity={activity} projectId={project.id} isOwner={isOwner(role)} />}
 
         {isOwner(role) && <ApprovalSettingsCard project={project} />}
+        {isOwner(role) && <LegalHoldCard project={project} />}
         {isOwner(role) && <WebhookCard project={project} deliveries={deliveries} />}
         {isOwner(role) && <DigestCard project={project} />}
         {isOwner(role) && <ReleaseEmailCard project={project} />}
@@ -552,6 +554,49 @@ function ApprovalSettingsCard({ project }) {
         </div>
         <Button variant={requireApproval ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
           {requireApproval ? "On" : "Off"}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function LegalHoldCard({ project }) {
+  const toast = useToast();
+  const [legalHold, setLegalHold] = useState(project.legal_hold);
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    const next = !legalHold;
+    setSaving(true);
+    const res = await fetch("/api/projects/legal-hold-toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, legalHold: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setLegalHold(next);
+      toast.success(next ? "Project placed under legal hold." : "Legal hold removed.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update this setting.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Scale size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Legal hold</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              While on, this project can't be deleted by anyone — enforced at the database level, not just this button.
+            </p>
+          </div>
+        </div>
+        <Button variant={legalHold ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
+          {legalHold ? "On" : "Off"}
         </Button>
       </div>
     </Card>
