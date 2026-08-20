@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Kanban, ClipboardList, Users, Bug, FlaskConical } from "lucide-react";
+import { LayoutDashboard, Kanban, ClipboardList, Users, Bug, FlaskConical, ToggleLeft } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
 import CompleteProfileGate from "./CompleteProfileGate";
@@ -14,6 +14,7 @@ const TABS = [
   { key: "changelog", path: "/changelog", label: "Changelog", icon: ClipboardList },
   { key: "crashes", path: "/crashes", label: "Crashes", icon: Bug },
   { key: "test-cases", path: "/test-cases", label: "Test cases", icon: FlaskConical },
+  { key: "flags", path: "/flags", label: "Flags", icon: ToggleLeft },
   { key: "collaborators", path: "/collaborators", label: "Collaborators", icon: Users },
 ];
 

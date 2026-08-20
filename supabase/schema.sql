@@ -170,6 +170,22 @@ create table test_case_runs (
 create index test_case_runs_release_id_idx on test_case_runs (release_id);
 create index test_case_runs_test_case_id_idx on test_case_runs (test_case_id);
 
+-- ── Feature flags ────────────────────────────────────────────
+-- Project-scoped, with percentage rollout resolved for a given device
+-- using the same stable device-hash bucketing already used for staged
+-- release rollout (lib/deviceBucket.js) — see pages/api/v1/feature-flags.js.
+create table feature_flags (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  key text not null,
+  description text,
+  enabled boolean not null default true,
+  rollout_percent int not null default 100 check (rollout_percent between 0 and 100),
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now(),
+  unique (project_id, key)
+);
+
 -- ── Profiles ─────────────────────────────────────────────────
 -- A public-facing display name for a user, so collaborators on a shared
 -- project can see who "jane@company.com" actually is instead of just
@@ -777,6 +793,7 @@ alter table task_templates enable row level security;
 alter table task_time_entries enable row level security;
 alter table test_cases enable row level security;
 alter table test_case_runs enable row level security;
+alter table feature_flags enable row level security;
 alter table notification_preferences enable row level security;
 alter table saved_views enable row level security;
 alter table channel_pins enable row level security;
@@ -856,6 +873,12 @@ create policy "members read test runs" on test_case_runs
 create policy "commenter+ write test runs" on test_case_runs
   for all using (project_role(project_id) in ('owner', 'editor', 'commenter'))
   with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
+
+create policy "members read feature flags" on feature_flags
+  for select using (project_role(project_id) is not null);
+create policy "editor+ write feature flags" on feature_flags
+  for all using (project_role(project_id) in ('owner', 'editor'))
+  with check (project_role(project_id) in ('owner', 'editor'));
 
 -- notification_preferences / saved_views: personal, owned entirely by
 -- the row's own user_id — still gated on current project membership so
