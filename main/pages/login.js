@@ -16,7 +16,13 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
+  // Counts consecutive failed sign-in attempts for the currently-typed
+  // email, so a wrong password on the first try just shows the plain
+  // error — no box, no forced action. Only after repeated failures do we
+  // *suggest* resetting the password, as a low-key inline link, not a
+  // popup. Resets whenever the email field changes.
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [failedAttemptsEmail, setFailedAttemptsEmail] = useState("");
   const [resending, setResending] = useState(false);
   // Set once signup succeeds, holding the email awaiting confirmation —
   // renders the inline code-entry form in place of the signup form. A
@@ -33,7 +39,6 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setMessage("");
-    setUnconfirmedEmail("");
     setLoading(true);
     const supabase = createClient();
     const redirectTo = router.query.redirectTo || "/dashboard";
@@ -46,12 +51,20 @@ export default function Login() {
       if (error) {
         setLoading(false);
         setError(error.message);
-        // Supabase intentionally returns the same generic "Invalid login
-        // credentials" for a wrong password AND an unconfirmed account
-        // (avoids leaking confirmation status) — there's no way to tell
-        // which one this is from the error alone, so a failed sign-in
-        // always offers a resend rather than trying to guess.
-        setUnconfirmedEmail(email);
+        // Supabase returns the same generic "Invalid login credentials"
+        // for a wrong password and an unconfirmed account alike (avoids
+        // leaking confirmation status), so there's no way to tell which
+        // one this is — but a typo is far more common than a genuinely
+        // unconfirmed account, so we don't assume either on the first
+        // couple of tries. Only after repeated failures for the same
+        // email do we suggest a password reset, as an opinion, not a
+        // forced action.
+        if (failedAttemptsEmail === email) {
+          setFailedAttempts((n) => n + 1);
+        } else {
+          setFailedAttemptsEmail(email);
+          setFailedAttempts(1);
+        }
         return;
       }
       router.push(redirectTo);
@@ -74,27 +87,12 @@ export default function Login() {
     }
   }
 
-  async function resendVerification() {
-    setResending(true);
-    const supabase = createClient();
-    const redirectTo = router.query.redirectTo || "/dashboard";
-    await supabase.auth.resend({
-      type: "signup",
-      email: unconfirmedEmail,
-      options: { emailRedirectTo: `${window.location.origin}${redirectTo}` },
-    });
-    setResending(false);
-    setError("");
-    setMessage("Verification email sent — check your inbox.");
-  }
-
   async function verifySignupOtp(code) {
     setOtpSubmitting(true);
     setOtpError("");
     const supabase = createClient();
-    const targetEmail = awaitingSignupOtp || unconfirmedEmail;
     const { error } = await supabase.auth.verifyOtp({
-      email: targetEmail,
+      email: awaitingSignupOtp,
       token: code,
       type: "signup",
     });
@@ -112,7 +110,7 @@ export default function Login() {
     const redirectTo = router.query.redirectTo || "/dashboard";
     await supabase.auth.resend({
       type: "signup",
-      email: awaitingSignupOtp || unconfirmedEmail,
+      email: awaitingSignupOtp,
       options: { emailRedirectTo: `${window.location.origin}${redirectTo}` },
     });
     setResending(false);
@@ -185,7 +183,10 @@ export default function Login() {
           required
           placeholder="you@company.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (e.target.value !== failedAttemptsEmail) setFailedAttempts(0);
+          }}
           autoFocus={mode !== "signup"}
         />
         <Input
@@ -210,22 +211,27 @@ export default function Login() {
           </p>
         )}
 
-        {unconfirmedEmail && (
-          <div className="flex flex-col gap-3 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
-            <div className="flex flex-col gap-2">
-              <p>Wrong password, or haven't verified your email yet?</p>
-              <Button type="button" size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
-                Resend verification email
-              </Button>
-            </div>
-            <OtpCodeInput
-              email={unconfirmedEmail}
-              onSubmit={verifySignupOtp}
-              submitting={otpSubmitting}
-              error={otpError}
-              sentLabel="Have a verification code instead?"
-            />
-          </div>
+        {mode === "signin" && failedAttempts >= 3 && (
+          <p className="text-sm text-ink-tertiary">
+            Still not working?{" "}
+            <Link href="/forgot-password" className="font-medium text-accent hover:text-accent-hover">
+              Reset your password
+            </Link>
+            {" — "}or, if you never finished verifying this email,{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                setMode("signup");
+                setError("");
+                setMessage("");
+              }}
+              className="font-medium text-accent hover:text-accent-hover"
+            >
+              sign up again
+            </a>{" "}
+            to get a new code.
+          </p>
         )}
 
         <Button type="submit" loading={loading} className="mt-1 w-full">
@@ -244,7 +250,7 @@ export default function Login() {
                 setMode("signup");
                 setError("");
                 setMessage("");
-                setUnconfirmedEmail("");
+                setFailedAttempts(0);
               }}
               className="font-medium text-accent hover:text-accent-hover"
             >
@@ -265,7 +271,7 @@ export default function Login() {
                 setMode("signin");
                 setError("");
                 setMessage("");
-                setUnconfirmedEmail("");
+                setFailedAttempts(0);
               }}
               className="font-medium text-accent hover:text-accent-hover"
             >
