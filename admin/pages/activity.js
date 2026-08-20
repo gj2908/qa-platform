@@ -15,6 +15,7 @@ const ACTION_LABEL = {
   organization_domain_status_updated: "updated organization domain status",
   organization_request_approved: "approved an organization request",
   organization_request_rejected: "rejected an organization request",
+  data_retention_cleanup_run: "ran a data retention cleanup",
 };
 
 export async function getServerSideProps() {

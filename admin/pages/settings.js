@@ -12,6 +12,7 @@ const THRESHOLD_FIELDS = [
   { key: "report_issue_window_minutes", label: "Report-issue rate limit — window", unit: "minutes", placeholder: "60" },
   { key: "register_device_max_attempts", label: "Register-device rate limit — max attempts", unit: "per window", placeholder: "10" },
   { key: "register_device_window_minutes", label: "Register-device rate limit — window", unit: "minutes", placeholder: "60" },
+  { key: "activity_retention_days", label: "Data retention — delete log rows older than", unit: "days, blank = never", placeholder: "" },
 ];
 
 export async function getServerSideProps() {
@@ -36,6 +37,8 @@ export default function AdminSettings({ settings: initialSettings, dbAdmins: ini
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [adminError, setAdminError] = useState("");
+  const [runningCleanup, setRunningCleanup] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
 
   async function saveThreshold(key) {
     setSavingKey(key);
@@ -65,6 +68,21 @@ export default function AdminSettings({ settings: initialSettings, dbAdmins: ini
       setNewAdminEmail("");
     } else {
       setAdminError(data.error || "Couldn't add that admin.");
+    }
+  }
+
+  async function runRetentionCleanup() {
+    const days = settings.activity_retention_days;
+    if (!days || !confirm(`Permanently delete log rows older than ${days} days across every project? This can't be undone.`)) return;
+    setRunningCleanup(true);
+    setCleanupResult(null);
+    const res = await fetch("/api/data-retention/run", { method: "POST" });
+    setRunningCleanup(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setCleanupResult(data.deleted);
+    } else {
+      alert(data.error || "Cleanup failed.");
     }
   }
 
@@ -117,6 +135,36 @@ export default function AdminSettings({ settings: initialSettings, dbAdmins: ini
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+        <div className="border-b border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          Data retention
+        </div>
+        <div className="bg-white p-4 dark:bg-slate-900">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Manually triggered, not a cron — set the threshold above, then run this whenever you want to reclaim
+            space. Deletes rows older than the threshold from project_activity, crash_reports, page_view_events,
+            install_events, webhook_deliveries, and rate_limit_events, across every project. Nothing runs
+            automatically; the free-tier database is small enough that this is worth checking before assuming you
+            need it.
+          </p>
+          <button
+            onClick={runRetentionCleanup}
+            disabled={runningCleanup || !settings.activity_retention_days}
+            className="mt-3 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            {runningCleanup ? "Running…" : "Run cleanup now"}
+          </button>
+          {cleanupResult && (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Deleted:{" "}
+              {Object.entries(cleanupResult)
+                .map(([table, count]) => `${count} ${table}`)
+                .join(", ")}
+            </p>
+          )}
         </div>
       </div>
 
