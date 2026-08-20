@@ -74,7 +74,15 @@ export default async function handler(req, res) {
     .from("project_collaborators")
     .select("project_id")
     .eq("email", user.email);
-  const projectIds = [...new Set((myProjects || []).map((p) => p.project_id))];
+  const allProjectIds = [...new Set((myProjects || []).map((p) => p.project_id))];
+
+  const { data: mutedPrefs } = await supabase
+    .from("notification_preferences")
+    .select("project_id")
+    .eq("user_id", user.id)
+    .eq("muted", true);
+  const mutedProjectIds = new Set((mutedPrefs || []).map((p) => p.project_id));
+  const projectIds = allProjectIds.filter((id) => !mutedProjectIds.has(id));
 
   if (projectIds.length === 0) {
     res.status(200).json({ items: [], unreadCount: 0 });

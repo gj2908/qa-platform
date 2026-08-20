@@ -6,15 +6,20 @@ import TaskDetailDialog from "../../../components/TaskDetailDialog";
 import ProjectShell from "../../../components/layout/ProjectShell";
 import Input from "../../../components/ui/Input";
 import Button from "../../../components/ui/Button";
+import Select from "../../../components/ui/Select";
+import { useToast } from "../../../components/ui/ToastProvider";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
 import { canManageBoard } from "../../../components/ui/role";
-import { Inbox, Plus, Search } from "lucide-react";
+import { Inbox, Plus, Search, Bookmark, LayoutTemplate, CheckSquare, X, Trash2 } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
   const { data: project } = await supabase.from("projects").select("*").eq("id", params.id).single();
   if (!project) return { notFound: true };
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { data: role } = await supabase.rpc("project_role", { p_project_id: params.id });
   const { data: tasks } = await supabase
     .from("tasks")
@@ -26,6 +31,17 @@ export async function getServerSideProps({ params, req, res }) {
     .from("project_collaborators")
     .select("email")
     .eq("project_id", params.id);
+  const { data: savedViews } = await supabase
+    .from("saved_views")
+    .select("*")
+    .eq("project_id", params.id)
+    .eq("user_id", user?.id || "")
+    .order("created_at", { ascending: true });
+  const { data: templates } = await supabase
+    .from("task_templates")
+    .select("*")
+    .eq("project_id", params.id)
+    .order("created_at", { ascending: true });
 
   const collaborators = collaboratorsRaw || [];
   const emails = [...new Set(collaborators.map((c) => c.email))];
@@ -37,11 +53,28 @@ export async function getServerSideProps({ params, req, res }) {
   const collaboratorsWithNames = collaborators.map((c) => ({ email: c.email, full_name: nameByEmail[c.email] || null }));
 
   return {
-    props: { project, role, tasks: tasks || [], collaborators: collaboratorsWithNames, nameByEmail },
+    props: {
+      project,
+      role,
+      tasks: tasks || [],
+      collaborators: collaboratorsWithNames,
+      nameByEmail,
+      initialSavedViews: savedViews || [],
+      initialTemplates: templates || [],
+    },
   };
 }
 
-export default function Board({ project, role, tasks: initialTasks, collaborators, nameByEmail }) {
+export default function Board({
+  project,
+  role,
+  tasks: initialTasks,
+  collaborators,
+  nameByEmail,
+  initialSavedViews,
+  initialTemplates,
+}) {
+  const toast = useToast();
   const [tasks, setTasks] = useState(initialTasks);
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
@@ -50,6 +83,17 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
   const [labelFilter, setLabelFilter] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const canEdit = canManageBoard(role);
+
+  const [savedViews, setSavedViews] = useState(initialSavedViews);
+  const [showViewsMenu, setShowViewsMenu] = useState(false);
+  const [newViewName, setNewViewName] = useState("");
+
+  const [templates, setTemplates] = useState(initialTemplates);
+  const [showTemplatesMenu, setShowTemplatesMenu] = useState(false);
+  const [newTemplate, setNewTemplate] = useState(null); // { title, labels, priority } while composing
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   // Best-effort — never blocks the real mutation it's attached to, same
   // rule as every other activity-logging call site in this app. Fetches
@@ -72,6 +116,135 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
     } catch (e) {
       // ignored
     }
+  }
+
+  function applyView(view) {
+    setSearch(view.filters?.search || "");
+    setPriorityFilter(view.filters?.priorityFilter || null);
+    setLabelFilter(view.filters?.labelFilter || null);
+    setShowViewsMenu(false);
+  }
+
+  async function saveCurrentView(e) {
+    e.preventDefault();
+    if (!newViewName.trim()) return;
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("saved_views")
+      .insert({
+        user_id: user.id,
+        project_id: project.id,
+        name: newViewName.trim(),
+        filters: { search, priorityFilter, labelFilter },
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setSavedViews([...savedViews, data]);
+    setNewViewName("");
+  }
+
+  async function deleteView(view) {
+    const supabase = createClient();
+    setSavedViews(savedViews.filter((v) => v.id !== view.id));
+    await supabase.from("saved_views").delete().eq("id", view.id);
+  }
+
+  async function createFromTemplate(template) {
+    setShowTemplatesMenu(false);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("tasks")
+      .insert({
+        project_id: project.id,
+        title: template.title,
+        description: template.description,
+        labels: template.default_labels || [],
+        priority: template.default_priority,
+        status: "backlog",
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (data) {
+      setTasks([...tasks, data]);
+      logTaskActivity("task_created", data.title);
+    }
+  }
+
+  async function saveTemplate(e) {
+    e.preventDefault();
+    if (!newTemplate?.title?.trim()) return;
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("task_templates")
+      .insert({
+        project_id: project.id,
+        title: newTemplate.title.trim(),
+        default_priority: newTemplate.priority || null,
+        default_labels: newTemplate.labels
+          ? newTemplate.labels.split(",").map((l) => l.trim()).filter(Boolean)
+          : [],
+        created_by: user.id,
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setTemplates([...templates, data]);
+    setNewTemplate(null);
+  }
+
+  function toggleTaskSelect(task) {
+    setSelectedIds((ids) => {
+      const next = new Set(ids);
+      if (next.has(task.id)) next.delete(task.id);
+      else next.add(task.id);
+      return next;
+    });
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  async function bulkSetStatus(status) {
+    const supabase = createClient();
+    const ids = [...selectedIds];
+    setTasks(tasks.map((t) => (ids.includes(t.id) ? { ...t, status } : t)));
+    await supabase.from("tasks").update({ status, updated_at: new Date().toISOString() }).in("id", ids);
+    exitSelectMode();
+  }
+
+  async function bulkSetAssignee(email) {
+    const supabase = createClient();
+    const ids = [...selectedIds];
+    setTasks(tasks.map((t) => (ids.includes(t.id) ? { ...t, assignee_email: email || null } : t)));
+    await supabase.from("tasks").update({ assignee_email: email || null }).in("id", ids);
+    exitSelectMode();
+  }
+
+  async function bulkDelete() {
+    const supabase = createClient();
+    const ids = [...selectedIds];
+    setTasks(tasks.filter((t) => !ids.includes(t.id)));
+    await supabase.from("tasks").delete().in("id", ids);
+    exitSelectMode();
   }
 
   const allLabels = [...new Set(tasks.flatMap((t) => t.labels || []))].sort();
@@ -188,7 +361,112 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
                 className="w-44 pl-8"
               />
             </div>
+            <div className="relative">
+              <Button variant="secondary" size="sm" onClick={() => setShowViewsMenu((v) => !v)}>
+                <Bookmark size={13} strokeWidth={2.25} />
+                Views
+              </Button>
+              {showViewsMenu && (
+                <div className="absolute right-0 top-full z-30 mt-1.5 w-64 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-surface-raised p-1.5 shadow-lg">
+                  {savedViews.length === 0 && <p className="px-2 py-1.5 text-xs text-ink-tertiary">No saved views yet.</p>}
+                  {savedViews.map((v) => (
+                    <div key={v.id} className="group flex items-center gap-1 rounded-md hover:bg-hover">
+                      <button onClick={() => applyView(v)} className="flex-1 truncate px-2 py-1.5 text-left text-sm text-ink-primary">
+                        {v.name}
+                      </button>
+                      <button
+                        onClick={() => deleteView(v)}
+                        className="mr-1 rounded p-1 text-ink-tertiary opacity-0 hover:bg-danger-subtle hover:text-danger group-hover:opacity-100"
+                      >
+                        <X size={12} strokeWidth={2.25} />
+                      </button>
+                    </div>
+                  ))}
+                  <form onSubmit={saveCurrentView} className="mt-1 flex gap-1 border-t border-border pt-1.5">
+                    <Input
+                      placeholder="Save current filters as…"
+                      value={newViewName}
+                      onChange={(e) => setNewViewName(e.target.value)}
+                      className="h-7 flex-1 text-xs"
+                    />
+                    <Button type="submit" size="sm" disabled={!newViewName.trim()}>
+                      Save
+                    </Button>
+                  </form>
+                </div>
+              )}
+            </div>
+
             {canEdit && (
+              <div className="relative">
+                <Button variant="secondary" size="sm" onClick={() => setShowTemplatesMenu((v) => !v)}>
+                  <LayoutTemplate size={13} strokeWidth={2.25} />
+                  Templates
+                </Button>
+                {showTemplatesMenu && (
+                  <div className="absolute right-0 top-full z-30 mt-1.5 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-surface-raised p-1.5 shadow-lg">
+                    {templates.length === 0 && <p className="px-2 py-1.5 text-xs text-ink-tertiary">No templates yet.</p>}
+                    {templates.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => createFromTemplate(t)}
+                        className="block w-full truncate rounded-md px-2 py-1.5 text-left text-sm text-ink-primary hover:bg-hover"
+                      >
+                        {t.title}
+                      </button>
+                    ))}
+                    <div className="mt-1 border-t border-border pt-1.5">
+                      {newTemplate ? (
+                        <form onSubmit={saveTemplate} className="flex flex-col gap-1.5">
+                          <Input
+                            autoFocus
+                            placeholder="Template title"
+                            value={newTemplate.title || ""}
+                            onChange={(e) => setNewTemplate({ ...newTemplate, title: e.target.value })}
+                            className="h-7 text-xs"
+                          />
+                          <Input
+                            placeholder="Labels, comma separated"
+                            value={newTemplate.labels || ""}
+                            onChange={(e) => setNewTemplate({ ...newTemplate, labels: e.target.value })}
+                            className="h-7 text-xs"
+                          />
+                          <div className="flex gap-1">
+                            <Button type="button" variant="secondary" size="sm" onClick={() => setNewTemplate(null)}>
+                              Cancel
+                            </Button>
+                            <Button type="submit" size="sm" disabled={!newTemplate.title?.trim()}>
+                              Save
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button
+                          onClick={() => setNewTemplate({ title: "", labels: "" })}
+                          className="flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm text-accent hover:bg-hover"
+                        >
+                          <Plus size={13} strokeWidth={2.25} />
+                          New template
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {canEdit && (
+              <Button
+                variant={selectMode ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              >
+                <CheckSquare size={13} strokeWidth={2.25} />
+                {selectMode ? `${selectedIds.size} selected` : "Select"}
+              </Button>
+            )}
+
+            {canEdit && !selectMode && (
               <form onSubmit={addTask} className="flex gap-2">
                 <Input
                   placeholder="New task title"
@@ -204,6 +482,46 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
             )}
           </div>
         </div>
+
+        {selectMode && (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-subtle px-3 py-2">
+            <span className="text-xs font-medium text-ink-tertiary">Bulk actions for {selectedIds.size} task{selectedIds.size === 1 ? "" : "s"}:</span>
+            <Select
+              value=""
+              onChange={(e) => e.target.value && bulkSetStatus(e.target.value)}
+              disabled={selectedIds.size === 0}
+              className="h-7 w-auto text-xs"
+            >
+              <option value="">Set status…</option>
+              {STATUS_ORDER.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_META[s].label}
+                </option>
+              ))}
+            </Select>
+            <Select
+              value=""
+              onChange={(e) => e.target.value && bulkSetAssignee(e.target.value === "__none__" ? "" : e.target.value)}
+              disabled={selectedIds.size === 0}
+              className="h-7 w-auto text-xs"
+            >
+              <option value="">Set assignee…</option>
+              <option value="__none__">Unassigned</option>
+              {collaborators.map((c) => (
+                <option key={c.email} value={c.email}>
+                  {c.full_name || c.email}
+                </option>
+              ))}
+            </Select>
+            <Button variant="secondary" size="sm" disabled={selectedIds.size === 0} onClick={bulkDelete}>
+              <Trash2 size={13} strokeWidth={2.25} />
+              Delete
+            </Button>
+            <Button variant="secondary" size="sm" className="ml-auto" onClick={exitSelectMode}>
+              Cancel
+            </Button>
+          </div>
+        )}
 
         {(allLabels.length > 0 || tasks.some((t) => t.priority)) && (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -284,6 +602,9 @@ export default function Board({ project, role, tasks: initialTasks, collaborator
                             onDelete={deleteTask}
                             onOpen={setSelectedTask}
                             editable={canEdit}
+                            selectMode={selectMode}
+                            selected={selectedIds.has(t.id)}
+                            onToggleSelect={toggleTaskSelect}
                           />
                         </div>
                       ))}

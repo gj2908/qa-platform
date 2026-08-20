@@ -4,7 +4,7 @@ import Textarea from "./ui/Textarea";
 import Select from "./ui/Select";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
-import { Trash2, X, Send } from "lucide-react";
+import { Trash2, X, Send, Clock, ImageOff } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { getAvatarColor } from "../lib/avatarColor";
@@ -31,9 +31,18 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
   const textareaRef = useRef(null);
   const currentUser = useCurrentUser();
 
+  const [timeEntries, setTimeEntries] = useState([]);
+  const [logMinutes, setLogMinutes] = useState("");
+  const [logNote, setLogNote] = useState("");
+  const [loggingTime, setLoggingTime] = useState(false);
+
+  const [screenshotUrl, setScreenshotUrl] = useState(null); // undefined-ish states: null = none/not-loaded, "error" = failed
+
   useEffect(() => {
     if (!task?.id) return;
     setComments([]);
+    setTimeEntries([]);
+    setScreenshotUrl(null);
     const supabase = createClient();
     supabase
       .from("task_comments")
@@ -41,7 +50,45 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
       .eq("task_id", task.id)
       .order("created_at", { ascending: true })
       .then(({ data }) => setComments(data || []));
-  }, [task?.id]);
+    supabase
+      .from("task_time_entries")
+      .select("*")
+      .eq("task_id", task.id)
+      .order("logged_on", { ascending: false })
+      .then(({ data }) => setTimeEntries(data || []));
+    if (task.screenshot_path) {
+      fetch(`/api/tasks/screenshot-url?taskId=${task.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => setScreenshotUrl(data?.url || "error"))
+        .catch(() => setScreenshotUrl("error"));
+    }
+  }, [task?.id, task?.screenshot_path]);
+
+  async function logTime(e) {
+    e.preventDefault();
+    const minutes = parseInt(logMinutes, 10);
+    if (!minutes || minutes <= 0 || !currentUser?.email) return;
+    setLoggingTime(true);
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("task_time_entries")
+      .insert({
+        task_id: task.id,
+        project_id: task.project_id,
+        user_email: currentUser.email,
+        minutes,
+        note: logNote.trim() || null,
+      })
+      .select()
+      .single();
+    setLoggingTime(false);
+    if (error || !data) return;
+    setTimeEntries((entries) => [data, ...entries]);
+    setLogMinutes("");
+    setLogNote("");
+  }
+
+  const totalMinutes = timeEntries.reduce((sum, e) => sum + e.minutes, 0);
 
   if (!open || !task) return null;
 
@@ -172,6 +219,23 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
         </div>
 
         <div className="flex flex-col gap-4 px-5 py-5">
+          {task.screenshot_path && (
+            <div>
+              {screenshotUrl === "error" ? (
+                <div className="flex items-center gap-1.5 text-xs text-ink-tertiary">
+                  <ImageOff size={13} strokeWidth={2.25} />
+                  Couldn't load the attached screenshot.
+                </div>
+              ) : screenshotUrl ? (
+                <a href={screenshotUrl} target="_blank" rel="noreferrer">
+                  <img src={screenshotUrl} alt="Attached screenshot" className="max-h-56 w-full rounded-md border border-border object-contain" />
+                </a>
+              ) : (
+                <div className="h-24 w-full animate-pulse rounded-md bg-subtle" />
+              )}
+            </div>
+          )}
+
           <FormField label="Description" htmlFor="taskDescription">
             <Textarea
               id="taskDescription"
@@ -234,6 +298,43 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
                 disabled={!editable}
               />
             </FormField>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            <div className="flex items-center gap-1.5">
+              <Clock size={13} strokeWidth={2.25} className="text-ink-tertiary" />
+              <p className="text-xs font-medium text-ink-secondary">
+                Time logged{totalMinutes > 0 ? ` — ${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m` : ""}
+              </p>
+            </div>
+            {timeEntries.length > 0 && (
+              <div className="flex flex-col gap-1">
+                {timeEntries.map((e) => (
+                  <div key={e.id} className="flex items-center gap-2 text-xs text-ink-tertiary">
+                    <span className="font-medium text-ink-secondary">{e.minutes}m</span>
+                    <span>{e.user_email}</span>
+                    {e.note && <span className="min-w-0 truncate">— {e.note}</span>}
+                    <span className="ml-auto shrink-0">{e.logged_on}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {editable && (
+              <form onSubmit={logTime} className="flex gap-1.5">
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Minutes"
+                  value={logMinutes}
+                  onChange={(e) => setLogMinutes(e.target.value)}
+                  className="w-24"
+                />
+                <Input placeholder="Note (optional)" value={logNote} onChange={(e) => setLogNote(e.target.value)} className="flex-1" />
+                <Button type="submit" size="sm" variant="secondary" loading={loggingTime} disabled={!logMinutes}>
+                  Log
+                </Button>
+              </form>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 border-t border-border pt-4">

@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { releaseId, feedback, reporterEmail } = req.body || {};
+  const { releaseId, feedback, reporterEmail, screenshotPath } = req.body || {};
 
   const trimmedFeedback = typeof feedback === "string" ? feedback.trim() : "";
   if (!trimmedFeedback) {
@@ -67,6 +67,12 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Defense against path traversal / cross-release references — the
+  // signed upload URL (sign-feedback-upload.js) always scopes the path
+  // to this exact releaseId, so anything else is either forged or stale.
+  const safeScreenshotPath =
+    typeof screenshotPath === "string" && screenshotPath.startsWith(`${releaseId}/`) ? screenshotPath : null;
+
   const title = trimmedFeedback.length > 80 ? `${trimmedFeedback.slice(0, 77)}...` : trimmedFeedback;
   const buildLabel = `${release.app_name || "Build"} v${release.version}${
     release.build_number ? ` (${release.build_number})` : ""
@@ -97,6 +103,7 @@ export default async function handler(req, res) {
     source: "tester_feedback",
     ai_category: aiCategory,
     ai_severity: aiSeverity,
+    screenshot_path: safeScreenshotPath,
     created_by: null,
   });
 

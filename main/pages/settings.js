@@ -8,22 +8,29 @@ import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useToast } from "../components/ui/ToastProvider";
-import { CircleAlert, CircleCheck, Bell, BadgeCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Bell, BadgeCheck, ShieldCheck, ShieldOff, Copy, BellOff, Mail } from "lucide-react";
 import { isPushSupported, getPushSubscriptionState, subscribeToPush, unsubscribeFromPush } from "../lib/pushSubscribe";
 
 function ProfileCard() {
   const toast = useToast();
   const user = useCurrentUser();
   const [fullName, setFullName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [initialized, setInitialized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (user && !initialized) {
-      setFullName(user.user_metadata?.full_name || "");
-      setInitialized(true);
-    }
+    if (!user || initialized) return;
+    setFullName(user.user_metadata?.full_name || "");
+    setInitialized(true);
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => setAvatarUrl(data?.avatar_url || ""));
   }, [user, initialized]);
 
   async function save(e) {
@@ -44,7 +51,7 @@ function ProfileCard() {
     }
     const { error: profileError } = await supabase
       .from("profiles")
-      .update({ full_name: trimmed })
+      .update({ full_name: trimmed, avatar_url: avatarUrl.trim() || null })
       .eq("id", user.id);
     setSaving(false);
     if (profileError) {
@@ -80,12 +87,170 @@ function ProfileCard() {
             error={!!error}
           />
         </FormField>
+        <FormField label="Avatar URL" htmlFor="avatarUrl" hint="A link to an image, shown instead of your initials.">
+          <div className="flex items-center gap-3">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" onError={(e) => (e.target.style.visibility = "hidden")} />
+            ) : (
+              <div className="h-9 w-9 shrink-0 rounded-full bg-subtle" />
+            )}
+            <Input
+              id="avatarUrl"
+              type="url"
+              placeholder="https://…"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              className="flex-1"
+            />
+          </div>
+        </FormField>
         <div>
           <Button type="submit" loading={saving}>
             Save
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function TwoFactorCard() {
+  const toast = useToast();
+  const [factors, setFactors] = useState(null); // null = loading
+  const [enrolling, setEnrolling] = useState(null); // { factorId, qrCode, secret }
+  const [code, setCode] = useState("");
+  const [working, setWorking] = useState(false);
+
+  async function refresh() {
+    const supabase = createClient();
+    const { data } = await supabase.auth.mfa.listFactors();
+    setFactors((data?.totp || []).filter((f) => f.status === "verified"));
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  async function startEnroll() {
+    setWorking(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    setWorking(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setEnrolling({ factorId: data.id, qrCode: data.totp.qr_code, secret: data.totp.secret });
+  }
+
+  async function confirmEnroll(e) {
+    e.preventDefault();
+    if (!enrolling || code.trim().length !== 6) return;
+    setWorking(true);
+    const supabase = createClient();
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: enrolling.factorId });
+    if (challengeError) {
+      setWorking(false);
+      toast.error(challengeError.message);
+      return;
+    }
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: enrolling.factorId,
+      challengeId: challenge.id,
+      code: code.trim(),
+    });
+    setWorking(false);
+    if (verifyError) {
+      toast.error(verifyError.message);
+      return;
+    }
+    toast.success("Two-factor authentication enabled.");
+    setEnrolling(null);
+    setCode("");
+    refresh();
+  }
+
+  async function disable(factorId) {
+    setWorking(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.mfa.unenroll({ factorId });
+    setWorking(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Two-factor authentication disabled.");
+    refresh();
+  }
+
+  if (factors === null) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        {factors.length > 0 ? (
+          <ShieldCheck size={15} strokeWidth={2.25} className="text-success" />
+        ) : (
+          <ShieldOff size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        )}
+        <h2 className="text-sm font-semibold text-ink-primary">Two-factor authentication</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        {factors.length > 0
+          ? "An authenticator app is required at sign-in, on top of your password."
+          : "Add an authenticator app (Google Authenticator, 1Password, etc.) for a second sign-in step."}
+      </p>
+
+      {factors.length > 0 ? (
+        <div className="mt-4">
+          <Button variant="secondary" size="sm" loading={working} onClick={() => disable(factors[0].id)}>
+            Disable
+          </Button>
+        </div>
+      ) : enrolling ? (
+        <form onSubmit={confirmEnroll} className="mt-4 flex flex-col gap-3">
+          {enrolling.qrCode && (
+            <img src={enrolling.qrCode} alt="Scan with your authenticator app" className="h-40 w-40 rounded border border-border" />
+          )}
+          <p className="flex items-center gap-1.5 text-xs text-ink-tertiary">
+            Can't scan? Enter this key manually: <code className="rounded bg-subtle px-1 py-0.5">{enrolling.secret}</code>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard?.writeText(enrolling.secret);
+                toast.success("Copied.");
+              }}
+            >
+              <Copy size={12} strokeWidth={2.25} />
+            </button>
+          </p>
+          <FormField label="6-digit code" htmlFor="totpCode" required>
+            <Input
+              id="totpCode"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="123456"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+            />
+          </FormField>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setEnrolling(null)} disabled={working}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" loading={working} disabled={code.length !== 6}>
+              Confirm
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="mt-4">
+          <Button variant="secondary" size="sm" loading={working} onClick={startEnroll}>
+            Set up
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -140,6 +305,87 @@ function PushNotificationsCard() {
         >
           {state === "on" ? "On" : "Off"}
         </Button>
+      </div>
+    </Card>
+  );
+}
+
+function NotificationPreferencesCard() {
+  const toast = useToast();
+  const user = useCurrentUser();
+  const [projects, setProjects] = useState(null); // null = loading
+  const [prefsByProject, setPrefsByProject] = useState({});
+  const [working, setWorking] = useState(null); // project_id currently saving
+
+  useEffect(() => {
+    if (!user) return;
+    const supabase = createClient();
+    supabase
+      .from("projects")
+      .select("id, name")
+      .order("name")
+      .then(async ({ data: projectRows }) => {
+        setProjects(projectRows || []);
+        const { data: prefRows } = await supabase
+          .from("notification_preferences")
+          .select("project_id, muted, email_enabled")
+          .eq("user_id", user.id);
+        setPrefsByProject(Object.fromEntries((prefRows || []).map((p) => [p.project_id, p])));
+      });
+  }, [user]);
+
+  async function setPref(projectId, patch) {
+    setWorking(projectId);
+    const supabase = createClient();
+    const current = prefsByProject[projectId] || { muted: false, email_enabled: true };
+    const next = { ...current, ...patch };
+    const { error } = await supabase
+      .from("notification_preferences")
+      .upsert({ user_id: user.id, project_id: projectId, ...next }, { onConflict: "user_id,project_id" });
+    setWorking(null);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPrefsByProject((p) => ({ ...p, [projectId]: next }));
+  }
+
+  if (!projects || projects.length === 0) return null;
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink-primary">Notification preferences</h2>
+      <p className="mt-1 text-sm text-ink-tertiary">Mute the bell or emails for individual projects — this only affects you.</p>
+
+      <div className="mt-4 flex flex-col divide-y divide-border">
+        {projects.map((p) => {
+          const pref = prefsByProject[p.id] || { muted: false, email_enabled: true };
+          return (
+            <div key={p.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+              <p className="min-w-0 truncate text-sm text-ink-primary">{p.name}</p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button
+                  variant={pref.muted ? "primary" : "secondary"}
+                  size="sm"
+                  loading={working === p.id}
+                  onClick={() => setPref(p.id, { muted: !pref.muted })}
+                  title={pref.muted ? "Unmute" : "Mute"}
+                >
+                  {pref.muted ? <BellOff size={13} strokeWidth={2.25} /> : <Bell size={13} strokeWidth={2.25} />}
+                </Button>
+                <Button
+                  variant={pref.email_enabled ? "secondary" : "primary"}
+                  size="sm"
+                  loading={working === p.id}
+                  onClick={() => setPref(p.id, { email_enabled: !pref.email_enabled })}
+                  title={pref.email_enabled ? "Emails on" : "Emails off"}
+                >
+                  <Mail size={13} strokeWidth={2.25} />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </Card>
   );
@@ -206,7 +452,11 @@ export default function Settings() {
 
         <ProfileCard />
 
+        <TwoFactorCard />
+
         <PushNotificationsCard />
+
+        <NotificationPreferencesCard />
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-ink-primary">Change password</h2>

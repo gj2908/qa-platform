@@ -23,7 +23,18 @@ function dueDateStatus(dueDate) {
   return "normal";
 }
 
-export default function TaskCard({ task, assigneeName, onMove, onDelete, onOpen, editable = true, draggableProps = {} }) {
+export default function TaskCard({
+  task,
+  assigneeName,
+  onMove,
+  onDelete,
+  onOpen,
+  editable = true,
+  draggableProps = {},
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
+}) {
   const idx = STATUS_ORDER.indexOf(task.status);
   const meta = STATUS_META[task.status];
   const dueStatus = dueDateStatus(task.due_date);
@@ -37,17 +48,28 @@ export default function TaskCard({ task, assigneeName, onMove, onDelete, onOpen,
 
   return (
     <div
-      draggable={editable}
-      onDragStart={editable ? handleDragStart : undefined}
-      onClick={() => onOpen?.(task)}
-      className={`group flex cursor-pointer flex-col gap-2 rounded-md border border-l-[3px] border-border bg-surface p-3 shadow-sm transition-shadow hover:shadow-md ${meta.accent}`}
+      draggable={editable && !selectMode}
+      onDragStart={editable && !selectMode ? handleDragStart : undefined}
+      onClick={() => (selectMode ? onToggleSelect?.(task) : onOpen?.(task))}
+      className={`group flex cursor-pointer flex-col gap-2 rounded-md border border-l-[3px] bg-surface p-3 shadow-sm transition-shadow hover:shadow-md ${meta.accent} ${
+        selected ? "border-accent ring-1 ring-accent" : "border-border"
+      }`}
       {...draggableProps}
     >
       <div className="flex items-start gap-1.5">
+        {selectMode && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect?.(task)}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-accent"
+          />
+        )}
         <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-ink-primary">
           {task.title}
         </p>
-        {editable && (
+        {editable && !selectMode && (
           <GripVertical
             size={14}
             className="mt-0.5 shrink-0 cursor-grab text-ink-disabled opacity-0 transition-opacity group-hover:opacity-100"

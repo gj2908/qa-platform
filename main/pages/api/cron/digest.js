@@ -25,7 +25,26 @@ export default async function handler(req, res) {
       .from("project_collaborators")
       .select("email")
       .eq("project_id", project.id);
-    const recipients = [...new Set((owners || []).map((o) => o.email))];
+    let recipients = [...new Set((owners || []).map((o) => o.email))];
+    if (recipients.length === 0) continue;
+
+    // Personal notification preferences (Settings → Notification
+    // preferences) can opt a user out of emails for just this project.
+    // notification_preferences is keyed by auth user id, not email, so
+    // this is a separate lookup rather than a PostgREST embed — there's
+    // no direct FK between notification_preferences and profiles for
+    // PostgREST to follow (both independently reference auth.users).
+    const { data: emailOptOuts } = await service
+      .from("notification_preferences")
+      .select("user_id")
+      .eq("project_id", project.id)
+      .eq("email_enabled", false);
+    const optedOutIds = (emailOptOuts || []).map((r) => r.user_id);
+    if (optedOutIds.length > 0) {
+      const { data: optedOutProfiles } = await service.from("profiles").select("email").in("id", optedOutIds);
+      const optedOut = new Set((optedOutProfiles || []).map((p) => p.email));
+      recipients = recipients.filter((email) => !optedOut.has(email));
+    }
     if (recipients.length === 0) continue;
 
     const digest = await buildDigest(service, project);
