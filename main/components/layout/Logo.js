@@ -1,5 +1,5 @@
-// The brand mark: a checkmark (QA/verified) on a white rounded-square
-// background — same glyph used for the PWA icons (public/icons/*) and
+// The brand mark: a checkmark (QA/verified) on the accent-blue rounded
+// square — same glyph used for the PWA icons (public/icons/*) and
 // notification icon (public/sw.js), kept as inline SVG here so it never
 // depends on the icon files loading and can inherit currentColor.
 function CheckmarkMark() {
@@ -37,7 +37,7 @@ export default function Logo({ compact = false, logoUrl = null, orgName = null }
 
   return (
     <div className="flex items-center gap-2.5 overflow-hidden">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-white text-accent">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg">
         <CheckmarkMark />
       </span>
       {!compact && (
