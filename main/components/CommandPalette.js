@@ -29,6 +29,10 @@ function buildFlatResults(results) {
 // added to TopNav so the top bar itself stays untouched.
 export default function CommandPalette() {
   const router = useRouter();
+  // When browsing inside an org's own pages, scope search to that org's
+  // projects — someone navigating org-first is almost always looking
+  // for something within it, not across every project they can see.
+  const orgId = router.pathname.startsWith("/organizations/[id]") ? router.query.id : null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState({ projects: [], releases: [], tasks: [] });
@@ -66,14 +70,16 @@ export default function CommandPalette() {
       return;
     }
     debounceRef.current = setTimeout(async () => {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+      const params = new URLSearchParams({ q: query.trim() });
+      if (orgId) params.set("orgId", orgId);
+      const res = await fetch(`/api/search?${params.toString()}`);
       if (res.ok) {
         setResults(await res.json());
         setActiveIndex(0);
       }
     }, DEBOUNCE_MS);
     return () => clearTimeout(debounceRef.current);
-  }, [query, open]);
+  }, [query, open, orgId]);
 
   if (!open) return null;
 
@@ -111,7 +117,7 @@ export default function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder="Search projects, releases, tasks…"
+            placeholder={orgId ? "Search this organization…" : "Search projects, releases, tasks…"}
             className="w-full bg-transparent text-sm text-ink-primary placeholder:text-ink-tertiary focus:outline-none"
           />
           <kbd className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-medium text-ink-tertiary">

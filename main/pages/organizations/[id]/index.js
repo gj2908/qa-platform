@@ -3,7 +3,7 @@ import { createServerSupabase } from "../../../lib/supabase/server";
 import AppShell from "../../../components/layout/AppShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
-import Input from "../../../components/ui/Input";
+import Textarea from "../../../components/ui/Textarea";
 import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
@@ -125,58 +125,97 @@ export default function OrganizationDetail({
   const [error, setError] = useState("");
   const [removeTarget, setRemoveTarget] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [addProjectId, setAddProjectId] = useState("");
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [addingProject, setAddingProject] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
 
   const isAdmin = myRole === "org_admin";
   const seatsUsed = members.length;
 
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   async function addMember(e) {
     e.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return;
-    setAdding(true);
-    setError("");
-    const res = await fetch("/api/organizations/members/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: org.id, email: normalizedEmail, role }),
-    });
-    setAdding(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error || "Couldn't add that member.");
+    // Accepts one email or many, pasted separated by commas/newlines/
+    // whitespace — same single endpoint either way, just called once
+    // per address so each add gets its own invite-email/seat-limit
+    // handling exactly as it already does for a single add.
+    const emails = [...new Set(email.split(/[\s,]+/).map((e) => e.trim().toLowerCase()).filter(Boolean))];
+    const invalid = emails.filter((e) => !EMAIL_RE.test(e));
+    if (emails.length === 0) return;
+    if (invalid.length > 0) {
+      setError(`Not a valid email: ${invalid.join(", ")}`);
       return;
     }
-    setMembers((m) => {
-      const withoutExisting = m.filter((x) => x.email !== normalizedEmail);
-      return [...withoutExisting, { email: normalizedEmail, role, created_at: new Date().toISOString() }];
-    });
-    setEmail("");
-    toast.success(data.invited ? "Member added — invite email sent." : "Member added.");
+
+    setAdding(true);
+    setError("");
+    let addedCount = 0;
+    let invitedCount = 0;
+    const failures = [];
+    for (const normalizedEmail of emails) {
+      const res = await fetch("/api/organizations/members/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: org.id, email: normalizedEmail, role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        failures.push(`${normalizedEmail}: ${data.error || "failed"}`);
+        continue;
+      }
+      addedCount += 1;
+      if (data.invited) invitedCount += 1;
+      setMembers((m) => {
+        const withoutExisting = m.filter((x) => x.email !== normalizedEmail);
+        return [...withoutExisting, { email: normalizedEmail, role, created_at: new Date().toISOString() }];
+      });
+    }
+    setAdding(false);
+
+    if (addedCount > 0) {
+      setEmail("");
+      toast.success(
+        addedCount === 1
+          ? invitedCount > 0
+            ? "Member added — invite email sent."
+            : "Member added."
+          : `${addedCount} member${addedCount === 1 ? "" : "s"} added${invitedCount > 0 ? `, ${invitedCount} invited` : ""}.`
+      );
+    }
+    if (failures.length > 0) {
+      setError(failures.join("; "));
+    }
   }
 
   async function addProject(e) {
     e.preventDefault();
-    if (!addProjectId) return;
+    if (selectedProjectIds.length === 0) return;
     setAddingProject(true);
-    const target = unattached.find((p) => p.id === addProjectId);
-    const res = await fetch("/api/organizations/set-org", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: addProjectId, orgId: org.id }),
-    });
+    const targets = unattached.filter((p) => selectedProjectIds.includes(p.id));
+    const addedTargets = [];
+    for (const target of targets) {
+      const res = await fetch("/api/organizations/set-org", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: target.id, orgId: org.id }),
+      });
+      if (res.ok) addedTargets.push(target);
+    }
     setAddingProject(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      toast.error(data.error || "Couldn't add that project.");
+    if (addedTargets.length === 0) {
+      toast.error("Couldn't add the selected project(s).");
       return;
     }
-    setUnattached((u) => u.filter((p) => p.id !== addProjectId));
-    if (target) setProjects((p) => [...p, { id: target.id, name: target.name }].sort((a, b) => a.name.localeCompare(b.name)));
-    setAddProjectId("");
-    toast.success("Project added to the organization.");
+    const addedIds = new Set(addedTargets.map((t) => t.id));
+    setUnattached((u) => u.filter((p) => !addedIds.has(p.id)));
+    setProjects((p) => [...p, ...addedTargets.map((t) => ({ id: t.id, name: t.name }))].sort((a, b) => a.name.localeCompare(b.name)));
+    if (addedTargets.length < targets.length) {
+      toast.error(`Added ${addedTargets.length} of ${targets.length} projects — some failed.`);
+    } else {
+      toast.success(addedTargets.length === 1 ? "Project added to the organization." : `${addedTargets.length} projects added to the organization.`);
+    }
+    setSelectedProjectIds([]);
   }
 
   async function confirmRemove() {
@@ -219,7 +258,10 @@ export default function OrganizationDetail({
                 {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
               </div>
               <p className="mt-0.5 text-sm text-ink-tertiary">
-                {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}
+                {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}{" "}
+                <a href="/docs/permissions" className="text-accent hover:text-accent-hover">
+                  What can each role do?
+                </a>
               </p>
             </div>
           </div>
@@ -242,6 +284,15 @@ export default function OrganizationDetail({
             value={org.seat_limit ? `${seatsUsed} / ${org.seat_limit}` : `${seatsUsed}`}
           />
         </div>
+
+        {isAdmin && org.seat_limit && org.seat_limit - seatsUsed <= 1 && (
+          <p className="flex items-center gap-1.5 rounded-md bg-warning-subtle px-3.5 py-2.5 text-sm text-warning-subtle-fg">
+            <CircleAlert size={14} />
+            {org.seat_limit - seatsUsed <= 0
+              ? "No seats left — remove a member or ask your platform operator to raise the seat limit before adding another."
+              : "Only 1 seat left on this organization."}
+          </p>
+        )}
 
         {error && (
           <p className="flex items-center gap-1.5 rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
@@ -305,22 +356,29 @@ export default function OrganizationDetail({
           </div>
 
           {isAdmin && unattached.length > 0 && (
-            <form onSubmit={addProject} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <FormField label="Add one of your projects">
-                  <Select value={addProjectId} onChange={(e) => setAddProjectId(e.target.value)}>
-                    <option value="">Choose a project…</option>
-                    {unattached.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormField>
-              </div>
-              <Button type="submit" loading={addingProject} disabled={!addProjectId}>
+            <form onSubmit={addProject} className="mt-4 flex flex-col gap-3">
+              <FormField label={`Add your project${unattached.length === 1 ? "" : "s"} (select one or more)`}>
+                <div className="flex flex-col gap-1.5 rounded-md border border-border p-2">
+                  {unattached.map((p) => (
+                    <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm text-ink-primary hover:bg-subtle">
+                      <input
+                        type="checkbox"
+                        checked={selectedProjectIds.includes(p.id)}
+                        onChange={(e) =>
+                          setSelectedProjectIds((ids) =>
+                            e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id)
+                          )
+                        }
+                        className="h-3.5 w-3.5 rounded border-border accent-accent"
+                      />
+                      {p.name}
+                    </label>
+                  ))}
+                </div>
+              </FormField>
+              <Button type="submit" loading={addingProject} disabled={selectedProjectIds.length === 0} className="self-start">
                 <FolderPlus size={15} strokeWidth={2.25} />
-                Add
+                {selectedProjectIds.length > 1 ? `Add ${selectedProjectIds.length} projects` : "Add"}
               </Button>
             </form>
           )}
@@ -358,10 +416,10 @@ export default function OrganizationDetail({
           {isAdmin && (
             <form onSubmit={addMember} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="flex-1">
-                <FormField label="Email">
-                  <Input
-                    type="email"
-                    placeholder="teammate@company.com"
+                <FormField label="Email (paste several to bulk-invite)">
+                  <Textarea
+                    rows={1}
+                    placeholder="teammate@company.com, another@company.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />

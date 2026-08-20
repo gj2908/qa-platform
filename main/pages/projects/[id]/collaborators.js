@@ -172,7 +172,10 @@ export default function Collaborators({ project, role: myRole, collaborators: in
           <p className="mt-1 text-sm text-ink-tertiary">
             {isOwner
               ? "Manage who has access to this project and what they can do."
-              : `You have ${ROLE_META[myRole]?.label.toLowerCase()} access to this project.`}
+              : `You have ${ROLE_META[myRole]?.label.toLowerCase()} access to this project.`}{" "}
+            <a href="/docs/permissions" className="text-accent hover:text-accent-hover">
+              What can each role do?
+            </a>
           </p>
         </div>
 
