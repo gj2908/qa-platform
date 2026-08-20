@@ -40,6 +40,8 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
   const [seatLimit, setSeatLimit] = useState(org.seat_limit ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [domainStatus, setDomainStatus] = useState(org.domain_status);
+  const [domainSaving, setDomainSaving] = useState(false);
 
   async function saveSeatLimit() {
     setSaving(true);
@@ -54,6 +56,21 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
       setSaved(true);
     } else {
       alert("Couldn't update the seat limit.");
+    }
+  }
+
+  async function setDomain(nextStatus) {
+    setDomainSaving(true);
+    const res = await fetch("/api/organizations/set-domain-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, domainStatus: nextStatus }),
+    });
+    setDomainSaving(false);
+    if (res.ok) {
+      setDomainStatus(nextStatus);
+    } else {
+      alert("Couldn't update the domain status.");
     }
   }
 
@@ -93,6 +110,40 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
             <span className="text-xs text-slate-400">{members.length} seat(s) currently used</span>
           </div>
         </Section>
+
+        {org.domain && (
+          <Section title="Domain connection">
+            <div className="flex flex-col gap-2 p-4">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm text-slate-700 dark:text-slate-300">{org.domain}</span>
+                <Badge tone={domainStatus === "connected" ? "success" : domainStatus === "pending" ? "warning" : "neutral"}>
+                  {domainStatus === "connected" ? "Connected" : domainStatus === "pending" ? "Pending" : "Display only"}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400">
+                {domainStatus === "pending"
+                  ? "Requested by an org admin — once vercel domains add has been run and DNS resolves, mark it connected below."
+                  : "No connection requested, or already handled."}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDomain("connected")}
+                  disabled={domainSaving || domainStatus === "connected"}
+                  className="h-9 rounded-md bg-primary-600 px-3 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  Mark connected
+                </button>
+                <button
+                  onClick={() => setDomain(null)}
+                  disabled={domainSaving || domainStatus == null}
+                  className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Clear status
+                </button>
+              </div>
+            </div>
+          </Section>
+        )}
 
         <Section title={`Members (${members.length})`}>
           {members.length === 0 ? (

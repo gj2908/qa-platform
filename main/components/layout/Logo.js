@@ -22,12 +22,10 @@ export default function Logo({ compact = false, logoUrl = null, orgName = null }
   if (logoUrl) {
     return (
       <div className="flex items-center gap-2.5 overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={logoUrl}
-          alt={orgName || "Logo"}
-          className="h-7 w-7 shrink-0 rounded-md object-cover"
-        />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-subtle p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoUrl} alt={orgName || "Logo"} className="h-full w-full object-contain" />
+        </span>
         {!compact && orgName && (
           <span className="truncate text-sm font-semibold tracking-tight text-ink-primary">{orgName}</span>
         )}

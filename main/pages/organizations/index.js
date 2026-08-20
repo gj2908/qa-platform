@@ -118,12 +118,10 @@ export default function Organizations({ orgs: initial }) {
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   {o.logo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={o.logo_url}
-                      alt={o.name}
-                      className="h-8 w-8 shrink-0 rounded-md border border-border object-cover"
-                    />
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-subtle p-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={o.logo_url} alt={o.name} className="h-full w-full object-contain" />
+                    </span>
                   ) : (
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
                       <Building2 size={15} strokeWidth={2.25} />

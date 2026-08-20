@@ -390,6 +390,7 @@ create table organizations (
   logo_url text,
   accent_color text,
   domain text, -- display-only, e.g. "acme.com" — not verified, not used for auto-join
+  domain_status text check (domain_status in ('pending', 'connected')), -- null = display-only; set when an admin requests real connection, see admin/'s fulfillment flow
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );

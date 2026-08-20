@@ -18,11 +18,11 @@ import {
   CircleAlert,
   Users,
   FolderKanban,
-  Palette,
   Download,
   FolderPlus,
   Building2,
   Clock,
+  Settings,
 } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -185,28 +185,36 @@ export default function OrganizationDetail({
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div className="flex items-center gap-3">
-          {org.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={org.logo_url}
-              alt={org.name}
-              className="h-11 w-11 shrink-0 rounded-lg border border-border object-cover"
-            />
-          ) : (
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg">
-              <Building2 size={20} strokeWidth={2} />
-            </span>
-          )}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-xl font-semibold text-ink-primary">{org.name}</h1>
-              {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {org.logo_url ? (
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-subtle p-1.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={org.logo_url} alt={org.name} className="h-full w-full object-contain" />
+              </span>
+            ) : (
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg">
+                <Building2 size={20} strokeWidth={2} />
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-xl font-semibold text-ink-primary">{org.name}</h1>
+                {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
+              </div>
+              <p className="mt-0.5 text-sm text-ink-tertiary">
+                {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}
+              </p>
             </div>
-            <p className="mt-0.5 text-sm text-ink-tertiary">
-              {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}
-            </p>
           </div>
+          {isAdmin && (
+            <a href={`/organizations/${org.id}/settings`} className="shrink-0">
+              <Button variant="secondary" size="sm">
+                <Settings size={14} strokeWidth={2.25} />
+                Settings
+              </Button>
+            </a>
+          )}
         </div>
 
         <div className="grid grid-cols-3 gap-3">
@@ -242,7 +250,7 @@ export default function OrganizationDetail({
                       <Icon size={12} strokeWidth={2.25} />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm text-ink-primary">
+                      <p className="truncate text-sm text-ink-primary">
                         <span className="font-medium">{a.actor_email}</span> {meta.label}
                         {a.project_name ? <span className="text-ink-tertiary"> in {a.project_name}</span> : null}
                         {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
@@ -381,8 +389,6 @@ export default function OrganizationDetail({
             })}
           </div>
         </Card>
-
-        {isAdmin && <BrandingCard org={org} />}
       </div>
 
       <ConfirmDialog
@@ -412,82 +418,3 @@ function StatTile({ icon: Icon, label, value }) {
   );
 }
 
-function BrandingCard({ org }) {
-  const [logoUrl, setLogoUrl] = useState(org.logo_url || "");
-  const [accentColor, setAccentColor] = useState(org.accent_color || "");
-  const [domain, setDomain] = useState(org.domain || "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-
-  const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-  async function save(e) {
-    e.preventDefault();
-    if (accentColor && !HEX_RE.test(accentColor)) {
-      setError("Accent color must be a hex code, e.g. #3358d4");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    setSaved(false);
-    const res = await fetch("/api/organizations/branding", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        orgId: org.id,
-        logoUrl: logoUrl.trim() || null,
-        accentColor: accentColor.trim() || null,
-        domain: domain.trim() || null,
-      }),
-    });
-    setSaving(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error || "Couldn't save branding.");
-      return;
-    }
-    setSaved(true);
-  }
-
-  return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2">
-        <Palette size={15} strokeWidth={2.25} className="text-ink-secondary" />
-        <h2 className="text-sm font-semibold text-ink-primary">Branding</h2>
-      </div>
-      <p className="mt-1 text-sm text-ink-tertiary">
-        The logo shows throughout the app for this org's projects and pages; the accent color only
-        applies to this org's public install/share pages.
-      </p>
-
-      <form onSubmit={save} className="mt-4 flex flex-col gap-3">
-        <FormField label="Domain" hint="Display only, e.g. acme.com — not verified, doesn't affect access">
-          <Input placeholder="acme.com" value={domain} onChange={(e) => setDomain(e.target.value)} />
-        </FormField>
-        <FormField label="Logo URL" hint="A publicly reachable image URL — square works best">
-          <Input
-            type="url"
-            placeholder="https://yourcompany.com/logo.png"
-            value={logoUrl}
-            onChange={(e) => setLogoUrl(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Accent color" error={error} hint="Hex code, e.g. #3358d4">
-          <Input
-            placeholder="#3358d4"
-            value={accentColor}
-            onChange={(e) => setAccentColor(e.target.value)}
-            error={!!error}
-          />
-        </FormField>
-        <div className="flex items-center gap-3">
-          <Button type="submit" loading={saving} className="w-fit">
-            Save branding
-          </Button>
-          {saved && <span className="text-sm text-success">Saved</span>}
-        </div>
-      </form>
-    </Card>
-  );
-}

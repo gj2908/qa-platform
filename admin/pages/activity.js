@@ -12,6 +12,7 @@ const ACTION_LABEL = {
   admin_removed: "removed a platform admin",
   organization_deleted: "deleted organization",
   organization_seat_limit_updated: "updated organization seat limit",
+  organization_domain_status_updated: "updated organization domain status",
 };
 
 export async function getServerSideProps() {
