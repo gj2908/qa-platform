@@ -4,6 +4,11 @@ import { Inter } from "next/font/google";
 import { useRouter } from "next/router";
 import { AnimatePresence, motion } from "framer-motion";
 import "../styles/globals.css";
+// Imported for its module-level `beforeinstallprompt` listener side
+// effect — must load before any gate/TopNav/UserMenu component gets a
+// chance to mount, since that one-time browser event fires early and
+// Chrome never re-dispatches it. See lib/pwaInstallPrompt.js.
+import "../lib/pwaInstallPrompt";
 import { ThemeProvider } from "../components/ThemeProvider";
 import { ToastProvider } from "../components/ui/ToastProvider";
 import { isAppShellPath } from "../lib/publicRoutes";
