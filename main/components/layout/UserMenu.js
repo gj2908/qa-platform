@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, Settings, Building2, ListChecks } from "lucide-react";
+import { LogOut, Settings, Building2, ListChecks, Download } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
 import { getAvatarColor } from "../../lib/avatarColor";
+import { usePwaInstall } from "../../lib/usePwaInstall";
 import ThemeToggle from "../ThemeToggle";
+import PwaInstallInstructions from "./PwaInstallInstructions";
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
   const user = useCurrentUser();
   const email = user?.email || "";
   const fullName = user?.user_metadata?.full_name?.trim() || "";
   const displayName = fullName || email;
   const ref = useRef(null);
+  const { canShowInstall, canPromptInstall, needsIOSInstructions, promptInstall } = usePwaInstall();
 
   useEffect(() => {
     function onClickOutside(e) {
@@ -26,6 +30,15 @@ export default function UserMenu() {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
+  }
+
+  async function handleInstallClick() {
+    setOpen(false);
+    if (canPromptInstall) {
+      await promptInstall();
+    } else if (needsIOSInstructions) {
+      setShowIOSInstructions(true);
+    }
   }
 
   const initial = displayName ? displayName[0].toUpperCase() : "?";
@@ -82,6 +95,15 @@ export default function UserMenu() {
             <Building2 size={14} strokeWidth={2} />
             Organizations
           </Link>
+          {canShowInstall && (
+            <button
+              onClick={handleInstallClick}
+              className="mt-1 flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
+            >
+              <Download size={14} strokeWidth={2} />
+              Install app
+            </button>
+          )}
           <button
             onClick={signOut}
             className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
@@ -91,6 +113,7 @@ export default function UserMenu() {
           </button>
         </div>
       )}
+      <PwaInstallInstructions open={showIOSInstructions} onClose={() => setShowIOSInstructions(false)} />
     </div>
   );
 }
