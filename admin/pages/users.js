@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AdminShell from "../components/AdminShell";
 import { Table, TableHead, TableBody, TableRow } from "../components/ui/Table";
+import Badge from "../components/ui/Badge";
 import { createServiceClient } from "../lib/supabase";
 import { Trash2, Search } from "lucide-react";
 
@@ -18,6 +19,7 @@ export async function getServerSideProps() {
       fullName: nameByEmail[u.email] || null,
       createdAt: u.created_at,
       lastSignInAt: u.last_sign_in_at || null,
+      emailConfirmed: !!u.email_confirmed_at,
     }))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -71,6 +73,7 @@ export default function AdminUsers({ users: initial }) {
           <TableHead>
             <th className="px-4 py-2 font-medium">Email</th>
             <th className="px-4 py-2 font-medium">Name</th>
+            <th className="px-4 py-2 font-medium">Verified</th>
             <th className="px-4 py-2 font-medium">Joined</th>
             <th className="px-4 py-2 font-medium">Last sign-in</th>
             <th className="px-4 py-2"></th>
@@ -80,6 +83,11 @@ export default function AdminUsers({ users: initial }) {
               <TableRow key={u.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{u.email}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{u.fullName || "—"}</td>
+                <td className="px-4 py-2.5">
+                  <Badge tone={u.emailConfirmed ? "success" : "warning"}>
+                    {u.emailConfirmed ? "Verified" : "Unverified"}
+                  </Badge>
+                </td>
                 <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
                   {new Date(u.createdAt).toLocaleDateString()}
                 </td>

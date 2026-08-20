@@ -111,30 +111,30 @@ plain `transition-colors` for hover states, which is correct for those.
   project doesn't expose files outside `main/`, even though the full
   repo is cloned (confirmed by a real deploy failure — `ENOENT` on
   `../CHANGELOG.md`). Update both files together when adding an entry.
-- **OTP-code verification, one shared UI component, three separate email
+- **OTP-code verification, one shared UI component, two separate email
   templates.** `components/ui/OtpCodeInput.js` (8-digit, matching
   `config.toml`'s `otp_length = 8`) is reused by every code-entry flow;
   each flow calls a *different* Supabase Auth send API so it gets its own
   dedicated email template/subject (never share a template across
-  flows — a magic-link email that says "sign in" is wrong when it's
-  actually for a password reset, learned the hard way this round):
-  `signUp()`/`resend({type:"signup"})` → `confirmation` template →
-  `verifyOtp({type:"signup"})`; `signInWithOtp({shouldCreateUser:false})`
-  → `magic_link` template → `verifyOtp({type:"email"})` (existing-user
-  one-time reverification only); `resetPasswordForEmail()` → `recovery`
+  flows): `signUp()`/`resend({type:"signup"})` → `confirmation` template
+  → `verifyOtp({type:"signup"})`; `resetPasswordForEmail()` → `recovery`
   template → `verifyOtp({type:"recovery"})` (forgot password). Templates
   live in `supabase/templates/*.html`, wired via
-  `[auth.email.template.*]` in `supabase/config.toml`.
-- **A DB-backed gate needing its own network round-trip must render a
-  blocking loading state, not `return null`, while unknown.** The two
-  older gates (`VerifyEmailGate`, `CompleteProfileGate`) get their answer
-  synchronously from the already-loaded session/JWT object.
-  `ReverificationGate.js` is the first one needing an actual
-  `profiles` row fetch after `user` resolves — during that fetch, if the
-  gate returns `null` instead of a loading shell, a page refresh can
-  briefly show real page content before the gate mounts. Any future gate
-  with a real DB dependency needs the same three-state render (unknown →
-  loading shell; false → nothing; true → the real gate).
+  `[auth.email.template.*]` in `supabase/config.toml`. Sign-in itself is
+  email+password only (`signInWithPassword`) — there's no magic-link
+  sign-in anywhere in this app.
+- **Gates render a blocking loading state, not `return null`, while
+  their answer is unknown.** `VerifyEmailGate`/`CompleteProfileGate` get
+  their answer synchronously from the already-loaded session/JWT object,
+  so this rarely matters for them in practice — but any future gate
+  needing its own DB round-trip (there used to be one,
+  `ReverificationGate.js`, a one-time legacy-account reverification
+  check via `signInWithOtp()`/the `magic_link` template — removed once
+  every account had been reverified and it was adding a network round
+  trip + loading flash on every hard refresh for zero remaining benefit)
+  must use the same three-state render (unknown → loading shell; false →
+  nothing; true → the real gate) or a page refresh can briefly show real
+  content before the gate mounts.
 
 ## Testing changes
 

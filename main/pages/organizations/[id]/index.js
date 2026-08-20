@@ -265,7 +265,7 @@ function BrandingCard({ org }) {
         <h2 className="text-sm font-semibold text-ink-primary">Branding</h2>
       </div>
       <p className="mt-1 text-sm text-ink-tertiary">
-        Shown on this org's public install/share pages instead of the default QA Platform logo.
+        Shown on this org's public install/share pages instead of the default Vrsnify logo.
       </p>
 
       <form onSubmit={save} className="mt-4 flex flex-col gap-3">

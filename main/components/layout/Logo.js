@@ -1,4 +1,20 @@
-import { Boxes } from "lucide-react";
+// The brand mark: a checkmark (QA/verified) on the accent-blue rounded
+// square — same glyph used for the PWA icons (public/icons/*) and
+// notification icon (public/sw.js), kept as inline SVG here so it never
+// depends on the icon files loading and can inherit currentColor.
+function CheckmarkMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M6 12.5 L10.2 16.7 L18 8"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 // logoUrl/orgName are optional — every existing call site (no org, or an
 // ungrouped project) renders exactly as before via the default params.
@@ -22,11 +38,11 @@ export default function Logo({ compact = false, logoUrl = null, orgName = null }
   return (
     <div className="flex items-center gap-2.5 overflow-hidden">
       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-accent-fg">
-        <Boxes size={16} strokeWidth={2.25} />
+        <CheckmarkMark />
       </span>
       {!compact && (
         <span className="truncate text-sm font-semibold tracking-tight text-ink-primary">
-          QA Platform
+          Vrsnify
         </span>
       )}
     </div>

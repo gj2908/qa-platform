@@ -5,9 +5,11 @@ import FormField from "../components/ui/FormField";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useToast } from "../components/ui/ToastProvider";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Bell, BadgeCheck } from "lucide-react";
+import { isPushSupported, getPushSubscriptionState, subscribeToPush, unsubscribeFromPush } from "../lib/pushSubscribe";
 
 function ProfileCard() {
   const toast = useToast();
@@ -54,8 +56,18 @@ function ProfileCard() {
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-semibold text-ink-primary">Profile</h2>
-      <p className="mt-1 text-sm text-ink-tertiary">Your name, shown to collaborators on shared projects.</p>
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-ink-primary">Profile</h2>
+        {user && (
+          <Badge tone={user.email_confirmed_at ? "success" : "warning"} icon={user.email_confirmed_at ? BadgeCheck : CircleAlert}>
+            {user.email_confirmed_at ? "Verified" : "Unverified"}
+          </Badge>
+        )}
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Your name, shown to collaborators on shared projects.
+        {user?.email ? ` Signed in as ${user.email}.` : ""}
+      </p>
 
       <form onSubmit={save} className="mt-5 flex flex-col gap-4">
         <FormField label="Full name" htmlFor="fullName" required error={error}>
@@ -74,6 +86,61 @@ function ProfileCard() {
           </Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+function PushNotificationsCard() {
+  const toast = useToast();
+  const user = useCurrentUser();
+  const [state, setState] = useState("checking"); // checking | unsupported | off | on
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    getPushSubscriptionState().then(setState);
+  }, []);
+
+  async function toggle() {
+    setWorking(true);
+    try {
+      if (state === "on") {
+        await unsubscribeFromPush();
+        setState("off");
+        toast.success("Push notifications disabled on this browser.");
+      } else {
+        await subscribeToPush(user.email);
+        setState("on");
+        toast.success("Push notifications enabled on this browser.");
+      }
+    } catch (e) {
+      toast.error(e.message || "Couldn't update push notifications.");
+    }
+    setWorking(false);
+  }
+
+  if (state === "unsupported") return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Bell size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Push notifications</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              Get a browser notification on this device for task mentions and release publishes.
+            </p>
+          </div>
+        </div>
+        <Button
+          variant={state === "on" ? "primary" : "secondary"}
+          size="sm"
+          loading={working || state === "checking" || !user}
+          onClick={toggle}
+        >
+          {state === "on" ? "On" : "Off"}
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -138,6 +205,8 @@ export default function Settings() {
         </div>
 
         <ProfileCard />
+
+        <PushNotificationsCard />
 
         <Card className="p-5">
           <h2 className="text-sm font-semibold text-ink-primary">Change password</h2>

@@ -165,7 +165,7 @@ export default function Login() {
           {mode === "signin" ? "Sign in" : "Create your account"}
         </h1>
         <p className="mt-1 text-sm text-ink-tertiary">
-          {mode === "signin" ? "Welcome back to QA Platform" : "Set up access to QA Platform"}
+          {mode === "signin" ? "Welcome back to Vrsnify" : "Set up access to Vrsnify"}
         </p>
       </div>
 

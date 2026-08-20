@@ -50,7 +50,7 @@ export async function getServerSideProps({ params, req, res }) {
   // restricts this to zero rows for anyone else, no extra check needed.
   const { data: tokens } = await supabase
     .from("api_tokens")
-    .select("id, token_prefix, label, created_at, last_used_at")
+    .select("id, token_prefix, label, created_at, last_used_at, scope")
     .eq("project_id", params.id)
     .order("created_at", { ascending: false });
 
@@ -420,6 +420,7 @@ function TokensCard({ project, tokens: initial }) {
   const toast = useToast();
   const [tokens, setTokens] = useState(initial);
   const [label, setLabel] = useState("");
+  const [scope, setScope] = useState("publish");
   const [creating, setCreating] = useState(false);
   const [newToken, setNewToken] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -439,14 +440,18 @@ function TokensCard({ project, tokens: initial }) {
     const res = await fetch("/api/projects/tokens/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, label: label.trim() }),
+      body: JSON.stringify({ projectId: project.id, label: label.trim(), scope }),
     });
     setCreating(false);
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       setNewToken(data.token);
-      setTokens((t) => [{ id: data.id, token_prefix: data.token_prefix, label: data.label, created_at: data.created_at, last_used_at: null }, ...t]);
+      setTokens((t) => [
+        { id: data.id, token_prefix: data.token_prefix, label: data.label, created_at: data.created_at, last_used_at: null, scope: data.scope },
+        ...t,
+      ]);
       setLabel("");
+      setScope("publish");
     } else {
       toast.error(data.error || "Couldn't create a token.");
     }
@@ -510,6 +515,14 @@ function TokensCard({ project, tokens: initial }) {
             <Input placeholder="ios-release-pipeline" value={label} onChange={(e) => setLabel(e.target.value)} />
           </FormField>
         </div>
+        <div className="sm:w-44">
+          <FormField label="Permission">
+            <Select value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="publish">Read &amp; publish</option>
+              <option value="read">Read-only</option>
+            </Select>
+          </FormField>
+        </div>
         <Button type="submit" loading={creating}>
           <KeyRound size={14} strokeWidth={2.25} />
           Generate token
@@ -521,7 +534,10 @@ function TokensCard({ project, tokens: initial }) {
           {tokens.map((t) => (
             <div key={t.id} className="flex items-center justify-between gap-3 py-2.5">
               <div className="min-w-0">
-                <p className="truncate text-sm text-ink-primary">{t.label || "Untitled token"}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-sm text-ink-primary">{t.label || "Untitled token"}</p>
+                  <Badge tone={t.scope === "read" ? "neutral" : "accent"}>{t.scope === "read" ? "read" : "publish"}</Badge>
+                </div>
                 <p className="font-mono text-xs text-ink-tertiary">
                   {t.token_prefix}… · {t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleDateString()}` : "never used"}
                 </p>

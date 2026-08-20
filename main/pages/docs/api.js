@@ -65,7 +65,7 @@ export default function ApiDocs() {
         <Endpoint
           method="GET"
           path="/api/v1/check-update"
-          description="Ask whether a newer build exists for a platform+channel than the one the caller is currently running. Params: platform (ios|android|web, required), currentVersion (required), currentBuildNumber (optional, tiebreaker), channel (optional, default production). Returns { updateAvailable: false } if nothing newer, or { updateAvailable: true, latestVersion, latestBuildNumber, notes, updateUrl } — updateUrl is an itms-services:// link for iOS, a direct APK download for Android, or the app's own URL for web."
+          description="Ask whether a newer build exists for a platform+channel than the one the caller is currently running. Params: platform (ios|android|web, required), currentVersion (required), currentBuildNumber (optional, tiebreaker), channel (optional, default production), deviceId (optional — a stable per-device identifier; if a release has a staged rollout percentage set, a device is bucketed by this id and only sees the new build once it falls within that percentage, otherwise it keeps getting the previous published release; omit it to always get the latest, ignoring rollout). Returns { updateAvailable: false } if nothing newer, or { updateAvailable: true, latestVersion, latestBuildNumber, notes, updateUrl } — updateUrl is an itms-services:// link for iOS, a direct APK download for Android, or the app's own URL for web."
           example={`curl "https://your-app/api/v1/check-update?platform=ios&currentVersion=1.2.0" \\
   -H "Authorization: Bearer qap_..."`}
         />

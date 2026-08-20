@@ -1,0 +1,32 @@
+// Web Push + minimal install support for the app shell (login through
+// dashboard) — see lib/publicRoutes.js's isAppShellPath for exactly
+// which routes register this. No offline caching or asset precaching;
+// this deliberately isn't a full offline-capable PWA.
+
+// A no-op fetch handler is part of Chrome's install criteria — without
+// one, "Add to Home Screen"/the install prompt won't show even with a
+// valid manifest. It intentionally does not call event.respondWith(),
+// so every request still goes straight to the network as normal.
+self.addEventListener("fetch", () => {});
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: "Vrsnify", body: event.data ? event.data.text() : "" };
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Vrsnify", {
+      body: data.body || "",
+      data: { url: data.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/";
+  event.waitUntil(clients.openWindow(url));
+});

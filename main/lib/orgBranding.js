@@ -1,6 +1,6 @@
 // Resolves a project's org branding (white-label logo/accent), if any.
 // Used by the public-facing pages (share/channel/docs) so a branded org's
-// testers see their own logo instead of the default QA Platform one.
+// testers see their own logo instead of the default Vrsnify one.
 // Returns null when the project has no org, or the org has no branding
 // set — callers fall back to the default Logo rendering in that case.
 export async function getOrgBranding(supabase, projectId) {

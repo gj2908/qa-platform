@@ -20,9 +20,14 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { projectId, label } = req.body || {};
+  const { projectId, label, scope } = req.body || {};
   if (!projectId) {
     res.status(400).json({ error: "A project is required." });
+    return;
+  }
+  const tokenScope = scope || "publish";
+  if (!["read", "publish"].includes(tokenScope)) {
+    res.status(400).json({ error: "scope must be 'read' or 'publish'" });
     return;
   }
 
@@ -41,9 +46,10 @@ export default async function handler(req, res) {
       token_hash: hash,
       token_prefix: prefix,
       label: (label || "").trim() || null,
+      scope: tokenScope,
       created_by: user.id,
     })
-    .select("id, token_prefix, label, created_at")
+    .select("id, token_prefix, label, created_at, scope")
     .single();
 
   if (error) {

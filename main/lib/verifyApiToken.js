@@ -10,7 +10,7 @@ export async function verifyApiToken(service, req) {
 
   const { data: token } = await service
     .from("api_tokens")
-    .select("id, project_id, label, created_by")
+    .select("id, project_id, label, created_by, scope")
     .eq("token_hash", hashToken(match[1]))
     .maybeSingle();
 

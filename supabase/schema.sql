@@ -10,6 +10,7 @@ create table projects (
   webhook_url text, -- optional Slack-incoming-webhook-compatible URL, notified on publish
   require_approval boolean not null default false, -- non-owner publishes land as pending_review
   digest_enabled boolean not null default false, -- lib/buildDigest.js / pages/api/cron/digest.js
+  release_emails_enabled boolean not null default false, -- real-time email on release_published, separate from the digest
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );
@@ -178,6 +179,19 @@ create table notification_read_state (
   last_read_at timestamptz not null default now()
 );
 
+-- ── Push subscriptions ──────────────────────────────────────
+-- Per-browser Web Push subscriptions, keyed by email like
+-- notification_read_state/project_favorites above. A user can subscribe
+-- from multiple browsers/devices, each getting its own row.
+create table push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+
 -- ── API tokens (CI/CD publishing) ───────────────────────────
 -- Project-scoped tokens for non-interactive release publishing
 -- (Authorization: Bearer <token>). Only a hash is ever stored — the raw
@@ -188,6 +202,7 @@ create table api_tokens (
   token_hash text not null unique,
   token_prefix text not null,  -- first 8 chars, shown in the UI for identification
   label text,
+  scope text not null default 'publish' check (scope in ('read', 'publish')), -- 'read' can't publish releases, see lib/verifyApiToken.js callers
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now(),
   last_used_at timestamptz
@@ -594,6 +609,7 @@ alter table project_collaborators enable row level security;
 alter table profiles enable row level security;
 alter table project_activity enable row level security;
 alter table notification_read_state enable row level security;
+alter table push_subscriptions enable row level security;
 alter table api_tokens enable row level security;
 alter table project_favorites enable row level security;
 alter table registered_devices enable row level security;
@@ -670,6 +686,10 @@ create policy "members read crash reports" on crash_reports
 create policy "self read own read-state" on notification_read_state
   for select using (auth.jwt() ->> 'email' = email);
 create policy "self upsert own read-state" on notification_read_state
+  for all using (auth.jwt() ->> 'email' = email)
+  with check (auth.jwt() ->> 'email' = email);
+
+create policy "self manage push subscriptions" on push_subscriptions
   for all using (auth.jwt() ->> 'email' = email)
   with check (auth.jwt() ->> 'email' = email);
 

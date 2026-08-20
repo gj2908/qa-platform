@@ -1,4 +1,5 @@
 import { activateScheduledReleaseIfDue } from "./activateScheduledRelease";
+import { bucketForDeviceId } from "./deviceBucket";
 
 // "What's the current release for this project+channel, per platform?" —
 // shared by pages/channel/[projectId]/[channel].js (the stable
@@ -7,8 +8,10 @@ import { activateScheduledReleaseIfDue } from "./activateScheduledRelease";
 // of this resolution order:
 //   published+scheduled → lazily activate any due-scheduled release →
 //   filter to published → latest per platform → overlay channel_pins,
-//   ignoring a pin whose release is no longer published.
-export async function resolveLatestReleases(service, { projectId, channel, req }) {
+//   ignoring a pin whose release is no longer published → staged
+//   rollout: a deviceId not yet in a release's rollout_percent falls
+//   back to the previous published release on that platform.
+export async function resolveLatestReleases(service, { projectId, channel, req, deviceId }) {
   const { data: candidates } = await service
     .from("releases")
     .select("*")
@@ -35,6 +38,20 @@ export async function resolveLatestReleases(service, { projectId, channel, req }
   for (const pin of pins || []) {
     const pinnedRelease = published.find((r) => r.id === pin.release_id);
     if (pinnedRelease) latestByPlatform[pin.platform] = pinnedRelease;
+  }
+
+  // Staged rollout: a device not yet in a release's rollout_percent sees
+  // the previous published release on this channel instead, so a canary
+  // rollout can ramp gradually without needing an explicit "old" pin.
+  // No deviceId supplied (existing callers) means unchanged behavior.
+  if (deviceId) {
+    const bucket = bucketForDeviceId(deviceId);
+    for (const platform of Object.keys(latestByPlatform)) {
+      const release = latestByPlatform[platform];
+      if (release.rollout_percent == null || bucket < release.rollout_percent) continue;
+      const previous = published.find((r) => r.platform === platform && r.id !== release.id);
+      if (previous) latestByPlatform[platform] = previous;
+    }
   }
 
   return latestByPlatform;

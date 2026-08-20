@@ -447,6 +447,11 @@ function ShareLinkSettingsCard({ release }) {
           ))}
         </div>
       </div>
+      {rollout && (
+        <p className="mt-1.5 text-xs text-ink-tertiary">
+          Also applies to channel links and in-app update checks that pass a deviceId — not just this share link.
+        </p>
+      )}
 
       <div className="mt-3 flex justify-end gap-2">
         {hasPin && (

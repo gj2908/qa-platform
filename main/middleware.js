@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isPublicLandingPath, isPublicSharePath, isAuthPath, isResetPasswordPath } from "./lib/publicRoutes";
 
 export async function middleware(req) {
   const res = NextResponse.next();
@@ -25,18 +26,12 @@ export async function middleware(req) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthPage =
-    req.nextUrl.pathname.startsWith("/login") ||
-    req.nextUrl.pathname.startsWith("/forgot-password");
-  const isPublicShare =
-    req.nextUrl.pathname.startsWith("/share/") ||
-    req.nextUrl.pathname.startsWith("/channel/") ||
-    req.nextUrl.pathname.startsWith("/register-device/") ||
-    req.nextUrl.pathname.startsWith("/docs/");
+  const isAuthPage = isAuthPath(req.nextUrl.pathname);
+  const isPublicShare = isPublicSharePath(req.nextUrl.pathname);
   // "/" is the public upload landing page — anyone can drop a build there
   // without signing in (protected instead by requiring an email and, once
   // published, the release ID being an unguessable UUID).
-  const isPublicLanding = req.nextUrl.pathname === "/";
+  const isPublicLanding = isPublicLandingPath(req.nextUrl.pathname);
   const isPublicUploadApi = req.nextUrl.pathname.startsWith("/api/public/");
   // CI/CD publishing is authenticated via its own Authorization: Bearer
   // <api token> header, not a session cookie — see pages/api/ci/releases/create.js.
@@ -50,7 +45,7 @@ export async function middleware(req) {
   // /reset-password is reached by clicking the email link, which creates the
   // session in the browser after the page loads — so anonymous visitors must
   // be allowed through and signed-in visitors must not be bounced away.
-  const isResetPassword = req.nextUrl.pathname.startsWith("/reset-password");
+  const isResetPassword = isResetPasswordPath(req.nextUrl.pathname);
 
   if (isPublicShare || isResetPassword || isPublicUploadApi || isCiApi || isPublicV1Api || isCronApi) return res;
 

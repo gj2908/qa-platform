@@ -27,6 +27,7 @@ export default async function handler(req, res) {
   const channel = req.query.channel || "production";
   const currentVersion = req.query.currentVersion;
   const currentBuildNumber = req.query.currentBuildNumber || null;
+  const deviceId = req.query.deviceId || null;
 
   if (!PLATFORMS.includes(platform)) {
     res.status(400).json({ error: "platform must be one of: ios, android, web" });
@@ -37,7 +38,12 @@ export default async function handler(req, res) {
     return;
   }
 
-  const latestByPlatform = await resolveLatestReleases(service, { projectId: token.project_id, channel, req });
+  const latestByPlatform = await resolveLatestReleases(service, {
+    projectId: token.project_id,
+    channel,
+    req,
+    deviceId,
+  });
   const release = latestByPlatform[platform];
 
   if (!release) {

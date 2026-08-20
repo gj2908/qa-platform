@@ -365,6 +365,7 @@ export default function ProjectOverview({
         {isOwner(role) && <ApprovalSettingsCard project={project} />}
         {isOwner(role) && <WebhookCard project={project} deliveries={deliveries} />}
         {isOwner(role) && <DigestCard project={project} />}
+        {isOwner(role) && <ReleaseEmailCard project={project} />}
         {isOwner(role) && <OrgAssignmentCard project={project} myOrgs={myOrgs} />}
       </div>
 
@@ -618,6 +619,49 @@ function DigestCard({ project }) {
             {digestEnabled ? "On" : "Off"}
           </Button>
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function ReleaseEmailCard({ project }) {
+  const toast = useToast();
+  const [releaseEmailsEnabled, setReleaseEmailsEnabled] = useState(project.release_emails_enabled);
+  const [saving, setSaving] = useState(false);
+
+  async function toggle() {
+    const next = !releaseEmailsEnabled;
+    setSaving(true);
+    const res = await fetch("/api/projects/release-emails-toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, releaseEmailsEnabled: next }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setReleaseEmailsEnabled(next);
+      toast.success(next ? "Release emails enabled." : "Release emails disabled.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't update this setting.");
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Mail size={15} strokeWidth={2.25} className="text-ink-secondary" />
+          <div>
+            <p className="text-sm font-medium text-ink-primary">Release publish emails</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              Email every collaborator the moment a new release is published — separate from the daily digest.
+            </p>
+          </div>
+        </div>
+        <Button variant={releaseEmailsEnabled ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
+          {releaseEmailsEnabled ? "On" : "Off"}
+        </Button>
       </div>
     </Card>
   );

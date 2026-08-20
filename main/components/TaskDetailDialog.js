@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FormField from "./ui/FormField";
 import Textarea from "./ui/Textarea";
 import Select from "./ui/Select";
@@ -9,6 +9,7 @@ import { createClient } from "../lib/supabase/client";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { getAvatarColor } from "../lib/avatarColor";
 import { relativeTime } from "../lib/format";
+import { getMentionQueryAt, extractMentionedCollaborators, splitMentions } from "../lib/mentions";
 
 // Opened by clicking a task card body (not the drag handle or the
 // quick status/delete controls) — the quick "New task title" add form
@@ -26,6 +27,8 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
   const [comments, setComments] = useState([]);
   const [commentBody, setCommentBody] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  const [mentionState, setMentionState] = useState(null); // null | { start, query, activeIndex }
+  const textareaRef = useRef(null);
   const currentUser = useCurrentUser();
 
   useEffect(() => {
@@ -60,9 +63,9 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
     // Best-effort @mention detection — logs to project_activity so a
     // mentioned collaborator sees it in the shared activity feed/bell,
     // same visibility level as every other event in this app (not a
-    // targeted per-user notification).
+    // targeted per-user notification), and also emails them directly.
     try {
-      const mentioned = collaborators.filter((c) => c.email !== currentUser.email && body.includes(c.email));
+      const mentioned = extractMentionedCollaborators(body, collaborators, currentUser.email);
       const excerpt = body.length > 80 ? `${body.slice(0, 77)}...` : body;
       await Promise.all(
         mentioned.map((c) =>
@@ -70,13 +73,72 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
             project_id: task.project_id,
             actor_email: currentUser.email,
             action: "task_mentioned",
-            detail: `${c.email} in "${task.title}": ${excerpt}`,
+            detail: `${nameByEmail?.[c.email] || c.email} in "${task.title}": ${excerpt}`,
           })
         )
       );
+      mentioned.forEach((c) => {
+        fetch("/api/tasks/notify-mention", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: task.project_id,
+            taskId: task.id,
+            mentionedEmail: c.email,
+            commentExcerpt: excerpt,
+          }),
+        }).catch(() => {});
+      });
     } catch (e) {
       // ignored
     }
+  }
+
+  const mentionCandidates = mentionState
+    ? collaborators
+        .filter((c) => c.email !== currentUser?.email)
+        .filter((c) => {
+          const q = mentionState.query.toLowerCase();
+          return c.email.toLowerCase().includes(q) || (c.full_name || "").toLowerCase().includes(q);
+        })
+        .slice(0, 6)
+    : [];
+
+  function onCommentChange(e) {
+    const value = e.target.value;
+    setCommentBody(value);
+    const mention = getMentionQueryAt(value, e.target.selectionStart);
+    setMentionState(mention ? { ...mention, activeIndex: 0 } : null);
+  }
+
+  function onCommentKeyDown(e) {
+    if (!mentionState || mentionCandidates.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMentionState((s) => ({ ...s, activeIndex: Math.min(s.activeIndex + 1, mentionCandidates.length - 1) }));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMentionState((s) => ({ ...s, activeIndex: Math.max(s.activeIndex - 1, 0) }));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      selectMention(mentionCandidates[mentionState.activeIndex]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setMentionState(null);
+    }
+  }
+
+  function selectMention(c) {
+    if (!c) return;
+    const token = `@${c.email} `;
+    const next = commentBody.slice(0, mentionState.start) + token + commentBody.slice(mentionState.start + mentionState.query.length + 1);
+    const caret = mentionState.start + token.length;
+    setCommentBody(next);
+    setMentionState(null);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(caret, caret);
+    });
   }
 
   async function save() {
@@ -195,7 +257,20 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
                           <span className="text-xs font-medium text-ink-primary">{displayName}</span>
                           <span className="text-[11px] text-ink-tertiary">{relativeTime(c.created_at)}</span>
                         </div>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary">{c.body}</p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-secondary">
+                          {splitMentions(c.body, collaborators).map((seg, i) =>
+                            seg.type === "mention" ? (
+                              <span
+                                key={i}
+                                className="rounded bg-accent-subtle px-1 py-0.5 font-medium text-accent-subtle-fg"
+                              >
+                                @{nameByEmail?.[seg.email] || seg.email}
+                              </span>
+                            ) : (
+                              <span key={i}>{seg.value}</span>
+                            )
+                          )}
+                        </p>
                       </div>
                     </div>
                   );
@@ -203,12 +278,14 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
               </div>
             )}
             {editable && (
-              <div className="flex items-end gap-2">
+              <div className="relative flex items-end gap-2">
                 <Textarea
+                  ref={textareaRef}
                   rows={2}
-                  placeholder="Add a comment…"
+                  placeholder="Add a comment… (@ to mention)"
                   value={commentBody}
-                  onChange={(e) => setCommentBody(e.target.value)}
+                  onChange={onCommentChange}
+                  onKeyDown={onCommentKeyDown}
                   className="flex-1"
                 />
                 <Button
@@ -221,6 +298,35 @@ export default function TaskDetailDialog({ task, collaborators, nameByEmail, edi
                 >
                   <Send size={13} strokeWidth={2.25} />
                 </Button>
+                {mentionState && mentionCandidates.length > 0 && (
+                  <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-md border border-border bg-surface-raised py-1 shadow-lg">
+                    {mentionCandidates.map((c, i) => {
+                      const color = getAvatarColor(c.email);
+                      const displayName = nameByEmail?.[c.email] || c.full_name || c.email;
+                      return (
+                        <button
+                          key={c.email}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectMention(c);
+                          }}
+                          onMouseEnter={() => setMentionState((s) => ({ ...s, activeIndex: i }))}
+                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
+                            i === mentionState.activeIndex ? "bg-hover" : ""
+                          }`}
+                        >
+                          <span
+                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${color.bg} ${color.text}`}
+                          >
+                            {displayName[0].toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-ink-primary">{displayName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -5,6 +5,8 @@ import { findDuplicateRelease } from "./findDuplicateRelease";
 import { fetchWebAppInfo } from "./faviconFetcher";
 import { sendWebhookNotification, buildReleasePayload } from "./webhookNotify";
 import { logActivity } from "./logActivity";
+import { sendEmail, escapeHtml, renderEmail, EMAIL_STYLES } from "./emailClient";
+import { sendPushToEmails } from "./pushSend";
 
 // Shared by the interactive session-authenticated endpoint
 // (pages/api/releases/create.js) and the CI/token-authenticated one
@@ -171,7 +173,7 @@ export async function publishRelease({
 
   const { data: project } = await service
     .from("projects")
-    .select("webhook_url, require_approval")
+    .select("webhook_url, require_approval, release_emails_enabled")
     .eq("id", projectId)
     .single();
 
@@ -246,6 +248,47 @@ export async function publishRelease({
     }
   } catch (e) {
     // ignored — notification failures never affect the publish result
+  }
+
+  // Best-effort release email — same "never affects the publish result"
+  // guarantee as the webhook send above.
+  try {
+    if (project?.release_emails_enabled) {
+      const { data: collaborators } = await service
+        .from("project_collaborators")
+        .select("email")
+        .eq("project_id", projectId);
+      const recipients = [...new Set((collaborators || []).map((c) => c.email))];
+      if (recipients.length > 0) {
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host;
+        const distributeUrl = `${protocol}://${host}/distribute/${release.id}`;
+        const versionLabel = `${release.platform} v${release.version}${
+          release.build_number ? ` (${release.build_number})` : ""
+        }`;
+        await sendEmail({
+          to: recipients,
+          subject: `${release.app_name || "New build"} ${release.version} published`,
+          html: renderEmail({
+            heading: "New release published",
+            bodyHtml: `<p ${EMAIL_STYLES.p}>${escapeHtml(
+              actorEmail || "Someone"
+            )} published <strong>${escapeHtml(versionLabel)}</strong>.</p>${
+              release.notes ? `<p style="margin:0;">${escapeHtml(release.notes)}</p>` : ""
+            }`,
+            ctaLabel: "View release",
+            ctaUrl: distributeUrl,
+          }),
+        });
+        await sendPushToEmails(service, recipients, {
+          title: `${release.app_name || "New build"} ${release.version} published`,
+          body: `${actorEmail || "Someone"} published ${versionLabel}`,
+          url: distributeUrl,
+        });
+      }
+    }
+  } catch (e) {
+    // ignored
   }
 
   return { ok: true, releaseId: release.id, status };

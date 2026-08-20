@@ -30,6 +30,10 @@ export default async function handler(req, res) {
     res.status(401).json({ error: "Missing or invalid Authorization: Bearer <token> header" });
     return;
   }
+  if (token.scope !== "publish") {
+    res.status(403).json({ error: "This token is read-only and cannot publish releases" });
+    return;
+  }
 
   const { data: creator } = await service.auth.admin.getUserById(token.created_by);
   const actorEmail = creator?.user?.email;

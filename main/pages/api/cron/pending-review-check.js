@@ -1,6 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase/server";
 import { sendWebhookNotification, buildApprovalReminderPayload } from "../../../lib/webhookNotify";
-import { sendEmail } from "../../../lib/emailClient";
+import { sendEmail, renderEmail, EMAIL_STYLES } from "../../../lib/emailClient";
 import { getSetting } from "../../../lib/platformSettings";
 
 const REMINDER_THRESHOLD_HOURS = 24;
@@ -64,7 +64,14 @@ export default async function handler(req, res) {
       await sendEmail({
         to: owner.email,
         subject: `${project?.name || "A project"}: build waiting for approval`,
-        html: `<p>${release.app_name || "A build"} v${release.version} (${release.platform}) has been waiting for approval for ${hoursWaiting} hours.</p><p><a href="${changelogUrl}">Review it</a></p>`,
+        html: renderEmail({
+          heading: "Build waiting for approval",
+          bodyHtml: `<p ${EMAIL_STYLES.p}>${release.app_name || "A build"} v${release.version} (${
+            release.platform
+          }) has been waiting for approval for ${hoursWaiting} hours.</p>`,
+          ctaLabel: "Review it",
+          ctaUrl: changelogUrl,
+        }),
       });
     }
 

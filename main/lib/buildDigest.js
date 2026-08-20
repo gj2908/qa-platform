@@ -1,4 +1,5 @@
 import { getExpiryStatus } from "./provisioning";
+import { renderEmail, EMAIL_STYLES } from "./emailClient";
 
 const LOOKBACK_HOURS = 24;
 
@@ -47,44 +48,53 @@ export async function buildDigest(service, project) {
 
   const hasContent = feedback.length > 0 || releases.length > 0 || pending.length > 0 || expiring.length > 0;
 
+  const list = (items) => `<ul ${EMAIL_STYLES.ul}>${items.map((li) => `<li ${EMAIL_STYLES.li}>${li}</li>`).join("")}</ul>`;
+
   const sections = [];
   if (releases.length > 0) {
     sections.push(
-      `<h3>New releases</h3><ul>${releases
-        .map((r) => `<li>${r.app_name || "Build"} v${r.version}${r.build_number ? ` (${r.build_number})` : ""} — ${r.platform}</li>`)
-        .join("")}</ul>`
+      `<h3 ${EMAIL_STYLES.h3}>New releases</h3>${list(
+        releases.map((r) => `${r.app_name || "Build"} v${r.version}${r.build_number ? ` (${r.build_number})` : ""} — ${r.platform}`)
+      )}`
     );
   }
   if (feedback.length > 0) {
     sections.push(
-      `<h3>New tester feedback (${feedback.length})</h3><ul>${feedback
-        .map((f) => `<li>${f.title}${f.ai_severity ? ` — ${f.ai_severity}` : ""}</li>`)
-        .join("")}</ul>`
+      `<h3 ${EMAIL_STYLES.h3}>New tester feedback (${feedback.length})</h3>${list(
+        feedback.map((f) => `${f.title}${f.ai_severity ? ` — ${f.ai_severity}` : ""}`)
+      )}`
     );
   }
   if (pending.length > 0) {
     sections.push(
-      `<h3>Pending approval</h3><ul>${pending
-        .map((r) => `<li>${r.app_name || "Build"} v${r.version} — ${r.platform}</li>`)
-        .join("")}</ul>`
+      `<h3 ${EMAIL_STYLES.h3}>Pending approval</h3>${list(
+        pending.map((r) => `${r.app_name || "Build"} v${r.version} — ${r.platform}`)
+      )}`
     );
   }
   if (expiring.length > 0) {
     sections.push(
-      `<h3>Provisioning profiles</h3><ul>${expiring
-        .map(
+      `<h3 ${EMAIL_STYLES.h3}>Provisioning profiles</h3>${list(
+        expiring.map(
           (r) =>
-            `<li>${r.app_name || "Build"} v${r.version} — ${
+            `${r.app_name || "Build"} v${r.version} — ${
               r.expiry.status === "expired" ? "expired" : `expires in ${r.expiry.daysLeft} day${r.expiry.daysLeft === 1 ? "" : "s"}`
-            }</li>`
+            }`
         )
-        .join("")}</ul>`
+      )}`
     );
   }
 
-  const html = hasContent
-    ? `<h2>${project.name} — daily digest</h2>${sections.join("")}`
-    : `<h2>${project.name} — daily digest</h2><p>Nothing new in the last ${LOOKBACK_HOURS} hours.</p>`;
+  const projectUrl = process.env.NEXT_PUBLIC_SITE_URL ? `${process.env.NEXT_PUBLIC_SITE_URL}/projects/${project.id}` : null;
+
+  const html = renderEmail({
+    heading: `${project.name} — daily digest`,
+    bodyHtml: hasContent
+      ? sections.join("")
+      : `<p ${EMAIL_STYLES.p}>Nothing new in the last ${LOOKBACK_HOURS} hours.</p>`,
+    ctaLabel: "Open project",
+    ctaUrl: projectUrl,
+  });
 
   return {
     hasContent,
