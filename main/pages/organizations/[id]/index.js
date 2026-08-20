@@ -10,7 +10,20 @@ import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { getAvatarColor } from "../../../lib/avatarColor";
-import { UserPlus, Trash2, CircleAlert, Users, FolderKanban, Palette, Download, FolderPlus } from "lucide-react";
+import { activityMetaFor } from "../../../lib/activityMeta";
+import { relativeTime } from "../../../lib/format";
+import {
+  UserPlus,
+  Trash2,
+  CircleAlert,
+  Users,
+  FolderKanban,
+  Palette,
+  Download,
+  FolderPlus,
+  Building2,
+  Clock,
+} from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -32,6 +45,25 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("org_id", params.id)
     .order("name");
 
+  // Cross-project activity feed — same query activity-export.js already
+  // runs for CSV export, just capped and rendered inline instead of
+  // streamed. Visible to every member (RLS's "members read activity"
+  // already allows this via project_role()'s org-admin fallback; the
+  // export endpoint's admin-only gate is an application choice specific
+  // to bulk export, not a hard permission boundary).
+  const projectIds = (projects || []).map((p) => p.id);
+  const nameById = Object.fromEntries((projects || []).map((p) => [p.id, p.name]));
+  let activity = [];
+  if (projectIds.length > 0) {
+    const { data: activityRows } = await supabase
+      .from("project_activity")
+      .select("id, project_id, actor_email, action, detail, created_at")
+      .in("project_id", projectIds)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    activity = (activityRows || []).map((a) => ({ ...a, project_name: nameById[a.project_id] || null }));
+  }
+
   // Projects the current user owns that aren't already in this org —
   // populates the "Add project" picker, admins only (cheap to skip the
   // query otherwise).
@@ -51,7 +83,7 @@ export async function getServerSideProps({ params, req, res }) {
   }
 
   return {
-    props: { org, role, members: members || [], projects: projects || [], ownedUnattached },
+    props: { org, role, members: members || [], projects: projects || [], ownedUnattached, activity },
   };
 }
 
@@ -60,7 +92,14 @@ const ROLE_META = {
   member: { label: "Member", tone: "neutral" },
 };
 
-export default function OrganizationDetail({ org, role: myRole, members: initial, projects: initialProjects, ownedUnattached }) {
+export default function OrganizationDetail({
+  org,
+  role: myRole,
+  members: initial,
+  projects: initialProjects,
+  ownedUnattached,
+  activity,
+}) {
   const toast = useToast();
   const [members, setMembers] = useState(initial);
   const [projects, setProjects] = useState(initialProjects);
@@ -146,11 +185,38 @@ export default function OrganizationDetail({ org, role: myRole, members: initial
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div>
-          <h1 className="text-xl font-semibold text-ink-primary">{org.name}</h1>
-          <p className="mt-1 text-sm text-ink-tertiary">
-            {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}
-          </p>
+        <div className="flex items-center gap-3">
+          {org.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={org.logo_url}
+              alt={org.name}
+              className="h-11 w-11 shrink-0 rounded-lg border border-border object-cover"
+            />
+          ) : (
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg">
+              <Building2 size={20} strokeWidth={2} />
+            </span>
+          )}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold text-ink-primary">{org.name}</h1>
+              {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
+            </div>
+            <p className="mt-0.5 text-sm text-ink-tertiary">
+              {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <StatTile icon={FolderKanban} label="Projects" value={projects.length} />
+          <StatTile icon={Users} label="Members" value={members.length} />
+          <StatTile
+            icon={UserPlus}
+            label="Seats"
+            value={org.seat_limit ? `${seatsUsed} / ${org.seat_limit}` : `${seatsUsed}`}
+          />
         </div>
 
         {error && (
@@ -158,6 +224,36 @@ export default function OrganizationDetail({ org, role: myRole, members: initial
             <CircleAlert size={14} />
             {error}
           </p>
+        )}
+
+        {activity.length > 0 && (
+          <Card className="p-5">
+            <div className="flex items-center gap-2">
+              <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
+              <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
+            </div>
+            <div className="mt-4 flex flex-col gap-3.5">
+              {activity.map((a) => {
+                const meta = activityMetaFor(a.action);
+                const Icon = meta.icon;
+                return (
+                  <div key={a.id} className="flex items-start gap-2.5">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
+                      <Icon size={12} strokeWidth={2.25} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-ink-primary">
+                        <span className="font-medium">{a.actor_email}</span> {meta.label}
+                        {a.project_name ? <span className="text-ink-tertiary"> in {a.project_name}</span> : null}
+                        {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
+                      </p>
+                      <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
         )}
 
         <Card className="p-5">
@@ -302,9 +398,24 @@ export default function OrganizationDetail({ org, role: myRole, members: initial
   );
 }
 
+function StatTile({ icon: Icon, label, value }) {
+  return (
+    <Card className="flex items-center gap-3 p-4">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-subtle text-ink-secondary">
+        <Icon size={17} strokeWidth={2} />
+      </span>
+      <div className="min-w-0">
+        <p className="text-lg font-semibold leading-tight text-ink-primary">{value}</p>
+        <p className="truncate text-xs text-ink-tertiary">{label}</p>
+      </div>
+    </Card>
+  );
+}
+
 function BrandingCard({ org }) {
   const [logoUrl, setLogoUrl] = useState(org.logo_url || "");
   const [accentColor, setAccentColor] = useState(org.accent_color || "");
+  const [domain, setDomain] = useState(org.domain || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -323,7 +434,12 @@ function BrandingCard({ org }) {
     const res = await fetch("/api/organizations/branding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: org.id, logoUrl: logoUrl.trim() || null, accentColor: accentColor.trim() || null }),
+      body: JSON.stringify({
+        orgId: org.id,
+        logoUrl: logoUrl.trim() || null,
+        accentColor: accentColor.trim() || null,
+        domain: domain.trim() || null,
+      }),
     });
     setSaving(false);
     const data = await res.json().catch(() => ({}));
@@ -341,10 +457,14 @@ function BrandingCard({ org }) {
         <h2 className="text-sm font-semibold text-ink-primary">Branding</h2>
       </div>
       <p className="mt-1 text-sm text-ink-tertiary">
-        Shown on this org's public install/share pages instead of the default Vrsnify logo.
+        The logo shows throughout the app for this org's projects and pages; the accent color only
+        applies to this org's public install/share pages.
       </p>
 
       <form onSubmit={save} className="mt-4 flex flex-col gap-3">
+        <FormField label="Domain" hint="Display only, e.g. acme.com — not verified, doesn't affect access">
+          <Input placeholder="acme.com" value={domain} onChange={(e) => setDomain(e.target.value)} />
+        </FormField>
         <FormField label="Logo URL" hint="A publicly reachable image URL — square works best">
           <Input
             type="url"

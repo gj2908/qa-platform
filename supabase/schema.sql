@@ -389,6 +389,7 @@ create table organizations (
   -- Flat typed columns, matching projects.webhook_url's precedent.
   logo_url text,
   accent_color text,
+  domain text, -- display-only, e.g. "acme.com" — not verified, not used for auto-join
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz default now()
 );

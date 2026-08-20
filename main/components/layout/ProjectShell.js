@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { LayoutDashboard, Kanban, ClipboardList, Users, Bug } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
@@ -6,6 +6,7 @@ import CompleteProfileGate from "./CompleteProfileGate";
 import VerifyEmailGate from "./VerifyEmailGate";
 import CommandPalette from "../CommandPalette";
 import { addRecentlyViewed } from "../../lib/recentlyViewed";
+import { createClient } from "../../lib/supabase/client";
 
 const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
@@ -19,14 +20,39 @@ const TABS = [
 // Changelog / Collaborators). No sidebar — the tabs live centered in the
 // single top bar (see TopNav), so the board gets the full page width.
 export default function ProjectShell({ project, active, children }) {
+  const [orgBranding, setOrgBranding] = useState(null);
+
   useEffect(() => {
     addRecentlyViewed(project);
   }, [project.id, project.name]);
+
+  // Ungrouped projects (the common case) skip this entirely — org_id is
+  // null, no query, no change from before this existed.
+  useEffect(() => {
+    if (!project.org_id) {
+      setOrgBranding(null);
+      return;
+    }
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("organizations")
+      .select("name, logo_url, domain")
+      .eq("id", project.org_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setOrgBranding(data || null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.org_id]);
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas">
       <TopNav
         crumb={project.name}
+        orgBranding={orgBranding}
         center={TABS.map((tab) => (
           <NavTab
             key={tab.key}

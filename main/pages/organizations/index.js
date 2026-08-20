@@ -29,7 +29,7 @@ export async function getServerSideProps({ req, res }) {
   if (orgIds.length > 0) {
     const { data } = await supabase
       .from("organizations")
-      .select("id, name, seat_limit, created_at")
+      .select("id, name, seat_limit, logo_url, domain, created_at")
       .in("id", orgIds)
       .order("created_at", { ascending: false });
     orgs = (data || []).map((o) => ({ ...o, myRole: roleByOrg[o.id] }));
@@ -117,11 +117,23 @@ export default function Organizations({ orgs: initial }) {
                 className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-hover"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
-                    <Building2 size={15} strokeWidth={2.25} />
-                  </span>
+                  {o.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={o.logo_url}
+                      alt={o.name}
+                      className="h-8 w-8 shrink-0 rounded-md border border-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-subtle text-accent-subtle-fg">
+                      <Building2 size={15} strokeWidth={2.25} />
+                    </span>
+                  )}
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink-primary">{o.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-medium text-ink-primary">{o.name}</p>
+                      {o.domain && <span className="shrink-0 text-xs text-ink-tertiary">· {o.domain}</span>}
+                    </div>
                     <p className="truncate text-xs text-ink-tertiary">
                       {o.myRole === "org_admin" ? "Admin" : "Member"}
                       {o.seat_limit ? ` · seat limit ${o.seat_limit}` : ""}

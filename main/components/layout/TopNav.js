@@ -3,6 +3,7 @@ import Link from "next/link";
 import { House, ListChecks, Menu } from "lucide-react";
 import UserMenu from "./UserMenu";
 import NotificationBell from "./NotificationBell";
+import Logo from "./Logo";
 
 // The single shared header for the whole app now that there's no sidebar
 // anywhere: a Home button back to the dashboard on the left, a centered
@@ -15,7 +16,7 @@ import NotificationBell from "./NotificationBell";
 // narrower laptop widths. Below `sm:`, the center nav disappears and its
 // tabs move into the hamburger menu instead (see below) — theme lives
 // only in the profile dropdown now (UserMenu.js), not in this bar at all.
-export default function TopNav({ crumb, center }) {
+export default function TopNav({ crumb, center, orgBranding }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -38,6 +39,23 @@ export default function TopNav({ crumb, center }) {
         >
           <House size={17} strokeWidth={2} />
         </Link>
+        {orgBranding && (
+          <>
+            <span className="text-ink-disabled">/</span>
+            {orgBranding.logo_url ? (
+              <span title={orgBranding.domain || orgBranding.name} className="shrink-0">
+                <Logo compact logoUrl={orgBranding.logo_url} orgName={orgBranding.name} />
+              </span>
+            ) : (
+              <span
+                title={orgBranding.domain || orgBranding.name}
+                className="shrink-0 truncate text-sm font-medium text-ink-secondary"
+              >
+                {orgBranding.name}
+              </span>
+            )}
+          </>
+        )}
         {crumb && (
           <>
             <span className="text-ink-disabled">/</span>

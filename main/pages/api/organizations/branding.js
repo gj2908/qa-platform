@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { orgId, logoUrl, accentColor } = req.body || {};
+  const { orgId, logoUrl, accentColor, domain } = req.body || {};
   if (!orgId) {
     res.status(400).json({ error: "Missing orgId" });
     return;
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
   const { error } = await authSupabase
     .from("organizations")
-    .update({ logo_url: logoUrl || null, accent_color: accentColor || null })
+    .update({ logo_url: logoUrl || null, accent_color: accentColor || null, domain: domain || null })
     .eq("id", orgId);
 
   if (error) {
