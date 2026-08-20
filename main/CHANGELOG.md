@@ -3,6 +3,45 @@
 Reverse-chronological summary of what's shipped, grouped by theme. See
 `git log` for the literal commit history this is built from.
 
+## 2026-08-21 — Organization lifecycle governance
+
+- Self-serve org creation is gone — a user now files a create or close
+  **request** (`organization_requests`), reviewed and fulfilled by a
+  platform operator from a new `admin/` queue (`/organizations/requests`).
+  Approving a create request provisions the org with `created_by` set to
+  the *requester*, so `assign_org_admin()`'s trigger correctly makes them
+  (not the operator running the approval) the org's first `org_admin`.
+  Self-serve creation is also blocked at the RLS layer, not just hidden
+  in the UI.
+- Caught in verification: `organization_requests.org_id` was `on delete
+  cascade` against `organizations`, so approving a close request would
+  delete the org and silently cascade-delete the request row *about*
+  that closure before it could be marked `approved` — erasing the
+  closure's own audit trail from the admin queue. Switched to `on delete
+  set null`; the request row now survives and renders the org as
+  "already gone."
+- Added `org_activity`, an org-level audit log (member add/remove,
+  branding/domain changes, project attach, lifecycle events) merged by
+  timestamp into the org dashboard's existing cross-project activity
+  feed, so "Recent activity" reads as one unified history.
+- Org admins can set default `webhook_url`/`require_approval` values
+  that fill in for a project only when it doesn't already have its own
+  (never overwrites an existing per-project setting).
+- Domain-verified auto-join: a signup whose email domain matches an
+  org's domain — only once that domain's `domain_status` is
+  `'connected'`, not merely `'pending'` — is added to that org as a
+  plain `member` automatically, via `handle_new_user()`.
+- Added a role & permissions reference page (`/docs/permissions`),
+  linked from both a project's Collaborators page and the org
+  dashboard, documenting how project roles and org roles combine.
+- Org member invites and project attachment both accept multiple
+  entries at once now (paste several emails; select several projects)
+  instead of one at a time.
+- The command palette (Cmd/Ctrl+K) scopes results to the current org's
+  projects when searching from within that org's own pages.
+- The org dashboard now warns once a seat limit has 1 or 0 seats left,
+  ahead of an add actually failing against the seat-limit trigger.
+
 ## 2026-08-15 — Fix publishing a release with a failed signed-URL upload
 
 - `publishRelease.js` could mark a release `published` with a `file_path`
