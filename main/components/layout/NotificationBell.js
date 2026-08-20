@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { activityMetaFor } from "../../lib/activityMeta";
 import { relativeTime } from "../../lib/format";
 
@@ -39,6 +39,26 @@ export default function NotificationBell() {
     }
   }
 
+  function dismiss(activityId) {
+    setItems((prev) => prev.filter((a) => a.id !== activityId));
+    fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityId }),
+    }).catch(() => {});
+  }
+
+  function clearAll() {
+    const ids = items.map((a) => a.id);
+    setItems([]);
+    if (ids.length === 0) return;
+    fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityIds: ids }),
+    }).catch(() => {});
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -58,9 +78,18 @@ export default function NotificationBell() {
 
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1.5 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-surface-raised p-1.5 shadow-lg">
-          <p className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-tertiary">
-            Recent activity
-          </p>
+          <div className="flex items-center justify-between px-2 py-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-tertiary">Recent activity</p>
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-xs font-medium text-ink-tertiary hover:text-ink-secondary"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
           {!loaded ? (
             <p className="px-2 py-4 text-center text-sm text-ink-tertiary">Loading…</p>
           ) : items.length === 0 ? (
@@ -72,24 +101,38 @@ export default function NotificationBell() {
                 const Icon = meta.icon;
                 const displayName = a.actorName || a.actorEmail;
                 return (
-                  <Link
-                    key={a.id}
-                    href={`/projects/${a.projectId}`}
-                    onClick={() => setOpen(false)}
-                    className="flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-hover"
-                  >
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
-                      <Icon size={12} strokeWidth={2.25} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-ink-primary">
-                        <span className="font-medium">{displayName}</span> {meta.label}
-                      </p>
-                      <p className="truncate text-xs text-ink-tertiary">
-                        {a.projectName} · {relativeTime(a.createdAt)}
-                      </p>
-                    </div>
-                  </Link>
+                  <div key={a.id} className="group relative">
+                    <Link
+                      href={`/projects/${a.projectId}`}
+                      onClick={() => setOpen(false)}
+                      className="flex items-start gap-2.5 rounded-md py-2 pl-2 pr-7 transition-colors hover:bg-hover"
+                    >
+                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
+                        <Icon size={12} strokeWidth={2.25} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-ink-primary">
+                          <span className="font-medium">{displayName}</span> {meta.label}
+                        </p>
+                        <p className="truncate text-xs text-ink-tertiary">
+                          {a.projectName} · {relativeTime(a.createdAt)}
+                        </p>
+                      </div>
+                    </Link>
+                    <button
+                      type="button"
+                      title="Dismiss"
+                      aria-label="Dismiss"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dismiss(a.id);
+                      }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-tertiary opacity-0 transition-opacity hover:bg-hover hover:text-ink-primary group-hover:opacity-100"
+                    >
+                      <X size={12} strokeWidth={2.25} />
+                    </button>
+                  </div>
                 );
               })}
             </div>

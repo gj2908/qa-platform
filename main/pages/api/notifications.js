@@ -26,6 +26,38 @@ export default async function handler(req, res) {
     return;
   }
 
+  if (req.method === "DELETE") {
+    // Body { activityId } dismisses one; { all: true } dismisses every
+    // activity id currently visible to this user (the "Clear all"
+    // button — computed from the same query GET uses, not a blanket
+    // future-proof clear, so it can't accidentally hide something not
+    // yet fetched).
+    const { activityId, all, activityIds } = req.body || {};
+    let ids = [];
+    if (activityId) ids = [activityId];
+    else if (Array.isArray(activityIds)) ids = activityIds;
+    else if (all) {
+      res.status(400).json({ error: "Pass activityIds with the full list to clear, computed client-side from the last GET." });
+      return;
+    }
+    if (ids.length === 0) {
+      res.status(400).json({ error: "Missing activityId or activityIds" });
+      return;
+    }
+    const { error } = await supabase
+      .from("notification_dismissals")
+      .upsert(
+        ids.map((id) => ({ email: user.email, activity_id: id })),
+        { onConflict: "email,activity_id" }
+      );
+    if (error) {
+      res.status(500).json({ error: error.message });
+      return;
+    }
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   if (req.method !== "GET") {
     res.status(405).end();
     return;
@@ -55,7 +87,14 @@ export default async function handler(req, res) {
     .in("project_id", projectIds)
     .order("created_at", { ascending: false })
     .limit(20);
-  const items = activity || [];
+
+  const { data: dismissals } = await supabase
+    .from("notification_dismissals")
+    .select("activity_id")
+    .eq("email", user.email);
+  const dismissedIds = new Set((dismissals || []).map((d) => d.activity_id));
+
+  const items = (activity || []).filter((a) => !dismissedIds.has(a.id));
 
   const emails = [...new Set(items.map((a) => a.actor_email))];
   let nameByEmail = {};

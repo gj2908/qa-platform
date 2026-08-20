@@ -179,6 +179,17 @@ create table notification_read_state (
   last_read_at timestamptz not null default now()
 );
 
+-- ── Notification dismissals ─────────────────────────────────
+-- Per-user "hide this from my bell" marker — project_activity itself is
+-- shared team history and never deleted just because one person
+-- cleared their notifications.
+create table notification_dismissals (
+  email text not null,
+  activity_id uuid not null references project_activity(id) on delete cascade,
+  dismissed_at timestamptz not null default now(),
+  primary key (email, activity_id)
+);
+
 -- ── Push subscriptions ──────────────────────────────────────
 -- Per-browser Web Push subscriptions, keyed by email like
 -- notification_read_state/project_favorites above. A user can subscribe
@@ -611,6 +622,7 @@ alter table project_collaborators enable row level security;
 alter table profiles enable row level security;
 alter table project_activity enable row level security;
 alter table notification_read_state enable row level security;
+alter table notification_dismissals enable row level security;
 alter table push_subscriptions enable row level security;
 alter table api_tokens enable row level security;
 alter table project_favorites enable row level security;
@@ -688,6 +700,10 @@ create policy "members read crash reports" on crash_reports
 create policy "self read own read-state" on notification_read_state
   for select using (auth.jwt() ->> 'email' = email);
 create policy "self upsert own read-state" on notification_read_state
+  for all using (auth.jwt() ->> 'email' = email)
+  with check (auth.jwt() ->> 'email' = email);
+
+create policy "self manage notification dismissals" on notification_dismissals
   for all using (auth.jwt() ->> 'email' = email)
   with check (auth.jwt() ->> 'email' = email);
 

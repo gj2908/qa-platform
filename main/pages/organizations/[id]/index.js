@@ -112,6 +112,7 @@ export default function OrganizationDetail({
   const [busy, setBusy] = useState(false);
   const [addProjectId, setAddProjectId] = useState("");
   const [addingProject, setAddingProject] = useState(false);
+  const [showAllActivity, setShowAllActivity] = useState(false);
 
   const isAdmin = myRole === "org_admin";
   const seatsUsed = members.length;
@@ -188,13 +189,13 @@ export default function OrganizationDetail({
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             {org.logo_url ? (
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-subtle p-1.5">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-border bg-subtle p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={org.logo_url} alt={org.name} className="h-full w-full object-contain" />
               </span>
             ) : (
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg">
-                <Building2 size={20} strokeWidth={2} />
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-fg">
+                <Building2 size={24} strokeWidth={2} />
               </span>
             )}
             <div className="min-w-0">
@@ -241,7 +242,7 @@ export default function OrganizationDetail({
               <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
             </div>
             <div className="mt-4 flex flex-col gap-3.5">
-              {activity.map((a) => {
+              {(showAllActivity ? activity : activity.slice(0, 5)).map((a) => {
                 const meta = activityMetaFor(a.action);
                 const Icon = meta.icon;
                 return (
@@ -261,6 +262,14 @@ export default function OrganizationDetail({
                 );
               })}
             </div>
+            {activity.length > 5 && (
+              <button
+                onClick={() => setShowAllActivity((s) => !s)}
+                className="mt-3 text-xs font-medium text-accent hover:text-accent-hover"
+              >
+                {showAllActivity ? "Show less" : `View ${activity.length - 5} more`}
+              </button>
+            )}
           </Card>
         )}
 
