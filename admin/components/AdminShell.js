@@ -12,7 +12,6 @@ import {
   UploadCloud,
   HardDrive,
   LogOut,
-  ShieldAlert,
   Activity,
   Search,
   Webhook,
@@ -24,6 +23,24 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
+
+// The brand mark: a checkmark, no background container — same glyph as
+// main/'s Logo.js, tinted with this app's own indigo primary accent
+// (tailwind.config.js's `primary`) instead of main/'s blue, so the two
+// are visually distinguishable while still reading as the same family.
+function CheckmarkMark({ size = 18, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <path
+        d="M5 12.5 L10.2 17.7 L19.5 6.5"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 // Grouped into sections so the sidebar reads as a hierarchy instead of a
 // flat list of 10 items — this is what used to overflow a single-row top
@@ -320,8 +337,8 @@ export default function AdminShell({ children }) {
             >
               <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <ShieldAlert size={18} className="text-amber-500" />
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">QA Admin</span>
+                  <CheckmarkMark size={18} className="text-primary-600 dark:text-primary-400" />
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Vrsnify Admin</span>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
                   <X size={16} />
@@ -340,8 +357,8 @@ export default function AdminShell({ children }) {
         className="sticky top-0 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex"
       >
         <div className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
-          <ShieldAlert size={18} className="shrink-0 text-amber-500" />
-          {!collapsed && <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">QA Admin</span>}
+          <CheckmarkMark size={18} className="shrink-0 text-primary-600 dark:text-primary-400" />
+          {!collapsed && <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">Vrsnify Admin</span>}
         </div>
         {collapsed ? (
           <nav className="flex flex-1 flex-col items-center gap-1 overflow-y-auto py-4">

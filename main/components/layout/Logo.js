@@ -1,14 +1,14 @@
-// The brand mark: a checkmark (QA/verified) on the accent-blue rounded
-// square — same glyph used for the PWA icons (public/icons/*) and
-// notification icon (public/sw.js), kept as inline SVG here so it never
-// depends on the icon files loading and can inherit currentColor.
+// The brand mark: a checkmark (QA/verified), no background container —
+// same glyph used for the PWA icons (public/icons/*) and notification
+// icon (public/sw.js), kept as inline SVG here so it never depends on
+// the icon files loading and can inherit currentColor.
 function CheckmarkMark() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
-        d="M6 12.5 L10.2 16.7 L18 8"
+        d="M5 12.5 L10.2 17.7 L19.5 6.5"
         stroke="currentColor"
-        strokeWidth="2.4"
+        strokeWidth="2.6"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

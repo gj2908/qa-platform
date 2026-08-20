@@ -53,33 +53,54 @@ export function escapeHtml(s) {
 // particular ignores flexbox/grid).
 export function renderEmail({ heading, bodyHtml, ctaLabel, ctaUrl }) {
   return `<!doctype html>
-<html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <style>
+      body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+      table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+      body { margin: 0; padding: 0; width: 100% !important; }
+      @media screen and (max-width: 600px) {
+        .email-container { width: 100% !important; }
+        .email-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      }
+    </style>
+  </head>
   <body style="margin:0;padding:32px 16px;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-container" style="max-width:520px;margin:0 auto;">
             <tr>
-              <td style="background-color:#3358d4;padding:18px 28px;">
-                <span style="color:#ffffff;font-size:15px;font-weight:600;letter-spacing:-0.01em;">Vrsnify</span>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:28px;color:#1f2430;font-size:14px;line-height:1.65;">
-                ${heading ? `<h1 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0a0a0a;">${heading}</h1>` : ""}
-                ${bodyHtml}
-                ${
-                  ctaUrl
-                    ? `<div style="margin-top:24px;"><a href="${ctaUrl}" style="display:inline-block;background-color:#3358d4;color:#ffffff;text-decoration:none;padding:10px 22px;border-radius:8px;font-weight:500;font-size:14px;">${
-                        ctaLabel || "View"
-                      }</a></div>`
-                    : ""
-                }
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 28px;border-top:1px solid #f0f1f3;">
-                <p style="margin:0;color:#9aa0ab;font-size:12px;">Sent by Vrsnify.</p>
+              <td style="background-color:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td class="email-padding" style="background-color:#3358d4;padding:18px 28px;">
+                      <span style="color:#ffffff;font-size:15px;font-weight:600;letter-spacing:-0.01em;">Vrsnify</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="email-padding" style="padding:28px;color:#1f2430;font-size:14px;line-height:1.65;">
+                      ${heading ? `<h1 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#0a0a0a;">${heading}</h1>` : ""}
+                      ${bodyHtml}
+                      ${
+                        ctaUrl
+                          ? `<div style="margin-top:24px;"><a href="${ctaUrl}" style="display:inline-block;background-color:#3358d4;color:#ffffff;text-decoration:none;padding:10px 22px;border-radius:8px;font-weight:500;font-size:14px;">${
+                              ctaLabel || "View"
+                            }</a></div>`
+                          : ""
+                      }
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="email-padding" style="padding:16px 28px;border-top:1px solid #f0f1f3;">
+                      <p style="margin:0;color:#9aa0ab;font-size:12px;">Sent by Vrsnify.</p>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
