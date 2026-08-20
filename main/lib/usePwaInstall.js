@@ -50,6 +50,20 @@ export function usePwaInstall() {
   const canPromptInstall = !!deferredPrompt;
   const needsIOSInstructions = env.isIOS && env.isSafari && !deferredPrompt;
   const canShowInstall = isMobile && !isStandalone && (canPromptInstall || needsIOSInstructions);
+  // Chrome throttles re-firing beforeinstallprompt after a page's been
+  // dismissed a couple of times, even though the site is still genuinely
+  // installable (visible proof: Chrome's own ⋮ menu still offers
+  // "Install app" in that state) — so on Android without a captured
+  // event, point the user at that menu instead of a dead-end disabled
+  // button.
+  const needsAndroidMenuFallback = env.isAndroid && !canPromptInstall;
 
-  return { canShowInstall, canPromptInstall, needsIOSInstructions, isStandalone, promptInstall };
+  return {
+    canShowInstall,
+    canPromptInstall,
+    needsIOSInstructions,
+    needsAndroidMenuFallback,
+    isStandalone,
+    promptInstall,
+  };
 }
