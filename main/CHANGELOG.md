@@ -3,6 +3,61 @@
 Reverse-chronological summary of what's shipped, grouped by theme. See
 `git log` for the literal commit history this is built from.
 
+## 2026-08-21 — Legal hold, org-enforced MFA, personal data export, Teams webhooks
+
+- Project owners can now put a project under legal hold (Overview →
+  Legal hold). Blocked at the database layer via a new
+  `trg_guard_legal_hold` trigger, not just a hidden button — a direct
+  delete through the owner-permitted RLS policy fails too.
+- Org admins can require every member to have a verified TOTP factor
+  before using the app at all (org settings → Security). Enforced by a
+  new `RequireMfaGate`, mounted alongside the existing
+  `VerifyEmailGate`/`CompleteProfileGate` — it deliberately never blocks
+  `/settings` itself, since that's where the TOTP enrollment UI
+  (`TwoFactorCard`, already shipped) lives.
+- Settings → Account: "Export my data" (a JSON download of everything
+  tied to your account — tasks, comments, time entries, memberships,
+  recent activity) and "Sign out of all devices"
+  (`supabase.auth.signOut({ scope: 'global' })`).
+- Outgoing project webhooks now detect a Microsoft Teams URL
+  (`office.com`/`office365.com`/`logic.azure.com`) and send a
+  MessageCard instead of the Slack `{text}` shape — Teams doesn't render
+  either the old shape or Slack's `*bold*` markdown.
+- Considered and skipped this pass: app-level IP allowlisting (real lock-
+  out risk without more testing than one session allows), per-session
+  list/revoke (no verified SDK support for a user listing their own
+  sessions), multi-sign-off release approval (the project model has
+  exactly one owner, so "multiple approvers" is a role-model change, not
+  a quick add).
+
+## 2026-08-21 — Feature flags
+
+- Project-scoped feature flags (Flags tab), editor+ managed, with a
+  percentage rollout slider. Resolved for a given device via the new
+  `GET /api/v1/feature-flags` (same Bearer-token auth as the rest of
+  `/api/v1/*`), reusing the exact device-hash bucketing
+  (`lib/deviceBucket.js`) that staged release rollout already uses — so
+  a flag and a release's `rollout_percent` land the same device on the
+  same side consistently.
+
+## 2026-08-21 — Personal productivity and QA tooling
+
+- Settings: avatar URL + a live preview, and TOTP two-factor
+  authentication (enroll/disable via Supabase Auth's built-in MFA).
+- Per-project notification preferences (mute the bell, or emails) —
+  actually wired into the notification bell's query and the digest
+  cron's recipient list, not just stored.
+- Board: saved filter views (per user), task templates, bulk task edit
+  (multi-select → set status/assignee/delete), and lightweight time
+  tracking on each task.
+- My Tasks is now a real agenda (Overdue / This week / Later / No due
+  date) with a CSV export.
+- New Test Cases tab: steps/expected-result test cases, with pass/fail/
+  blocked runs logged per release and a short run history.
+- Tester feedback reports can now include a screenshot, compressed to
+  JPEG client-side before upload (protects the free-tier 1GB storage
+  cap) — shown inline on the resulting task.
+
 ## 2026-08-21 — Automatic domain provisioning
 
 - Requesting a custom domain connection (org settings → Domain →

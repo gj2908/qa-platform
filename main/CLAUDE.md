@@ -94,6 +94,11 @@ plain `transition-colors` for hover states, which is correct for those.
   wrapped in try/catch that swallows errors, so a release publish/task
   update/etc. never fails because a secondary side-effect did. Follow
   this shape for any new notification/logging/integration code.
+  `webhookNotify.js` also branches payload *shape* by the target URL's
+  host (Slack-style `{text}` normally, a MessageCard for anything on
+  `office.com`/`office365.com`/`logic.azure.com`) — a single
+  `webhook_url` field still works for either provider with zero extra
+  config; add another provider here the same way rather than a new field.
 - **Optional external providers degrade to no-ops.** `ANTHROPIC_API_KEY`,
   `RESEND_API_KEY`, and `VERCEL_API_TOKEN`/`VERCEL_PROJECT_ID` being unset
   doesn't break anything — the relevant functions just return
@@ -150,6 +155,11 @@ plain `transition-colors` for hover states, which is correct for those.
   pin whose release is no longer published) lives in
   `lib/resolveLatestRelease.js` — reused by `pages/channel/[projectId]/[channel].js`
   and `pages/api/v1/check-update.js`. Don't reimplement this a third time.
+  The stable 0-99 device bucketing it uses for staged rollout is its own
+  small utility, `lib/deviceBucket.js`'s `bucketForDeviceId()` — reused
+  as-is (not reimplemented) by `pages/api/v1/feature-flags.js` for
+  percentage-rollout feature flags, so the same device consistently
+  lands on the same side of both a release rollout and a flag.
 - **`main/CHANGELOG.md` is a copy, not a symlink, of the repo-root
   `CHANGELOG.md`.** `pages/changelog-log.js` reads the local copy at
   build time because Vercel's build sandbox for this subdirectory-rooted
@@ -179,7 +189,14 @@ plain `transition-colors` for hover states, which is correct for those.
   trip + loading flash on every hard refresh for zero remaining benefit)
   must use the same three-state render (unknown → loading shell; false →
   nothing; true → the real gate) or a page refresh can briefly show real
-  content before the gate mounts.
+  content before the gate mounts. `RequireMfaGate` is the first real
+  example of this — it does its own `org_members`/`organizations` +
+  `auth.mfa.listFactors()` lookup. It also has to special-case its own
+  escape hatch: it never blocks `/settings` itself (checked via
+  `useRouter().pathname`), since that's the only page with the actual
+  TOTP-enrollment UI (`TwoFactorCard`) — a gate whose fix lives on one
+  specific page always needs that page exempted, or a required-but-
+  unenrolled user could never reach the thing that satisfies the gate.
 
 ## Testing changes
 
