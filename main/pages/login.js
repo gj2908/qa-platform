@@ -2,13 +2,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { createClient } from "../lib/supabase/client";
+import { createServiceClient } from "../lib/supabase/server";
+import { getOrgByDomain } from "../lib/orgBranding";
 import AuthLayout from "../components/layout/AuthLayout";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import OtpCodeInput from "../components/ui/OtpCodeInput";
 import { CircleAlert, CircleCheck } from "lucide-react";
 
-export default function Login() {
+// Anonymous, service-role lookup — a visitor hitting /login via an org's
+// connected custom domain has no session yet, so organizations' normal
+// members-only RLS policy can't apply (same reasoning as
+// pages/share/[id].js's use of createServiceClient for org branding).
+export async function getServerSideProps({ req }) {
+  const supabase = createServiceClient();
+  const branding = await getOrgByDomain(supabase, req.headers.host);
+  return { props: { branding: branding || null } };
+}
+
+export default function Login({ branding }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -130,7 +142,7 @@ export default function Login() {
 
   if (awaitingSignupOtp) {
     return (
-      <AuthLayout>
+      <AuthLayout logoUrl={branding?.logoUrl} orgName={branding?.orgName} accentColor={branding?.accentColor}>
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold text-ink-primary">Verify your email</h1>
           <p className="mt-1 text-sm text-ink-tertiary">
@@ -168,7 +180,7 @@ export default function Login() {
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout logoUrl={branding?.logoUrl} orgName={branding?.orgName} accentColor={branding?.accentColor}>
       <div className="mb-6 text-center">
         <h1 className="text-lg font-semibold text-ink-primary">
           {mode === "signin" ? "Sign in" : "Create your account"}
