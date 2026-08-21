@@ -18,6 +18,7 @@ function ProfileCard() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [initialized, setInitialized] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -53,6 +54,19 @@ function ProfileCard() {
       return;
     }
     toast.success("Profile updated.");
+  }
+
+  async function removeAvatar() {
+    setRemoving(true);
+    const supabase = createClient();
+    const { error: profileError } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+    setRemoving(false);
+    if (profileError) {
+      toast.error(profileError.message);
+      return;
+    }
+    setAvatarUrl("");
+    toast.success("Avatar removed.");
   }
 
   return (
@@ -96,6 +110,11 @@ function ProfileCard() {
               onChange={(e) => setAvatarUrl(e.target.value)}
               className="flex-1"
             />
+            {avatarUrl && (
+              <Button type="button" variant="secondary" size="sm" loading={removing} onClick={removeAvatar}>
+                Remove
+              </Button>
+            )}
           </div>
         </FormField>
         <div>
