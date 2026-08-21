@@ -20,7 +20,16 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Vrsnify", {
       body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
       data: { url: data.url || "/" },
+      // Android's notification system auto-generates its own action
+      // chips (e.g. a "Copy link" chip from on-device text
+      // classification) when a notification has none of its own —
+      // declaring a real "Open" action here takes that slot instead,
+      // so tapping the notification opens the app rather than
+      // triggering the OS's auto-suggested action.
+      actions: [{ action: "open", title: "Open" }],
     })
   );
 });

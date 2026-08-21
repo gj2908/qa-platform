@@ -6,14 +6,14 @@ import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
-import { useCurrentUser, useAvatarUrl } from "../lib/UserContext";
+import { useCurrentUser, useAvatarState } from "../lib/UserContext";
 import { useToast } from "../components/ui/ToastProvider";
 import { CircleAlert, CircleCheck, BadgeCheck } from "lucide-react";
 
 function ProfileCard() {
   const toast = useToast();
   const user = useCurrentUser();
-  const contextAvatarUrl = useAvatarUrl();
+  const { avatarUrl: contextAvatarUrl, avatarLoaded } = useAvatarState();
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [initialized, setInitialized] = useState(false);
@@ -21,12 +21,17 @@ function ProfileCard() {
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState("");
 
+  // Wait for avatarLoaded, not just `user` — the avatar_url fetch resolves
+  // a beat after the user does, so reading contextAvatarUrl the instant
+  // `user` first becomes truthy would almost always capture it mid-fetch
+  // (still null) and this effect's `initialized` guard would then never
+  // let it re-sync once the real value arrived.
   useEffect(() => {
-    if (!user || initialized) return;
+    if (!user || !avatarLoaded || initialized) return;
     setFullName(user.user_metadata?.full_name || "");
     setAvatarUrl(contextAvatarUrl || "");
     setInitialized(true);
-  }, [user, initialized, contextAvatarUrl]);
+  }, [user, avatarLoaded, initialized, contextAvatarUrl]);
 
   async function save(e) {
     e.preventDefault();

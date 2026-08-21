@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { createClient } from "./supabase/client";
 
-const UserContext = createContext({ user: null, avatarUrl: null });
+const UserContext = createContext({ user: null, avatarUrl: null, avatarLoaded: false });
 
 // Single source of truth for "who's signed in" + their avatar, shared by
 // every component that used to call supabase.auth.getUser() on its own
@@ -13,6 +13,12 @@ const UserContext = createContext({ user: null, avatarUrl: null });
 export function UserProvider({ children }) {
   const [user, setUser] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  // Distinguishes "haven't fetched avatar_url yet" from "fetched, and
+  // there genuinely isn't one" — both look like avatarUrl === null.
+  // Without this, a consumer that reads avatarUrl the instant `user`
+  // first resolves (see ProfileCard) can capture it mid-fetch and never
+  // re-sync once the real value lands a beat later.
+  const [avatarLoaded, setAvatarLoaded] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -29,6 +35,7 @@ export function UserProvider({ children }) {
   useEffect(() => {
     if (!user) {
       setAvatarUrl(null);
+      setAvatarLoaded(false);
       return;
     }
     let cancelled = false;
@@ -39,14 +46,17 @@ export function UserProvider({ children }) {
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        if (!cancelled) setAvatarUrl(data?.avatar_url || null);
+        if (!cancelled) {
+          setAvatarUrl(data?.avatar_url || null);
+          setAvatarLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [user?.id]);
 
-  return <UserContext.Provider value={{ user, avatarUrl }}>{children}</UserContext.Provider>;
+  return <UserContext.Provider value={{ user, avatarUrl, avatarLoaded }}>{children}</UserContext.Provider>;
 }
 
 export function useCurrentUser() {
@@ -55,4 +65,13 @@ export function useCurrentUser() {
 
 export function useAvatarUrl() {
   return useContext(UserContext).avatarUrl;
+}
+
+// Returns { avatarUrl, avatarLoaded } for consumers that need to tell
+// "still loading" apart from "confirmed no avatar" — e.g. before
+// initializing local form state from the context value once, on the
+// assumption that a null means "no avatar" rather than "not fetched yet".
+export function useAvatarState() {
+  const { avatarUrl, avatarLoaded } = useContext(UserContext);
+  return { avatarUrl, avatarLoaded };
 }
