@@ -1,7 +1,7 @@
 {
   "name": "Vrsnify (QA)",
   "short_name": "Vrsnify",
-  "start_url": "/dashboard",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
