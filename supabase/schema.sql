@@ -624,6 +624,23 @@ as $$
   limit 1;
 $$;
 
+-- Lets admin/'s session-based browser client (not just its service-role
+-- server client) see cross-tenant rows an ordinary user-scoped policy
+-- wouldn't allow — currently just organization_requests, for a live nav
+-- badge. Only covers admin_allowlist (DB table), not the ADMIN_EMAILS
+-- env var fallback — Postgres has no visibility into that env var.
+create or replace function is_platform_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from admin_allowlist where email = (auth.jwt() ->> 'email')
+  );
+$$;
+
 -- Auto-assign the creator as org_admin, mirroring assign_project_owner().
 create or replace function assign_org_admin()
 returns trigger
@@ -854,8 +871,14 @@ create policy "self read own org requests" on organization_requests
   for select using (auth.jwt() ->> 'email' = requester_email);
 create policy "self create org requests" on organization_requests
   for insert with check (auth.jwt() ->> 'email' = requester_email);
+create policy "platform admins read all org requests" on organization_requests
+  for select using (is_platform_admin());
 -- No update/delete policy for regular users — resolving a request only
 -- ever happens from admin/'s service-role client.
+
+-- Realtime: admin/'s nav badge subscribes to inserts/updates here so a
+-- new or resolved request shows up live without a page refresh.
+alter publication supabase_realtime add table organization_requests;
 
 alter table org_activity enable row level security;
 create policy "members read org activity" on org_activity

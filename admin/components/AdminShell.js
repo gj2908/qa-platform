@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClientBrowser } from "../lib/supabase";
+import { useOrgRequestCount } from "../lib/useOrgRequestCount";
 import ThemeToggle from "./ThemeToggle";
 import {
   LayoutDashboard,
@@ -253,7 +254,22 @@ function UserMenu({ email, onSignOut }) {
   );
 }
 
-function NavList({ onNavigate }) {
+// Small numeric pill for a pending count next to a nav item — capped at
+// "9+" so a runaway count never stretches the sidebar row.
+function NavCountBadge({ count, active }) {
+  if (!count) return null;
+  return (
+    <span
+      className={`relative z-10 ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
+        active ? "bg-white text-primary-700" : "bg-red-500 text-white"
+      }`}
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+function NavList({ onNavigate, orgRequestCount }) {
   const router = useRouter();
   return (
     <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
@@ -266,6 +282,7 @@ function NavList({ onNavigate }) {
             {section.items.map((item) => {
               const Icon = item.icon;
               const active = isActive(router.pathname, item.href);
+              const count = item.href === "/organizations/requests" ? orgRequestCount : 0;
               return (
                 <Link
                   key={item.href}
@@ -288,6 +305,7 @@ function NavList({ onNavigate }) {
                   <span className={`relative z-10 ${active ? "text-white" : "text-slate-700 dark:text-slate-300"}`}>
                     {item.label}
                   </span>
+                  <NavCountBadge count={count} active={active} />
                 </Link>
               );
             })}
@@ -303,6 +321,7 @@ export default function AdminShell({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [email, setEmail] = useState(null);
+  const orgRequestCount = useOrgRequestCount();
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1");
@@ -358,7 +377,7 @@ export default function AdminShell({ children }) {
                   <X size={16} />
                 </button>
               </div>
-              <NavList onNavigate={() => setMobileOpen(false)} />
+              <NavList onNavigate={() => setMobileOpen(false)} orgRequestCount={orgRequestCount} />
             </motion.aside>
           </>
         )}
@@ -381,22 +400,28 @@ export default function AdminShell({ children }) {
             {ALL_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = isActive(router.pathname, item.href);
+              const count = item.href === "/organizations/requests" ? orgRequestCount : 0;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   title={item.label}
-                  className={`flex h-9 w-9 items-center justify-center rounded-md transition-colors ${
+                  className={`relative flex h-9 w-9 items-center justify-center rounded-md transition-colors ${
                     active ? "bg-primary-600 text-white" : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
                   <Icon size={16} strokeWidth={2} />
+                  {!!count && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-semibold text-white">
+                      {count > 9 ? "9+" : count}
+                    </span>
+                  )}
                 </Link>
               );
             })}
           </nav>
         ) : (
-          <NavList />
+          <NavList orgRequestCount={orgRequestCount} />
         )}
         <button
           onClick={toggleCollapsed}

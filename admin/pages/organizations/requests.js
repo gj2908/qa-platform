@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import AdminShell from "../../components/AdminShell";
 import { Table, TableHead, TableBody, TableRow } from "../../components/ui/Table";
 import Badge from "../../components/ui/Badge";
-import { createServiceClient } from "../../lib/supabase";
+import { createServiceClient, createRealtimeClientBrowser } from "../../lib/supabase";
 import { Check, X } from "lucide-react";
 
 export async function getServerSideProps() {
@@ -33,6 +33,43 @@ const STATUS_TONE = { pending: "warning", approved: "success", rejected: "neutra
 export default function OrganizationRequests({ requests: initial }) {
   const [requests, setRequests] = useState(initial);
   const [busyId, setBusyId] = useState(null);
+  const [justUpdated, setJustUpdated] = useState(false);
+
+  // Live-refreshes the table when a request is filed or resolved from
+  // anywhere else (main/'s "Request an organization" flow, or another
+  // admin acting on the same queue) — same is_platform_admin()-gated
+  // realtime access as the nav badge (lib/useOrgRequestCount.js).
+  useEffect(() => {
+    let cancelled = false;
+    let supabase;
+    let channel;
+
+    function onChange() {
+      fetch("/api/organizations/requests/list")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setRequests(data.requests);
+          setJustUpdated(true);
+          setTimeout(() => setJustUpdated(false), 1500);
+        })
+        .catch(() => {});
+    }
+
+    createRealtimeClientBrowser().then((client) => {
+      if (cancelled) return;
+      supabase = client;
+      channel = supabase
+        .channel("organization_requests_list")
+        .on("postgres_changes", { event: "*", schema: "public", table: "organization_requests" }, onChange)
+        .subscribe();
+    });
+
+    return () => {
+      cancelled = true;
+      if (supabase && channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   async function resolve(request, action) {
     setBusyId(request.id);
@@ -61,15 +98,25 @@ export default function OrganizationRequests({ requests: initial }) {
 
   return (
     <AdminShell>
-      <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Organization requests ({pending.length} pending)
-      </h1>
+      <div className="flex items-center gap-2.5">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          Organization requests ({pending.length} pending)
+        </h1>
+        <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          </span>
+          Live
+        </span>
+      </div>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Org creation and closure are requested from main/, not self-serve — approve provisions the
-        org (or removes it); reject leaves everything as-is.
+        org (or removes it); reject leaves everything as-is. Updates here automatically as new
+        requests come in.
       </p>
 
-      <div className="mt-5">
+      <div className={`mt-5 rounded-lg transition-shadow ${justUpdated ? "ring-2 ring-primary-400/50" : ""}`}>
         <Table>
           <TableHead>
             <th className="px-4 py-2 font-medium">Requester</th>

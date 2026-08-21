@@ -5,6 +5,22 @@ export function createClientBrowser() {
   return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+// For postgres_changes subscriptions specifically: createClientBrowser()
+// wires up auth for regular queries fine, but .channel().subscribe()
+// opens its websocket immediately — if that happens before the client's
+// own async getSession()-driven realtime.setAuth() call resolves, the
+// socket connects as the anon role, so any RLS policy gating the
+// subscription (e.g. is_platform_admin()) silently receives nothing, no
+// error. Awaiting this before subscribing closes that race.
+export async function createRealtimeClientBrowser() {
+  const supabase = createClientBrowser();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+  return supabase;
+}
+
 // The admin panel talks to Supabase for its actual data ONLY via the
 // service-role client — cross-tenant visibility requires bypassing RLS
 // by design. Auth is handled entirely in middleware.js (session exists +

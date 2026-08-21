@@ -67,7 +67,12 @@ export default function AdminOrganizations({ orgs: initial }) {
 
   return (
     <AdminShell>
-      <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Organizations ({orgs.length})</h1>
+      <div>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Organizations ({orgs.length})</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Cross-tenant visibility into every organization on the platform, its members, and its projects.
+        </p>
+      </div>
       <div className="relative mt-4 max-w-sm">
         <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -89,6 +94,13 @@ export default function AdminOrganizations({ orgs: initial }) {
             <th className="px-4 py-2"></th>
           </TableHead>
           <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-400">
+                  {query.trim() ? "No organizations match your search." : "No organizations yet."}
+                </td>
+              </TableRow>
+            )}
             {filtered.map((o) => (
               <TableRow key={o.id}>
                 <td className="px-4 py-2.5">
