@@ -77,15 +77,20 @@ export async function middleware(req) {
 }
 
 // NOTE: /api/manifest, /api/release-icon, /share/*, /api/public/*, "/",
-// and /api/cron/* are excluded from the login gate on purpose. /api/manifest
-// and /api/release-icon are fetched directly by Apple's OS-level installer,
-// which carries no browser auth cookies. /share/* is the public,
-// anyone-with-the-link install page. "/" is the public upload landing, and
-// /api/public/* is the endpoint it posts to — both meant to be reachable
-// without signing in. /api/cron/* is invoked by Vercel Cron itself, which
-// has no session cookie either.
+// /api/cron/*, manifest.json, sw.js, and icons/* are excluded from the
+// login gate on purpose. /api/manifest and /api/release-icon are fetched
+// directly by Apple's OS-level installer, which carries no browser auth
+// cookies. /share/* is the public, anyone-with-the-link install page. "/"
+// is the public upload landing, and /api/public/* is the endpoint it
+// posts to — both meant to be reachable without signing in. /api/cron/*
+// is invoked by Vercel Cron itself, which has no session cookie either.
+// manifest.json/sw.js/icons/* must stay reachable anonymously too — found
+// live: Chrome's WebAPK-minting service re-fetches all three with no
+// session cookie to build a real standalone Android install, and having
+// them redirect to /login here made every Android "Install" silently
+// fall back to a plain home-screen shortcut instead (see main/CLAUDE.md).
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/manifest|api/release-icon|api/download|share/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|sw.js|icons/|api/manifest|api/release-icon|api/download|share/).*)",
   ],
 };

@@ -142,23 +142,31 @@ plain `transition-colors` for hover states, which is correct for those.
   Vercel's serverless runtime (no `atos`/`retrace` toolchain available).
   If you ever add real symbolication, it'll need an external service or a
   self-hosted worker, not a Vercel function.
-- **The PWA manifest's `start_url` must resolve to a 200 for an
-  anonymous, cookie-less request.** `public/manifest.json`'s `start_url`
-  is `"/"` (the public upload landing, redirected to `/dashboard`
-  server-side for signed-in visitors by `middleware.js`) rather than
-  `/dashboard` itself. Confirmed live on Android: Chrome's real
-  "Install app" flow (the one producing a true standalone WebAPK, not
-  just a home-screen shortcut) has Google's WebAPK-minting server
-  re-fetch `start_url` with no session cookie to validate it before
-  building the package; pointing it at an auth-gated route makes that
-  fetch hit the `/login` redirect, the mint silently fails, and Chrome
-  falls back to a plain shortcut that opens in a normal browser tab
-  instead of standalone — with no error surfaced anywhere client-side.
-  `beforeinstallprompt` firing and the browser's own menu offering
-  "Install app" both still look fine in that broken state, so this is
-  easy to miss; the only symptom is the installed icon not actually
-  behaving like a standalone app. If `start_url` ever needs to change
-  again, it must stay a route reachable with a 200 while signed out.
+- **Every file the PWA install pipeline touches must resolve to a 200
+  for an anonymous, cookie-less request** — `manifest.json`, `sw.js`,
+  `icons/*`, and the manifest's `start_url` (`"/"`, the public upload
+  landing, redirected to `/dashboard` server-side for signed-in visitors
+  by `middleware.js` — not `/dashboard` itself). Confirmed live on
+  Android: Chrome's real "Install app" flow (the one producing a true
+  standalone WebAPK, not just a home-screen shortcut) has Google's
+  WebAPK-minting server independently re-fetch all of these with no
+  session cookie, to build the package. `middleware.js`'s matcher
+  originally only excluded `favicon.ico` (a file that doesn't even exist
+  — see `_app.js`'s actual `favicon-32.png`) from the login gate, not
+  `manifest.json`/`sw.js`/`icons/*`, so every one of those anonymous
+  fetches was hitting the `/login` redirect — confirmed by `curl`
+  against prod returning a 307 to `/login` for `/manifest.json` and
+  `/icons/icon-192.png`. The mint silently fails in that state and
+  Chrome falls back to a plain shortcut that opens in a normal browser
+  tab instead of standalone, with no error surfaced anywhere
+  client-side. `beforeinstallprompt` firing and the browser's own menu
+  offering "Install app" both still look fine — the browser tab's own
+  fetches of these files are cookie-authenticated, so only the
+  cookie-less server-side mint fails — which makes this easy to miss;
+  the only symptom is the installed icon not actually behaving like a
+  standalone app. Any new static asset the manifest references (new
+  icon sizes, screenshots, etc.) needs the same exemption in
+  `middleware.js`'s matcher, or this regresses silently again.
 - **Device/OS breakdown comes from `page_view_events`, not
   `install_events`.** `install_events`/`manifest.js`/`download.js` are hit
   by OS-level installer processes with unreliable User-Agent strings;
