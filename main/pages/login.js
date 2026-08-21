@@ -24,6 +24,7 @@ export default function Login({ branding }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [mode, setMode] = useState("signin");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -63,7 +64,7 @@ export default function Login({ branding }) {
     setError("");
     setMessage("");
     setLoading(true);
-    const supabase = createClient();
+    const supabase = createClient(mode === "signin" ? { rememberMe } : undefined);
     const redirectTo = router.query.redirectTo || "/dashboard";
 
     if (mode === "signin") {
@@ -220,6 +221,18 @@ export default function Login({ branding }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
+        {mode === "signin" && (
+          <label className="flex items-center gap-2 text-sm text-ink-secondary">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-3.5 w-3.5 rounded border-border accent-accent"
+            />
+            Remember me
+          </label>
+        )}
 
         {message && (
           <p className="flex items-center gap-1.5 text-sm text-success">

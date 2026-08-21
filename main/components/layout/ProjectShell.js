@@ -9,6 +9,7 @@ import OrgAnnouncementBanner from "./OrgAnnouncementBanner";
 import CommandPalette from "../CommandPalette";
 import { addRecentlyViewed } from "../../lib/recentlyViewed";
 import { createClient } from "../../lib/supabase/client";
+import { UserProvider } from "../../lib/UserContext";
 
 const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
@@ -54,26 +55,28 @@ export default function ProjectShell({ project, active, children }) {
   }, [project.org_id]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas">
-      <TopNav
-        crumb={project.name}
-        orgBranding={orgBranding}
-        center={TABS.map((tab) => (
-          <NavTab
-            key={tab.key}
-            href={`/projects/${project.id}${tab.path}`}
-            label={tab.label}
-            icon={tab.icon}
-            active={active === tab.key}
-          />
-        ))}
-      />
-      <OrgAnnouncementBanner />
-      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-      <CompleteProfileGate />
-      <VerifyEmailGate />
-      <RequireMfaGate />
-      <CommandPalette />
-    </div>
+    <UserProvider>
+      <div className="flex min-h-screen flex-col bg-canvas">
+        <TopNav
+          crumb={project.name}
+          orgBranding={orgBranding}
+          center={TABS.map((tab) => (
+            <NavTab
+              key={tab.key}
+              href={`/projects/${project.id}${tab.path}`}
+              label={tab.label}
+              icon={tab.icon}
+              active={active === tab.key}
+            />
+          ))}
+        />
+        <OrgAnnouncementBanner />
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <CompleteProfileGate />
+        <VerifyEmailGate />
+        <RequireMfaGate />
+        <CommandPalette />
+      </div>
+    </UserProvider>
   );
 }

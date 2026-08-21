@@ -251,22 +251,27 @@ export async function publishRelease({
     // ignored — notification failures never affect the publish result
   }
 
-  // Best-effort release email — same "never affects the publish result"
-  // guarantee as the webhook send above.
+  // Best-effort release email + push — same "never affects the publish
+  // result" guarantee as the webhook send above. Recipients/URL/label are
+  // shared by both; push is intentionally *not* nested under the
+  // "release emails" toggle below — it's a separate opt-in
+  // (PushNotificationsCard in Settings), and used to silently never fire
+  // because it sat inside that unrelated, default-off email gate.
   try {
-    if (project?.release_emails_enabled) {
-      const { data: collaborators } = await service
-        .from("project_collaborators")
-        .select("email")
-        .eq("project_id", projectId);
-      const recipients = [...new Set((collaborators || []).map((c) => c.email))];
-      if (recipients.length > 0) {
-        const protocol = req.headers["x-forwarded-proto"] || "https";
-        const host = req.headers.host;
-        const distributeUrl = `${protocol}://${host}/distribute/${release.id}`;
-        const versionLabel = `${release.platform} v${release.version}${
-          release.build_number ? ` (${release.build_number})` : ""
-        }`;
+    const { data: collaborators } = await service
+      .from("project_collaborators")
+      .select("email")
+      .eq("project_id", projectId);
+    const recipients = [...new Set((collaborators || []).map((c) => c.email))];
+    if (recipients.length > 0) {
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const host = req.headers.host;
+      const distributeUrl = `${protocol}://${host}/distribute/${release.id}`;
+      const versionLabel = `${release.platform} v${release.version}${
+        release.build_number ? ` (${release.build_number})` : ""
+      }`;
+
+      if (project?.release_emails_enabled) {
         await sendEmail({
           to: recipients,
           subject: `${release.app_name || "New build"} ${release.version} published`,
@@ -281,12 +286,13 @@ export async function publishRelease({
             ctaUrl: distributeUrl,
           }),
         });
-        await sendPushToEmails(service, recipients, {
-          title: `${release.app_name || "New build"} ${release.version} published`,
-          body: `${actorEmail || "Someone"} published ${versionLabel}`,
-          url: distributeUrl,
-        });
       }
+
+      await sendPushToEmails(service, recipients, {
+        title: `${release.app_name || "New build"} ${release.version} published`,
+        body: `${actorEmail || "Someone"} published ${versionLabel}`,
+        url: distributeUrl,
+      });
     }
   } catch (e) {
     // ignored

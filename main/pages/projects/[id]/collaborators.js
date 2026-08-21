@@ -10,7 +10,7 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { ROLE_META, ASSIGNABLE_ROLES, canManageReleases } from "../../../components/ui/role";
-import { getAvatarColor } from "../../../lib/avatarColor";
+import Avatar from "../../../components/ui/Avatar";
 import { useToast } from "../../../components/ui/ToastProvider";
 import {
   UserPlus,
@@ -40,10 +40,14 @@ export async function getServerSideProps({ params, req, res }) {
   if (collaborators.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("email, full_name")
+      .select("email, full_name, avatar_url")
       .in("email", collaborators.map((c) => c.email));
-    const nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
-    collaborators = collaborators.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
+    const profileByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p]));
+    collaborators = collaborators.map((c) => ({
+      ...c,
+      full_name: profileByEmail[c.email]?.full_name || null,
+      avatar_url: profileByEmail[c.email]?.avatar_url || null,
+    }));
   }
 
   // Empty for non-owners — RLS's "owner manages tokens" policy already
@@ -276,15 +280,10 @@ export default function Collaborators({ project, role: myRole, collaborators: in
             const meta = ROLE_META[c.role];
             const Icon = meta.icon;
             const displayName = c.full_name || c.email;
-            const color = getAvatarColor(c.email);
             return (
               <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color.bg} ${color.text}`}
-                  >
-                    {displayName[0].toUpperCase()}
-                  </span>
+                  <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="md" />
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink-primary">{displayName}</p>
                     {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}

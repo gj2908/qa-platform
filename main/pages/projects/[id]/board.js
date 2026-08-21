@@ -51,11 +51,17 @@ export async function getServerSideProps({ params, req, res }) {
   const collaborators = collaboratorsRaw || [];
   const emails = [...new Set(collaborators.map((c) => c.email))];
   let nameByEmail = {};
+  let avatarUrlByEmail = {};
   if (emails.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("email, full_name").in("email", emails);
+    const { data: profiles } = await supabase.from("profiles").select("email, full_name, avatar_url").in("email", emails);
     nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
+    avatarUrlByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.avatar_url]));
   }
-  const collaboratorsWithNames = collaborators.map((c) => ({ email: c.email, full_name: nameByEmail[c.email] || null }));
+  const collaboratorsWithNames = collaborators.map((c) => ({
+    email: c.email,
+    full_name: nameByEmail[c.email] || null,
+    avatar_url: avatarUrlByEmail[c.email] || null,
+  }));
 
   return {
     props: {
@@ -64,6 +70,7 @@ export async function getServerSideProps({ params, req, res }) {
       tasks: tasks || [],
       collaborators: collaboratorsWithNames,
       nameByEmail,
+      avatarUrlByEmail,
       initialSavedViews: savedViews || [],
       initialTemplates: templates || [],
       initialDependencies: dependencies || [],
@@ -77,6 +84,7 @@ export default function Board({
   tasks: initialTasks,
   collaborators,
   nameByEmail,
+  avatarUrlByEmail,
   initialSavedViews,
   initialTemplates,
   initialDependencies,
@@ -644,6 +652,7 @@ export default function Board({
                           <TaskCard
                             task={t}
                             assigneeName={t.assignee_email ? nameByEmail[t.assignee_email] : null}
+                            assigneeAvatarUrl={t.assignee_email ? avatarUrlByEmail[t.assignee_email] : null}
                             onMove={moveTask}
                             onDelete={deleteTask}
                             onOpen={setSelectedTask}

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Megaphone, X } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
+import { useOrgIds } from "../../lib/useOrgIds";
 
 // Org-authored, dismissible-per-member banner shown across every project
 // under an org — distinct from admin/'s cross-tenant platform_settings
@@ -12,18 +13,15 @@ import { useCurrentUser } from "../../lib/useCurrentUser";
 // announcement is found.
 export default function OrgAnnouncementBanner() {
   const user = useCurrentUser();
+  const orgIds = useOrgIds(user?.email);
   const [announcement, setAnnouncement] = useState(null); // { id, message, orgName }
 
   useEffect(() => {
-    if (!user?.email) return;
+    if (!orgIds || orgIds.length === 0) return;
     let cancelled = false;
     const supabase = createClient();
 
     async function check() {
-      const { data: memberships } = await supabase.from("org_members").select("org_id").eq("email", user.email);
-      const orgIds = [...new Set((memberships || []).map((m) => m.org_id))];
-      if (orgIds.length === 0) return;
-
       const { data: announcements } = await supabase
         .from("org_announcements")
         .select("id, message, org_id, expires_at, created_at, organizations(name)")
@@ -48,7 +46,7 @@ export default function OrgAnnouncementBanner() {
     return () => {
       cancelled = true;
     };
-  }, [user?.email]);
+  }, [orgIds, user?.email]);
 
   async function dismiss() {
     if (!announcement || !user?.email) return;

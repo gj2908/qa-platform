@@ -9,7 +9,7 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { getAvatarColor } from "../../../lib/avatarColor";
+import Avatar from "../../../components/ui/Avatar";
 import { activityMetaFor } from "../../../lib/activityMeta";
 import { relativeTime } from "../../../lib/format";
 import {
@@ -34,11 +34,25 @@ export async function getServerSideProps({ params, req, res }) {
   const { data: role } = await supabase.rpc("org_role", { p_org_id: params.id });
   if (!role) return { notFound: true };
 
-  const { data: members } = await supabase
+  const { data: membersRaw } = await supabase
     .from("org_members")
     .select("email, role, created_at")
     .eq("org_id", params.id)
     .order("role");
+
+  let members = membersRaw || [];
+  if (members.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("email, full_name, avatar_url")
+      .in("email", members.map((m) => m.email));
+    const profileByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p]));
+    members = members.map((m) => ({
+      ...m,
+      full_name: profileByEmail[m.email]?.full_name || null,
+      avatar_url: profileByEmail[m.email]?.avatar_url || null,
+    }));
+  }
 
   const { data: projects } = await supabase
     .from("projects")
@@ -99,7 +113,7 @@ export async function getServerSideProps({ params, req, res }) {
   }
 
   return {
-    props: { org, role, members: members || [], projects: projects || [], ownedUnattached, activity },
+    props: { org, role, members, projects: projects || [], ownedUnattached, activity },
   };
 }
 
@@ -639,16 +653,15 @@ export default function OrganizationDetail({
           <div className="mt-4 divide-y divide-border border-t border-border">
             {members.map((m) => {
               const meta = ROLE_META[m.role];
-              const color = getAvatarColor(m.email);
+              const displayName = m.full_name || m.email;
               return (
                 <div key={m.email} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color.bg} ${color.text}`}
-                    >
-                      {m.email[0].toUpperCase()}
-                    </span>
-                    <p className="truncate text-sm text-ink-primary">{m.email}</p>
+                    <Avatar avatarUrl={m.avatar_url} seed={m.email} displayName={displayName} size="team" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-ink-primary">{displayName}</p>
+                      {m.full_name && <p className="truncate text-xs text-ink-tertiary">{m.email}</p>}
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge tone={meta.tone}>{meta.label}</Badge>

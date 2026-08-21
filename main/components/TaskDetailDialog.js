@@ -8,6 +8,7 @@ import { Trash2, X, Send, Clock, ImageOff } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { getAvatarColor } from "../lib/avatarColor";
+import Avatar from "./ui/Avatar";
 import { relativeTime } from "../lib/format";
 import { getMentionQueryAt, extractMentionedCollaborators, splitMentions } from "../lib/mentions";
 import { STATUS_META } from "./ui/status";
@@ -564,7 +565,6 @@ export default function TaskDetailDialog({
                 {mentionState && mentionCandidates.length > 0 && (
                   <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-md border border-border bg-surface-raised py-1 shadow-lg">
                     {mentionCandidates.map((c, i) => {
-                      const color = getAvatarColor(c.email);
                       const displayName = nameByEmail?.[c.email] || c.full_name || c.email;
                       return (
                         <button
@@ -579,11 +579,7 @@ export default function TaskDetailDialog({
                             i === mentionState.activeIndex ? "bg-hover" : ""
                           }`}
                         >
-                          <span
-                            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${color.bg} ${color.text}`}
-                          >
-                            {displayName[0].toUpperCase()}
-                          </span>
+                          <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="sm" />
                           <span className="min-w-0 flex-1 truncate text-sm text-ink-primary">{displayName}</span>
                         </button>
                       );

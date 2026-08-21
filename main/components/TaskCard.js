@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2, OctagonAlert } from "lucide-react";
 import { STATUS_META, STATUS_ORDER } from "./ui/status";
-import { getAvatarColor } from "../lib/avatarColor";
+import Avatar from "./ui/Avatar";
 
 const AI_CATEGORY_TONE = {
   bug: "bg-danger-subtle text-danger-subtle-fg",
@@ -26,6 +26,7 @@ function dueDateStatus(dueDate) {
 export default function TaskCard({
   task,
   assigneeName,
+  assigneeAvatarUrl,
   onMove,
   onDelete,
   onOpen,
@@ -39,7 +40,6 @@ export default function TaskCard({
   const idx = STATUS_ORDER.indexOf(task.status);
   const meta = STATUS_META[task.status];
   const dueStatus = dueDateStatus(task.due_date);
-  const assigneeColor = task.assignee_email ? getAvatarColor(task.assignee_email) : null;
   const assigneeDisplay = assigneeName || task.assignee_email;
 
   function handleDragStart(e) {
@@ -127,11 +127,7 @@ export default function TaskCard({
         <div className="flex flex-wrap items-center gap-2">
           {task.assignee_email && (
             <div className="flex items-center gap-1.5">
-              <span
-                className={`flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-semibold ${assigneeColor.bg} ${assigneeColor.text}`}
-              >
-                {assigneeDisplay[0].toUpperCase()}
-              </span>
+              <Avatar avatarUrl={assigneeAvatarUrl} seed={task.assignee_email} displayName={assigneeDisplay} size="xs" />
               <span className="truncate text-xs text-ink-tertiary">{assigneeDisplay}</span>
             </div>
           )}

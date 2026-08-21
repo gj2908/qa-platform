@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, Settings, Building2, ListChecks, Download } from "lucide-react";
+import { LogOut, Settings, User, Building2, ListChecks, Download } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
-import { useCurrentUser } from "../../lib/useCurrentUser";
-import { getAvatarColor } from "../../lib/avatarColor";
+import { useCurrentUser, useAvatarUrl } from "../../lib/UserContext";
 import { usePwaInstall } from "../../lib/usePwaInstall";
 import ThemeToggle from "../ThemeToggle";
 import PwaInstallInstructions from "./PwaInstallInstructions";
+import Avatar from "../ui/Avatar";
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
   const user = useCurrentUser();
+  const avatarUrl = useAvatarUrl();
   const email = user?.email || "";
   const fullName = user?.user_metadata?.full_name?.trim() || "";
   const displayName = fullName || email;
@@ -41,31 +42,31 @@ export default function UserMenu() {
     }
   }
 
-  const initial = displayName ? displayName[0].toUpperCase() : "?";
-  const color = getAvatarColor(email);
-
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-opacity hover:opacity-80 ${color.bg} ${color.text}`}
+        className="rounded-full transition-opacity hover:opacity-80"
         title={displayName}
       >
-        {initial}
+        <Avatar avatarUrl={avatarUrl} seed={email} displayName={displayName} size="md" />
       </button>
 
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1.5 w-56 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
-          <div className="truncate border-b border-border px-2.5 py-2">
-            {fullName ? (
-              <>
-                <p className="truncate text-sm font-medium text-ink-primary">{fullName}</p>
-                <p className="truncate text-xs text-ink-tertiary">{email}</p>
-              </>
-            ) : (
-              <p className="truncate text-xs text-ink-tertiary">{email || "Loading…"}</p>
-            )}
+          <div className="flex items-center gap-2.5 truncate border-b border-border px-2.5 py-2">
+            <Avatar avatarUrl={avatarUrl} seed={email} displayName={displayName} size="md" />
+            <div className="min-w-0">
+              {fullName ? (
+                <>
+                  <p className="truncate text-sm font-medium text-ink-primary">{fullName}</p>
+                  <p className="truncate text-xs text-ink-tertiary">{email}</p>
+                </>
+              ) : (
+                <p className="truncate text-xs text-ink-tertiary">{email || "Loading…"}</p>
+              )}
+            </div>
           </div>
           <div className="mt-1 flex items-center justify-between gap-2 px-2.5 py-1.5">
             <span className="text-sm text-ink-secondary">Theme</span>
@@ -80,9 +81,17 @@ export default function UserMenu() {
             My tasks
           </Link>
           <Link
-            href="/settings"
+            href="/profile"
             onClick={() => setOpen(false)}
             className="mt-1 flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
+          >
+            <User size={14} strokeWidth={2} />
+            Profile
+          </Link>
+          <Link
+            href="/settings"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
           >
             <Settings size={14} strokeWidth={2} />
             Settings

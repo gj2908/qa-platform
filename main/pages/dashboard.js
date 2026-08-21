@@ -35,19 +35,46 @@ export async function getServerSideProps({ req, res }) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: projectsRaw } = await supabase
-    .from("projects")
-    .select("*")
-    .order("created_at", { ascending: false });
+  // None of these six queries depend on each other's results (only on
+  // `user`, already resolved above), so they run concurrently instead of
+  // as seven sequential round trips.
+  const [
+    { data: projectsRaw },
+    { data: myRoles },
+    { data: favoritesRaw },
+    { count: openTasksCount },
+    { data: lastRelease },
+    { data: myUploadsRaw },
+  ] = await Promise.all([
+    supabase.from("projects").select("*").order("created_at", { ascending: false }),
+    user?.email
+      ? supabase.from("project_collaborators").select("project_id, role").eq("email", user.email)
+      : Promise.resolve({ data: [] }),
+    user?.email
+      ? supabase.from("project_favorites").select("project_id").eq("email", user.email)
+      : Promise.resolve({ data: [] }),
+    supabase.from("tasks").select("id", { count: "exact", head: true }).neq("status", "done"),
+    supabase
+      .from("releases")
+      .select("created_at")
+      .eq("status", "published")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Releases published anonymously (no project) from the public landing
+    // page, matched back to this account by email.
+    user?.email
+      ? supabase
+          .from("releases")
+          .select("*")
+          .is("project_id", null)
+          .eq("uploader_email", user.email)
+          .eq("status", "published")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
 
-  const { data: myRoles } = user?.email
-    ? await supabase.from("project_collaborators").select("project_id, role").eq("email", user.email)
-    : { data: [] };
   const roleByProject = Object.fromEntries((myRoles || []).map((r) => [r.project_id, r.role]));
-
-  const { data: favoritesRaw } = user?.email
-    ? await supabase.from("project_favorites").select("project_id").eq("email", user.email)
-    : { data: [] };
   const favoriteIds = new Set((favoritesRaw || []).map((f) => f.project_id));
 
   const projects = (projectsRaw || [])
@@ -57,32 +84,7 @@ export async function getServerSideProps({ req, res }) {
       return new Date(b.created_at) - new Date(a.created_at);
     });
 
-  const { count: openTasksCount } = await supabase
-    .from("tasks")
-    .select("id", { count: "exact", head: true })
-    .neq("status", "done");
-
-  const { data: lastRelease } = await supabase
-    .from("releases")
-    .select("created_at")
-    .eq("status", "published")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Releases published anonymously (no project) from the public landing
-  // page, matched back to this account by email.
-  let myUploads = [];
-  if (user?.email) {
-    const { data } = await supabase
-      .from("releases")
-      .select("*")
-      .is("project_id", null)
-      .eq("uploader_email", user.email)
-      .eq("status", "published")
-      .order("created_at", { ascending: false });
-    myUploads = data || [];
-  }
+  const myUploads = myUploadsRaw || [];
 
   return {
     props: {

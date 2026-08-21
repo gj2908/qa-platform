@@ -42,7 +42,7 @@ import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
 import BarChart from "../../../components/ui/BarChart";
 import { TrendingUp } from "lucide-react";
-import { getAvatarColor } from "../../../lib/avatarColor";
+import Avatar from "../../../components/ui/Avatar";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -75,10 +75,14 @@ export async function getServerSideProps({ params, req, res }) {
 
   const emails = [...new Set([...collaborators.map((c) => c.email), ...activity.map((a) => a.actor_email)])];
   if (emails.length > 0) {
-    const { data: profiles } = await supabase.from("profiles").select("email, full_name").in("email", emails);
-    const nameByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p.full_name]));
-    collaborators = collaborators.map((c) => ({ ...c, full_name: nameByEmail[c.email] || null }));
-    activity = activity.map((a) => ({ ...a, actor_name: nameByEmail[a.actor_email] || null }));
+    const { data: profiles } = await supabase.from("profiles").select("email, full_name, avatar_url").in("email", emails);
+    const profileByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p]));
+    collaborators = collaborators.map((c) => ({
+      ...c,
+      full_name: profileByEmail[c.email]?.full_name || null,
+      avatar_url: profileByEmail[c.email]?.avatar_url || null,
+    }));
+    activity = activity.map((a) => ({ ...a, actor_name: profileByEmail[a.actor_email]?.full_name || null }));
   }
 
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -350,14 +354,9 @@ export default function ProjectOverview({
               {collaborators.map((c) => {
                 const meta = ROLE_META[c.role];
                 const displayName = c.full_name || c.email;
-                const color = getAvatarColor(c.email);
                 return (
                   <div key={c.email} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${color.bg} ${color.text}`}
-                    >
-                      {displayName[0].toUpperCase()}
-                    </span>
+                    <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="team" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-ink-primary">{displayName}</p>
                       <p className="text-[11px] text-ink-tertiary">{meta.label}</p>

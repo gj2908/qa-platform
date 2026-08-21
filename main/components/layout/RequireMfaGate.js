@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { createClient } from "../../lib/supabase/client";
 import { useCurrentUser } from "../../lib/useCurrentUser";
+import { useOrgIds } from "../../lib/useOrgIds";
 import Button from "../ui/Button";
 import Link from "next/link";
 import { ShieldAlert, LogOut } from "lucide-react";
@@ -16,6 +17,7 @@ import { ShieldAlert, LogOut } from "lucide-react";
 // "ok" → null.
 export default function RequireMfaGate() {
   const user = useCurrentUser();
+  const orgIds = useOrgIds(user?.email);
   const router = useRouter();
   const [status, setStatus] = useState("checking"); // checking | required | ok
 
@@ -25,13 +27,11 @@ export default function RequireMfaGate() {
   const onSettingsPage = router.pathname === "/settings";
 
   useEffect(() => {
-    if (!user?.email) return;
+    if (!orgIds) return;
     let cancelled = false;
     const supabase = createClient();
 
     async function check() {
-      const { data: memberships } = await supabase.from("org_members").select("org_id").eq("email", user.email);
-      const orgIds = [...new Set((memberships || []).map((m) => m.org_id))];
       if (orgIds.length === 0) {
         if (!cancelled) setStatus("ok");
         return;
@@ -50,7 +50,7 @@ export default function RequireMfaGate() {
     return () => {
       cancelled = true;
     };
-  }, [user?.email]);
+  }, [orgIds]);
 
   async function signOut() {
     const supabase = createClient();
