@@ -1,9 +1,10 @@
 import { createServiceClient } from "../../../../lib/supabase/server";
-import { verifyApiToken } from "../../../../lib/verifyApiToken";
+import { verifyApiToken, resolveTokenProjectId } from "../../../../lib/verifyApiToken";
 
 // GET /api/v1/releases/:id — detail for a single release, scoped to the
 // token's project (a token for project A can never read project B's data,
-// even if it guesses an id).
+// even if it guesses an id). An org token must also pass ?projectId=
+// naming a project in its own org — see resolveTokenProjectId.
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.status(405).end();
@@ -17,13 +18,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  const { projectId, error: scopeError } = await resolveTokenProjectId(service, token, req);
+  if (scopeError) {
+    res.status(scopeError.status).json(scopeError.body);
+    return;
+  }
+
   const { data: release } = await service
     .from("releases")
     .select(
       "id, platform, version, build_number, channel, status, app_name, bundle_id, notes, install_count, created_at"
     )
     .eq("id", req.query.id)
-    .eq("project_id", token.project_id)
+    .eq("project_id", projectId)
     .single();
 
   if (!release) {

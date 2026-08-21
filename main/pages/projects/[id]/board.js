@@ -7,6 +7,7 @@ import ProjectShell from "../../../components/layout/ProjectShell";
 import Input from "../../../components/ui/Input";
 import Button from "../../../components/ui/Button";
 import Select from "../../../components/ui/Select";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
 import { canManageBoard } from "../../../components/ui/role";
@@ -42,6 +43,10 @@ export async function getServerSideProps({ params, req, res }) {
     .select("*")
     .eq("project_id", params.id)
     .order("created_at", { ascending: true });
+  const { data: dependencies } = await supabase
+    .from("task_dependencies")
+    .select("*")
+    .eq("project_id", params.id);
 
   const collaborators = collaboratorsRaw || [];
   const emails = [...new Set(collaborators.map((c) => c.email))];
@@ -61,6 +66,7 @@ export async function getServerSideProps({ params, req, res }) {
       nameByEmail,
       initialSavedViews: savedViews || [],
       initialTemplates: templates || [],
+      initialDependencies: dependencies || [],
     },
   };
 }
@@ -73,9 +79,12 @@ export default function Board({
   nameByEmail,
   initialSavedViews,
   initialTemplates,
+  initialDependencies,
 }) {
   const toast = useToast();
   const [tasks, setTasks] = useState(initialTasks);
+  const [dependencies, setDependencies] = useState(initialDependencies);
+  const [blockConfirm, setBlockConfirm] = useState(null); // { count, proceed } while awaiting a soft warn on a done-move with open blockers
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
@@ -247,6 +256,19 @@ export default function Board({
     exitSelectMode();
   }
 
+  // Dependency rows where `taskId` is blocked and its blocker hasn't
+  // reached 'done' yet — the only thing that drives both the TaskCard
+  // indicator and the soft "mark done anyway?" warn below. Soft warn only,
+  // matching this app's "RLS + UI hints, not a workflow engine" posture
+  // (see supabase/schema.sql's comment on task_dependencies).
+  function getOpenBlockers(taskId) {
+    return dependencies.filter((d) => {
+      if (d.blocked_task_id !== taskId) return false;
+      const blocker = tasks.find((t) => t.id === d.blocking_task_id);
+      return blocker && blocker.status !== "done";
+    });
+  }
+
   const allLabels = [...new Set(tasks.flatMap((t) => t.labels || []))].sort();
 
   const visibleTasks = tasks.filter((t) => {
@@ -279,6 +301,17 @@ export default function Board({
   }
 
   async function moveTask(task, newStatus) {
+    if (newStatus === "done" && task.status !== "done") {
+      const openBlockers = getOpenBlockers(task.id);
+      if (openBlockers.length > 0) {
+        setBlockConfirm({ count: openBlockers.length, proceed: () => performMoveTask(task, newStatus) });
+        return;
+      }
+    }
+    await performMoveTask(task, newStatus);
+  }
+
+  async function performMoveTask(task, newStatus) {
     const supabase = createClient();
     setTasks(tasks.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t)));
     await supabase.from("tasks").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", task.id);
@@ -291,6 +324,19 @@ export default function Board({
   // of 10 (standard fractional-index trick) and persisting the new
   // positions — cross-column drops still just change status via moveTask.
   async function reorderTask(taskId, columnKey, targetIndex) {
+    const moved = tasks.find((t) => t.id === taskId);
+    if (!moved) return;
+    if (columnKey === "done" && moved.status !== "done") {
+      const openBlockers = getOpenBlockers(taskId);
+      if (openBlockers.length > 0) {
+        setBlockConfirm({ count: openBlockers.length, proceed: () => performReorderTask(taskId, columnKey, targetIndex) });
+        return;
+      }
+    }
+    await performReorderTask(taskId, columnKey, targetIndex);
+  }
+
+  async function performReorderTask(taskId, columnKey, targetIndex) {
     const supabase = createClient();
     const columnTasks = tasks.filter((t) => t.status === columnKey && t.id !== taskId);
     const moved = tasks.find((t) => t.id === taskId);
@@ -605,6 +651,7 @@ export default function Board({
                             selectMode={selectMode}
                             selected={selectedIds.has(t.id)}
                             onToggleSelect={toggleTaskSelect}
+                            openBlockerCount={getOpenBlockers(t.id).length}
                           />
                         </div>
                       ))}
@@ -632,6 +679,23 @@ export default function Board({
         onClose={() => setSelectedTask(null)}
         onSave={saveTaskDetails}
         onDelete={deleteTask}
+        allTasks={tasks}
+        dependencies={dependencies}
+        onDependencyAdded={(dep) => setDependencies((deps) => [...deps, dep])}
+        onDependencyRemoved={(depId) => setDependencies((deps) => deps.filter((d) => d.id !== depId))}
+      />
+
+      <ConfirmDialog
+        open={!!blockConfirm}
+        title={`${blockConfirm?.count || 0} blocker${blockConfirm?.count === 1 ? "" : "s"} aren't done yet`}
+        description="You can still mark this task done — nothing blocks the status change, this is just a heads up."
+        confirmLabel="Mark done anyway"
+        onConfirm={() => {
+          const proceed = blockConfirm?.proceed;
+          setBlockConfirm(null);
+          proceed?.();
+        }}
+        onCancel={() => setBlockConfirm(null)}
       />
     </ProjectShell>
   );

@@ -30,6 +30,16 @@ export default async function handler(req, res) {
     res.status(401).json({ error: "Missing or invalid Authorization: Bearer <token> header" });
     return;
   }
+  // Explicit kind check, not just the scope check below: an org token
+  // publishing to a project chosen by request body would let one leaked
+  // token publish to any project in the org. Belt-and-suspenders with
+  // org_api_tokens.scope's DB-level 'read'-only constraint, which alone
+  // would already reject this via the scope check — this makes the
+  // rejection reason unambiguous rather than incidentally correct.
+  if (token.kind !== "project") {
+    res.status(403).json({ error: "Organization-scoped tokens can't publish releases — use a project token instead." });
+    return;
+  }
   if (token.scope !== "publish") {
     res.status(403).json({ error: "This token is read-only and cannot publish releases" });
     return;

@@ -2,8 +2,10 @@ import { useState } from "react";
 import Link from "next/link";
 import AdminShell from "../../components/AdminShell";
 import Badge from "../../components/ui/Badge";
+import StatCard from "../../components/ui/StatCard";
 import { createServiceClient } from "../../lib/supabase";
-import { ArrowLeft } from "lucide-react";
+import { formatBytes } from "../../lib/format";
+import { ArrowLeft, PackageCheck, HardDrive, Activity, Download } from "lucide-react";
 
 export async function getServerSideProps({ params }) {
   const service = createServiceClient();
@@ -22,7 +24,41 @@ export async function getServerSideProps({ params }) {
     .eq("org_id", params.id)
     .order("name");
 
-  return { props: { org, members: members || [], projects: projects || [] } };
+  // Release/storage/activity aggregates are tallied in JS from a couple of
+  // narrow queries rather than a SQL aggregate, matching this page's
+  // existing member/project count style. Guard the empty-org case so we
+  // never hand Postgrest an empty `.in()` array.
+  const projectIds = (projects || []).map((p) => p.id);
+  let releaseCount = 0;
+  let totalStorageBytes = 0;
+  let activityCount30d = 0;
+  if (projectIds.length > 0) {
+    const { data: releases } = await service
+      .from("releases")
+      .select("id, file_size_bytes")
+      .in("project_id", projectIds);
+    releaseCount = (releases || []).length;
+    totalStorageBytes = (releases || []).reduce((sum, r) => sum + (r.file_size_bytes || 0), 0);
+
+    const since30 = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const { count } = await service
+      .from("project_activity")
+      .select("id", { count: "exact", head: true })
+      .in("project_id", projectIds)
+      .gt("created_at", since30);
+    activityCount30d = count || 0;
+  }
+
+  return {
+    props: {
+      org,
+      members: members || [],
+      projects: projects || [],
+      releaseCount,
+      totalStorageBytes,
+      activityCount30d,
+    },
+  };
 }
 
 function Section({ title, children }) {
@@ -36,7 +72,14 @@ function Section({ title, children }) {
   );
 }
 
-export default function AdminOrganizationDetail({ org, members, projects }) {
+export default function AdminOrganizationDetail({
+  org,
+  members,
+  projects,
+  releaseCount,
+  totalStorageBytes,
+  activityCount30d,
+}) {
   const [seatLimit, setSeatLimit] = useState(org.seat_limit ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -101,10 +144,36 @@ export default function AdminOrganizationDetail({ org, members, projects }) {
         <ArrowLeft size={14} />
         Organizations
       </Link>
-      <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{org.name}</h1>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-        Created {new Date(org.created_at).toLocaleDateString()}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{org.name}</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Created {new Date(org.created_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/api/organizations/export?orgId=${org.id}&format=csv`}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Download size={14} />
+            Export CSV
+          </a>
+          <a
+            href={`/api/organizations/export?orgId=${org.id}&format=json`}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <Download size={14} />
+            Export JSON
+          </a>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard icon={PackageCheck} label="Releases" value={releaseCount} index={0} />
+        <StatCard icon={HardDrive} label="Storage used" value={formatBytes(totalStorageBytes)} index={1} />
+        <StatCard icon={Activity} label="Activity (30d)" value={activityCount30d} index={2} />
+      </div>
 
       <div className="mt-5 flex flex-col gap-5">
         <Section title="Seat limit override">

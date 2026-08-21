@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Kanban, ClipboardList, Users, Bug, FlaskConical, ToggleLeft } from "lucide-react";
+import { LayoutDashboard, Kanban, CalendarDays, ClipboardList, Users, Bug, FlaskConical, ToggleLeft } from "lucide-react";
 import TopNav from "./TopNav";
 import NavTab from "./NavTab";
 import CompleteProfileGate from "./CompleteProfileGate";
 import VerifyEmailGate from "./VerifyEmailGate";
 import RequireMfaGate from "./RequireMfaGate";
+import OrgAnnouncementBanner from "./OrgAnnouncementBanner";
 import CommandPalette from "../CommandPalette";
 import { addRecentlyViewed } from "../../lib/recentlyViewed";
 import { createClient } from "../../lib/supabase/client";
@@ -12,6 +13,7 @@ import { createClient } from "../../lib/supabase/client";
 const TABS = [
   { key: "overview", path: "", label: "Overview", icon: LayoutDashboard },
   { key: "board", path: "/board", label: "Board", icon: Kanban },
+  { key: "calendar", path: "/calendar", label: "Calendar", icon: CalendarDays },
   { key: "changelog", path: "/changelog", label: "Changelog", icon: ClipboardList },
   { key: "crashes", path: "/crashes", label: "Crashes", icon: Bug },
   { key: "test-cases", path: "/test-cases", label: "Test cases", icon: FlaskConical },
@@ -66,6 +68,7 @@ export default function ProjectShell({ project, active, children }) {
           />
         ))}
       />
+      <OrgAnnouncementBanner />
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       <CompleteProfileGate />
       <VerifyEmailGate />

@@ -1,6 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { logActivity } from "../../../lib/logActivity";
-import { sendWebhookNotification, buildCollaboratorPayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildCollaboratorPayload } from "../../../lib/webhookNotify";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -54,12 +54,13 @@ export default async function handler(req, res) {
   });
 
   try {
-    const { data: project } = await service.from("projects").select("webhook_url").eq("id", projectId).single();
-    if (project?.webhook_url) {
-      await sendWebhookNotification(
-        project.webhook_url,
+    const { data: project } = await service.from("projects").select("webhook_url, org_id").eq("id", projectId).single();
+    if (project?.webhook_url || project?.org_id) {
+      await notifyProjectWebhooks(
+        service,
+        { id: projectId, webhook_url: project.webhook_url, org_id: project.org_id },
         buildCollaboratorPayload({ email: email.trim().toLowerCase(), role: null, action: "removed" }),
-        { service, projectId, event: "collaborator_removed" }
+        "collaborator_removed"
       );
     }
   } catch (e) {

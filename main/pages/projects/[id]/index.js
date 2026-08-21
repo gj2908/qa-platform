@@ -7,6 +7,8 @@ import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
 import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
+import Badge from "../../../components/ui/Badge";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
@@ -30,6 +32,11 @@ import {
   Building2,
   BookOpen,
   Scale,
+  CheckCircle2,
+  Map,
+  Copy,
+  Check,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -100,6 +107,37 @@ export async function getServerSideProps({ params, req, res }) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 6);
 
+  // "Completed this week" + velocity chart — done tasks bucketed by
+  // updated_at (there's no dedicated completed_at column, so this is an
+  // approximation: retitling/relabeling a done task also bumps
+  // updated_at, nudging which week it's counted in — see the caption in
+  // the UI). Bucketed the same pre-seed-then-walk-once way installTrend
+  // buckets by day above, just with 7-day-wide, 6-bucket periods instead
+  // of 30 one-day periods.
+  const { data: doneTasksRaw } = await supabase
+    .from("tasks")
+    .select("id, updated_at")
+    .eq("project_id", params.id)
+    .eq("status", "done");
+  const doneTasks = doneTasksRaw || [];
+
+  const now = Date.now();
+  const completedThisWeek = doneTasks.filter((t) => now - new Date(t.updated_at).getTime() < 7 * 86_400_000).length;
+
+  const weekBuckets = {};
+  const weekLabels = [];
+  for (let i = 5; i >= 0; i--) {
+    const label = new Date(now - i * 7 * 86_400_000).toISOString().slice(0, 10);
+    weekBuckets[label] = 0;
+    weekLabels.push(label);
+  }
+  for (const t of doneTasks) {
+    const ageWeeks = Math.floor((now - new Date(t.updated_at).getTime()) / (7 * 86_400_000));
+    const label = weekLabels[5 - ageWeeks];
+    if (label in weekBuckets) weekBuckets[label] += 1;
+  }
+  const velocity = Object.entries(weekBuckets).map(([label, value]) => ({ label, value }));
+
   // Funnel (share page view → install click) + device/OS breakdown, last
   // 30 days — page_view_events has the more reliable UA data (a real
   // browser hit), install_events covers the "installed" stage.
@@ -166,6 +204,8 @@ export async function getServerSideProps({ params, req, res }) {
       funnel,
       deviceBreakdown,
       feedbackStats,
+      completedThisWeek,
+      velocity,
       deliveries: deliveries || [],
       role,
       tasks: tasks || [],
@@ -190,6 +230,8 @@ export default function ProjectOverview({
   funnel,
   deviceBreakdown,
   feedbackStats,
+  completedThisWeek,
+  velocity,
   deliveries,
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -223,8 +265,9 @@ export default function ProjectOverview({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatTile icon={ListTodo} label="Open tasks" value={openTasks} />
+          <StatTile icon={CheckCircle2} label="Completed this week" value={completedThisWeek} />
           <StatTile icon={PackageCheck} label="Releases" value={releases.length} />
           <StatTile icon={Users} label="Collaborators" value={collaborators.length} />
         </div>
@@ -359,10 +402,12 @@ export default function ProjectOverview({
           funnel={funnel}
           deviceBreakdown={deviceBreakdown}
           feedbackStats={feedbackStats}
+          velocity={velocity}
         />
 
         {activity.length > 0 && <ActivityCard activity={activity} projectId={project.id} isOwner={isOwner(role)} />}
 
+        {isOwner(role) && <RoadmapCard project={project} />}
         {isOwner(role) && <ApprovalSettingsCard project={project} />}
         {isOwner(role) && <LegalHoldCard project={project} />}
         {isOwner(role) && <WebhookCard project={project} deliveries={deliveries} />}
@@ -376,7 +421,7 @@ export default function ProjectOverview({
   );
 }
 
-function InsightsCard({ installTrend, versionAdoption, funnel, deviceBreakdown, feedbackStats }) {
+function InsightsCard({ installTrend, versionAdoption, funnel, deviceBreakdown, feedbackStats, velocity }) {
   const totalInstalls = installTrend.reduce((sum, d) => sum + d.value, 0);
   const funnelTotal = Math.max(funnel[0]?.value || 0, 1);
 
@@ -395,6 +440,17 @@ function InsightsCard({ installTrend, versionAdoption, funnel, deviceBreakdown, 
           <div className="mt-2">
             <BarChart data={installTrend} height={80} />
           </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-ink-secondary">Velocity (last 6 weeks)</p>
+          <div className="mt-2">
+            <BarChart data={velocity} height={80} />
+          </div>
+          <p className="mt-1 text-[11px] text-ink-tertiary">
+            Based on each task's last-updated time, not a dedicated completion date — retitling or relabeling a
+            done task can nudge which week it's counted in.
+          </p>
         </div>
 
         <div>
@@ -556,6 +612,113 @@ function ApprovalSettingsCard({ project }) {
           {requireApproval ? "On" : "Off"}
         </Button>
       </div>
+    </Card>
+  );
+}
+
+function RoadmapCard({ project }) {
+  const toast = useToast();
+  const [enabled, setEnabled] = useState(project.roadmap_enabled);
+  const [token, setToken] = useState(project.roadmap_token);
+  const [toggling, setToggling] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [confirmingRegen, setConfirmingRegen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const link = typeof window !== "undefined" ? `${window.location.origin}/roadmap/${token}` : "";
+
+  async function callRoadmapToggle(body) {
+    const res = await fetch("/api/projects/roadmap-toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, ...body }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Couldn't update the roadmap link.");
+      return null;
+    }
+    return data;
+  }
+
+  async function toggle() {
+    const next = !enabled;
+    setToggling(true);
+    const data = await callRoadmapToggle({ enabled: next });
+    setToggling(false);
+    if (!data) return;
+    setEnabled(data.roadmapEnabled);
+    toast.success(next ? "Public roadmap enabled." : "Public roadmap disabled.");
+  }
+
+  async function regenerate() {
+    setRegenerating(true);
+    const data = await callRoadmapToggle({ regenerate: true });
+    setRegenerating(false);
+    setConfirmingRegen(false);
+    if (!data) return;
+    setToken(data.roadmapToken);
+    toast.success("Roadmap link regenerated — the old link no longer works.");
+  }
+
+  function copyLink() {
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    toast.success("Link copied.");
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Map size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Public roadmap</h2>
+        {enabled && <Badge tone="success">Enabled</Badge>}
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        A read-only, no-login page showing this project's To Do, In Progress, and Review tasks —
+        titles, priority, labels, and due dates only. No descriptions, assignees, or other internal
+        data.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-3">
+        {enabled && (
+          <div className="flex items-center gap-2">
+            <Input readOnly value={link} onFocus={(e) => e.target.select()} className="font-mono text-xs" />
+            <Button type="button" variant="secondary" size="sm" onClick={copyLink} className="shrink-0">
+              {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
+          <Button variant={enabled ? "secondary" : "primary"} size="sm" loading={toggling} onClick={toggle} className="w-fit">
+            {enabled ? "Disable roadmap" : "Enable roadmap"}
+          </Button>
+          {enabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmingRegen(true)}
+              className="w-fit"
+            >
+              <RefreshCw size={13} strokeWidth={2.25} />
+              Regenerate link
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmingRegen}
+        title="Regenerate roadmap link?"
+        description="The current link stops working immediately — anyone you've already shared it with will need the new one."
+        confirmLabel="Regenerate"
+        loading={regenerating}
+        onConfirm={regenerate}
+        onCancel={() => setConfirmingRegen(false)}
+      />
     </Card>
   );
 }

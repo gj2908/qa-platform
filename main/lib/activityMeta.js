@@ -1,4 +1,4 @@
-import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff } from "lucide-react";
+import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff, OctagonAlert, Megaphone } from "lucide-react";
 
 // Shared between the project Overview "Recent activity" card, the
 // top-bar notification bell, and the org dashboard's activity feed —
@@ -16,6 +16,7 @@ export const ACTIVITY_META = {
   task_completed: { icon: Check, label: "completed a task" },
   task_overdue: { icon: CalendarClock, label: "has an overdue task" },
   task_mentioned: { icon: AtSign, label: "mentioned someone in a task" },
+  task_dependency_added: { icon: OctagonAlert, label: "added a task dependency" },
   project_created: { icon: FolderPlus, label: "created the project" },
   project_settings_updated: { icon: Settings, label: "updated project settings" },
   api_token_created: { icon: KeyRound, label: "created an API token" },
@@ -36,6 +37,9 @@ export const ACTIVITY_META = {
   org_member_joined_via_link: { icon: UserPlus, label: "joined via invite link" },
   org_mfa_required_enabled: { icon: ShieldCheck, label: "required two-factor auth for all members" },
   org_mfa_required_disabled: { icon: ShieldOff, label: "removed the two-factor auth requirement" },
+  org_announcement_created: { icon: Megaphone, label: "posted an announcement" },
+  org_api_token_created: { icon: KeyRound, label: "created an organization API token" },
+  org_api_token_revoked: { icon: KeySquare, label: "revoked an organization API token" },
 };
 
 export function activityMetaFor(action) {

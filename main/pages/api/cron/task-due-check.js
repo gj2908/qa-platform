@@ -1,5 +1,5 @@
 import { createServiceClient } from "../../../lib/supabase/server";
-import { sendWebhookNotification, buildTaskOverduePayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildTaskOverduePayload } from "../../../lib/webhookNotify";
 import { getSetting } from "../../../lib/platformSettings";
 
 // Nudges once per task when it passes its due date without being marked
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   for (const task of tasks || []) {
     const { data: project } = await service
       .from("projects")
-      .select("name, webhook_url")
+      .select("name, webhook_url, org_id")
       .eq("id", task.project_id)
       .single();
 
@@ -48,17 +48,18 @@ export default async function handler(req, res) {
       detail: `${task.title}${task.assignee_email ? ` (${task.assignee_email})` : ""}`,
     });
 
-    if (project?.webhook_url) {
+    if (project?.webhook_url || project?.org_id) {
       const boardUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/projects/${task.project_id}/board`;
-      await sendWebhookNotification(
-        project.webhook_url,
+      await notifyProjectWebhooks(
+        service,
+        { id: task.project_id, webhook_url: project.webhook_url, org_id: project.org_id },
         buildTaskOverduePayload({
           appName: project.name,
           taskTitle: task.title,
           assigneeEmail: task.assignee_email,
           boardUrl,
         }),
-        { service, projectId: task.project_id, event: "task_overdue" }
+        "task_overdue"
       );
     }
 

@@ -37,6 +37,14 @@ export default function ApiDocs() {
             Collaborators page) via <code className="rounded bg-subtle px-1 py-0.5 text-xs">Authorization: Bearer &lt;token&gt;</code>.
             A token is scoped to exactly one project.
           </p>
+          <p className="mt-3 text-sm text-ink-tertiary">
+            An org admin can instead generate an organization token (on an org's Settings page) — it uses
+            the same <code className="rounded bg-subtle px-1 py-0.5 text-xs">Authorization: Bearer &lt;token&gt;</code> header, but is always
+            read-only and has no project of its own, so every <code className="rounded bg-subtle px-1 py-0.5 text-xs">/api/v1/*</code> request made
+            with one must name a project in that org via a <code className="rounded bg-subtle px-1 py-0.5 text-xs">?projectId=</code> query
+            parameter. <code className="rounded bg-subtle px-1 py-0.5 text-xs">/api/ci/releases/create</code> (publishing) does not accept
+            organization tokens at all — publishing always requires a project token.
+          </p>
         </div>
 
         <Endpoint

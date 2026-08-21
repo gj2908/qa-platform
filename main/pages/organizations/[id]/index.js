@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import AppShell from "../../../components/layout/AppShell";
 import Card from "../../../components/ui/Card";
@@ -14,6 +14,7 @@ import { activityMetaFor } from "../../../lib/activityMeta";
 import { relativeTime } from "../../../lib/format";
 import {
   UserPlus,
+  UserMinus,
   Trash2,
   CircleAlert,
   Users,
@@ -124,15 +125,23 @@ export default function OrganizationDetail({
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [removeTarget, setRemoveTarget] = useState(null);
+  const [offboardTarget, setOffboardTarget] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [offboardBusy, setOffboardBusy] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [addingProject, setAddingProject] = useState(false);
   const [showAllActivity, setShowAllActivity] = useState(false);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvRows, setCsvRows] = useState([]);
+  const [csvError, setCsvError] = useState("");
+  const [csvInviting, setCsvInviting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const isAdmin = myRole === "org_admin";
   const seatsUsed = members.length;
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const CSV_MAX_ROWS = 200;
 
   async function addMember(e) {
     e.preventDefault();
@@ -175,6 +184,103 @@ export default function OrganizationDetail({
 
     if (addedCount > 0) {
       setEmail("");
+      toast.success(
+        addedCount === 1
+          ? invitedCount > 0
+            ? "Member added — invite email sent."
+            : "Member added."
+          : `${addedCount} member${addedCount === 1 ? "" : "s"} added${invitedCount > 0 ? `, ${invitedCount} invited` : ""}.`
+      );
+    }
+    if (failures.length > 0) {
+      setError(failures.join("; "));
+    }
+  }
+
+  // Alternative to the paste-emails textarea above: lets an admin set a
+  // different role per row instead of one shared role for the whole
+  // batch. Parsed and previewed entirely client-side (no parsing library
+  // — this is a hand-rolled two-column split) so the admin can eyeball
+  // the rows before any invite emails actually go out.
+  async function handleCsvFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvError("");
+    setCsvRows([]);
+    setCsvFileName(file.name);
+
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length === 0) {
+      setCsvError("That CSV looks empty.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    // Skip a header row only when it's unambiguous — the first line's
+    // second column isn't literally one of the two valid role values.
+    const firstRole = (lines[0].split(",")[1] || "").trim();
+    const dataLines = firstRole === "member" || firstRole === "org_admin" ? lines : lines.slice(1);
+
+    if (dataLines.length > CSV_MAX_ROWS) {
+      setCsvError(`That CSV has ${dataLines.length} rows — cap is ${CSV_MAX_ROWS}. Split it into smaller files.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    const rows = dataLines
+      .map((line) => {
+        const [rawEmail, rawRole] = line.split(",");
+        const rowEmail = (rawEmail || "").trim().toLowerCase();
+        const trimmedRole = (rawRole || "").trim();
+        const rowRole = trimmedRole === "" ? "member" : trimmedRole;
+        const valid = EMAIL_RE.test(rowEmail) && (rowRole === "member" || rowRole === "org_admin");
+        return { email: rowEmail, role: rowRole, valid };
+      })
+      .filter((r) => r.email.length > 0);
+
+    if (rows.length === 0) {
+      setCsvError("No rows found in that CSV.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setCsvRows(rows);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function inviteFromCsv() {
+    const validRows = csvRows.filter((r) => r.valid);
+    if (validRows.length === 0) return;
+
+    setCsvInviting(true);
+    setError("");
+    let addedCount = 0;
+    let invitedCount = 0;
+    const failures = [];
+    for (const row of validRows) {
+      const res = await fetch("/api/organizations/members/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: org.id, email: row.email, role: row.role }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        failures.push(`${row.email}: ${data.error || "failed"}`);
+        continue;
+      }
+      addedCount += 1;
+      if (data.invited) invitedCount += 1;
+      setMembers((m) => {
+        const withoutExisting = m.filter((x) => x.email !== row.email);
+        return [...withoutExisting, { email: row.email, role: row.role, created_at: new Date().toISOString() }];
+      });
+    }
+    setCsvInviting(false);
+
+    if (addedCount > 0) {
+      setCsvRows([]);
+      setCsvFileName("");
       toast.success(
         addedCount === 1
           ? invitedCount > 0
@@ -234,6 +340,33 @@ export default function OrganizationDetail({
       const data = await res.json().catch(() => ({}));
       setError(data.error || "Couldn't remove that member.");
       setRemoveTarget(null);
+    }
+  }
+
+  async function confirmOffboard() {
+    if (!offboardTarget) return;
+    setOffboardBusy(true);
+    const res = await fetch("/api/organizations/members/offboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, email: offboardTarget.email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setOffboardBusy(false);
+    if (res.ok) {
+      setMembers((m) => m.filter((x) => x.email !== offboardTarget.email));
+      setOffboardTarget(null);
+      toast.success(
+        `Offboarded — removed from ${data.removedFromProjects?.length || 0} project(s).`
+      );
+      if (data.skippedOwnerOf?.length > 0) {
+        toast.error(
+          `Still owns ${data.skippedOwnerOf.length} project(s) — transfer ownership there first to fully remove access.`
+        );
+      }
+    } else {
+      setError(data.error || "Couldn't offboard that member.");
+      setOffboardTarget(null);
     }
   }
 
@@ -440,6 +573,69 @@ export default function OrganizationDetail({
             </form>
           )}
 
+          {isAdmin && (
+            <div className="mt-3 flex flex-col gap-2">
+              <FormField
+                label="or upload a CSV (email,role per line)"
+                hint="role column is optional and defaults to member; a header row is detected automatically."
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleCsvFile}
+                  className="block w-full cursor-pointer text-sm text-ink-secondary file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-primary hover:file:bg-hover"
+                />
+              </FormField>
+
+              {csvError && (
+                <p className="flex items-center gap-1.5 text-xs text-danger">
+                  <CircleAlert size={12} strokeWidth={2.5} />
+                  {csvError}
+                </p>
+              )}
+
+              {csvRows.length > 0 && (
+                <div className="rounded-md border border-border p-3">
+                  <p className="text-xs font-medium text-ink-secondary">
+                    {csvFileName ? `${csvFileName} — ` : ""}
+                    {csvRows.length} row{csvRows.length === 1 ? "" : "s"} parsed
+                    {csvRows.some((r) => !r.valid)
+                      ? `, ${csvRows.filter((r) => !r.valid).length} invalid (will be skipped)`
+                      : ""}
+                  </p>
+                  <div className="mt-2 flex flex-col gap-1">
+                    {csvRows.slice(0, 10).map((r, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                        <span className={`truncate ${r.valid ? "text-ink-primary" : "text-danger"}`}>
+                          {r.email || "(empty)"}
+                        </span>
+                        <Badge tone={r.valid ? "neutral" : "danger"}>{r.role}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                  {csvRows.length > 10 && (
+                    <p className="mt-1.5 text-xs text-ink-tertiary">
+                      + {csvRows.length - 10} more row{csvRows.length - 10 === 1 ? "" : "s"}
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-3"
+                    loading={csvInviting}
+                    disabled={csvRows.filter((r) => r.valid).length === 0}
+                    onClick={inviteFromCsv}
+                  >
+                    <UserPlus size={14} strokeWidth={2.25} />
+                    Invite {csvRows.filter((r) => r.valid).length} member
+                    {csvRows.filter((r) => r.valid).length === 1 ? "" : "s"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 divide-y divide-border border-t border-border">
             {members.map((m) => {
               const meta = ROLE_META[m.role];
@@ -456,6 +652,15 @@ export default function OrganizationDetail({
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge tone={meta.tone}>{meta.label}</Badge>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setOffboardTarget(m)}
+                        title="Offboard — revoke access everywhere"
+                        className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+                      >
+                        <UserMinus size={14} strokeWidth={2.25} />
+                      </button>
+                    )}
                     {isAdmin && (
                       <button
                         onClick={() => setRemoveTarget(m)}
@@ -481,6 +686,16 @@ export default function OrganizationDetail({
         loading={busy}
         onConfirm={confirmRemove}
         onCancel={() => setRemoveTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!offboardTarget}
+        title={`Offboard ${offboardTarget?.email}?`}
+        description="Removes their org membership and revokes their direct access to every project in this organization — not just this org's own membership. Projects they own are skipped (transfer ownership there first)."
+        confirmLabel="Offboard"
+        loading={offboardBusy}
+        onConfirm={confirmOffboard}
+        onCancel={() => setOffboardTarget(null)}
       />
     </AppShell>
   );

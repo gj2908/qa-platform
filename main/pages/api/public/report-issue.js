@@ -1,6 +1,6 @@
 import { createServiceClient } from "../../../lib/supabase/server";
 import { triageFeedback } from "../../../lib/aiClient";
-import { sendWebhookNotification, buildFeedbackPayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildFeedbackPayload } from "../../../lib/webhookNotify";
 import { checkRateLimit, clientIp } from "../../../lib/rateLimit";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -115,19 +115,24 @@ export default async function handler(req, res) {
   // Best-effort webhook notification — same "never block the real
   // action" rule as every other notification trigger in this app.
   try {
-    const { data: project } = await service.from("projects").select("webhook_url").eq("id", release.project_id).single();
-    if (project?.webhook_url) {
+    const { data: project } = await service
+      .from("projects")
+      .select("webhook_url, org_id")
+      .eq("id", release.project_id)
+      .single();
+    if (project?.webhook_url || project?.org_id) {
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host;
-      await sendWebhookNotification(
-        project.webhook_url,
+      await notifyProjectWebhooks(
+        service,
+        { id: release.project_id, webhook_url: project.webhook_url, org_id: project.org_id },
         buildFeedbackPayload({
           appName: release.app_name,
           feedback: trimmedFeedback,
           reporterEmail: email,
           boardUrl: `${protocol}://${host}/projects/${release.project_id}/board`,
         }),
-        { service, projectId: release.project_id, event: "tester_feedback" }
+        "tester_feedback"
       );
     }
   } catch (e) {

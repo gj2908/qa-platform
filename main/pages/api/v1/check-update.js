@@ -1,5 +1,5 @@
 import { createServiceClient } from "../../../lib/supabase/server";
-import { verifyApiToken } from "../../../lib/verifyApiToken";
+import { verifyApiToken, resolveTokenProjectId } from "../../../lib/verifyApiToken";
 import { resolveLatestReleases } from "../../../lib/resolveLatestRelease";
 import { compareVersions } from "../../../lib/compareVersions";
 
@@ -10,6 +10,9 @@ const PLATFORMS = ["ios", "android", "web"];
 // Bearer-token authenticated like the rest of /api/v1/*; the token's
 // project scope plus the caller's platform/channel/currentVersion decide
 // the answer. See pages/docs/api.js for the client-integration example.
+// Accepts either a project token (scope is implicit) or an org token
+// (requires ?projectId=, checked against the token's org — see
+// resolveTokenProjectId).
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.status(405).end();
@@ -20,6 +23,12 @@ export default async function handler(req, res) {
   const token = await verifyApiToken(service, req);
   if (!token) {
     res.status(401).json({ error: "Missing or invalid Authorization: Bearer <token> header" });
+    return;
+  }
+
+  const { projectId, error: scopeError } = await resolveTokenProjectId(service, token, req);
+  if (scopeError) {
+    res.status(scopeError.status).json(scopeError.body);
     return;
   }
 
@@ -39,7 +48,7 @@ export default async function handler(req, res) {
   }
 
   const latestByPlatform = await resolveLatestReleases(service, {
-    projectId: token.project_id,
+    projectId,
     channel,
     req,
     deviceId,

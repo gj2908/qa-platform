@@ -103,3 +103,38 @@ export async function sendWebhookNotification(url, payload, log) {
 
   return result;
 }
+
+// Fires a webhook-notifying event to every URL configured for a project:
+// its own `webhook_url` (if set) and, when the project belongs to an org,
+// that org's `default_webhook_url` (if set) — live fan-out, not just the
+// one-time copy applied at org-attach time. Both sends are independent and
+// best-effort: either can fail without affecting the other or the caller.
+// `project` only needs `webhook_url` and `org_id`. `log` is passed through
+// unchanged to each `sendWebhookNotification` call so `webhook_deliveries`
+// gets a row per URL, same as today.
+export async function notifyProjectWebhooks(service, project, payload, event) {
+  const log = { service, projectId: project?.id, event };
+  const sends = [];
+
+  if (project?.webhook_url) {
+    sends.push(sendWebhookNotification(project.webhook_url, payload, log));
+  }
+
+  if (project?.org_id) {
+    try {
+      const { data: org } = await service
+        .from("organizations")
+        .select("default_webhook_url")
+        .eq("id", project.org_id)
+        .single();
+
+      if (org?.default_webhook_url && org.default_webhook_url !== project.webhook_url) {
+        sends.push(sendWebhookNotification(org.default_webhook_url, payload, log));
+      }
+    } catch (e) {
+      // ignored — org lookup failure never blocks the project's own webhook
+    }
+  }
+
+  await Promise.allSettled(sends);
+}

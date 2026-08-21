@@ -89,12 +89,20 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { data: activity } = await supabase
+  // `before` (ISO timestamp) drives keyset pagination for the full
+  // /notifications page — the bell dropdown's own default call (no
+  // `before`) is untouched and stays capped at the small bell limit.
+  const { before } = req.query;
+  const pageSize = before ? 40 : 20;
+
+  let activityQuery = supabase
     .from("project_activity")
     .select("id, project_id, actor_email, action, detail, created_at, projects(name)")
     .in("project_id", projectIds)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(pageSize);
+  if (before) activityQuery = activityQuery.lt("created_at", before);
+  const { data: activity } = await activityQuery;
 
   const { data: dismissals } = await supabase
     .from("notification_dismissals")
@@ -126,5 +134,10 @@ export default async function handler(req, res) {
     ? enriched.filter((a) => new Date(a.createdAt) > new Date(lastReadAt)).length
     : enriched.length;
 
-  res.status(200).json({ items: enriched, unreadCount });
+  // Raw (pre-dismissal-filter) page length hitting the page size is the
+  // signal there may be another page — filtering can make `items` shorter
+  // than `pageSize` even when more rows exist further back.
+  const hasMore = (activity || []).length === pageSize;
+
+  res.status(200).json({ items: enriched, unreadCount, hasMore });
 }

@@ -16,7 +16,11 @@ export function isPublicSharePath(pathname) {
     pathname.startsWith("/share/") ||
     pathname.startsWith("/channel/") ||
     pathname.startsWith("/register-device/") ||
-    pathname.startsWith("/docs/")
+    pathname.startsWith("/docs/") ||
+    // Public, read-only project roadmap, gated by projects.roadmap_token
+    // (an unguessable-token capability, same shape as the release share
+    // id above) rather than a signed-in session.
+    pathname.startsWith("/roadmap/")
   );
 }
 

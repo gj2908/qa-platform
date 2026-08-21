@@ -1,6 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { logActivity } from "../../../lib/logActivity";
-import { sendWebhookNotification, buildCollaboratorPayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildCollaboratorPayload } from "../../../lib/webhookNotify";
 
 const VALID_ROLES = ["viewer", "commenter", "editor"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   }
 
   const service = createServiceClient();
-  const { data: project } = await service.from("projects").select("webhook_url").eq("id", projectId).single();
+  const { data: project } = await service.from("projects").select("webhook_url, org_id").eq("id", projectId).single();
 
   const results = [];
   for (const raw of rawList) {
@@ -74,11 +74,12 @@ export default async function handler(req, res) {
     });
 
     try {
-      if (project?.webhook_url) {
-        await sendWebhookNotification(
-          project.webhook_url,
+      if (project?.webhook_url || project?.org_id) {
+        await notifyProjectWebhooks(
+          service,
+          { id: projectId, webhook_url: project?.webhook_url, org_id: project?.org_id },
           buildCollaboratorPayload({ email: normalizedEmail, role, action: "added" }),
-          { service, projectId, event: "collaborator_added" }
+          "collaborator_added"
         );
       }
     } catch (e) {

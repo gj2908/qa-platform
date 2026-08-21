@@ -1,6 +1,6 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { logActivity } from "../../../lib/logActivity";
-import { sendWebhookNotification, buildReleasePayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildReleasePayload } from "../../../lib/webhookNotify";
 
 // Owner-only: approves or rejects a release held as pending_review.
 // Approving flips it to published and fires the same activity/webhook a
@@ -77,12 +77,17 @@ export default async function handler(req, res) {
   });
 
   try {
-    const { data: project } = await service.from("projects").select("webhook_url").eq("id", release.project_id).single();
-    if (project?.webhook_url) {
+    const { data: project } = await service
+      .from("projects")
+      .select("webhook_url, org_id")
+      .eq("id", release.project_id)
+      .single();
+    if (project?.webhook_url || project?.org_id) {
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host;
-      await sendWebhookNotification(
-        project.webhook_url,
+      await notifyProjectWebhooks(
+        service,
+        { id: release.project_id, webhook_url: project.webhook_url, org_id: project.org_id },
         buildReleasePayload({
           appName: updated.app_name,
           version: updated.version,
@@ -90,7 +95,7 @@ export default async function handler(req, res) {
           platform: updated.platform,
           installUrl: `${protocol}://${host}/distribute/${updated.id}`,
         }),
-        { service, projectId: release.project_id, event: "release_published" }
+        "release_published"
       );
     }
   } catch (e) {

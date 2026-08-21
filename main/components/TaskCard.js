@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2, OctagonAlert } from "lucide-react";
 import { STATUS_META, STATUS_ORDER } from "./ui/status";
 import { getAvatarColor } from "../lib/avatarColor";
 
@@ -34,6 +34,7 @@ export default function TaskCard({
   selectMode = false,
   selected = false,
   onToggleSelect,
+  openBlockerCount = 0,
 }) {
   const idx = STATUS_ORDER.indexOf(task.status);
   const meta = STATUS_META[task.status];
@@ -89,6 +90,16 @@ export default function TaskCard({
           <Sparkles size={10} strokeWidth={2.25} />
           {task.ai_category}
           {task.ai_severity ? ` · ${task.ai_severity}` : ""}
+        </span>
+      )}
+
+      {openBlockerCount > 0 && (
+        <span
+          title={`Blocked by ${openBlockerCount} task${openBlockerCount === 1 ? "" : "s"} not yet done`}
+          className="inline-flex w-fit items-center gap-1 rounded bg-danger-subtle px-1.5 py-0.5 text-[10px] font-medium text-danger-subtle-fg"
+        >
+          <OctagonAlert size={10} strokeWidth={2.25} />
+          {openBlockerCount} blocker{openBlockerCount === 1 ? "" : "s"}
         </span>
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import { getRequestOrigin } from "../../../lib/getRequestOrigin";
@@ -11,7 +11,21 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { useToast } from "../../../components/ui/ToastProvider";
-import { ArrowLeft, Palette, Globe, Webhook, TriangleAlert, Link2, Copy, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  Palette,
+  Globe,
+  Webhook,
+  TriangleAlert,
+  Link2,
+  Copy,
+  RefreshCw,
+  ShieldCheck,
+  Megaphone,
+  KeyRound,
+  Check,
+  Trash2,
+} from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -21,10 +35,32 @@ export async function getServerSideProps({ params, req, res }) {
   const { data: role } = await supabase.rpc("org_role", { p_org_id: params.id });
   if (role !== "org_admin") return { notFound: true };
 
-  return { props: { org, siteOrigin: getRequestOrigin(req) } };
+  const { data: announcement } = await supabase
+    .from("org_announcements")
+    .select("id, message, created_at, expires_at")
+    .eq("org_id", params.id)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: tokensRaw } = await supabase
+    .from("org_api_tokens")
+    .select("id, token_prefix, label, scope, created_at, last_used_at")
+    .eq("org_id", params.id)
+    .order("created_at", { ascending: false });
+
+  return {
+    props: {
+      org,
+      siteOrigin: getRequestOrigin(req),
+      announcement: announcement || null,
+      tokens: tokensRaw || [],
+    },
+  };
 }
 
-export default function OrganizationSettings({ org, siteOrigin }) {
+export default function OrganizationSettings({ org, siteOrigin, announcement, tokens }) {
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -42,6 +78,8 @@ export default function OrganizationSettings({ org, siteOrigin }) {
         <BrandingCard org={org} />
         <DomainCard org={org} />
         <InviteLinkCard org={org} siteOrigin={siteOrigin} />
+        <AnnouncementCard org={org} announcement={announcement} />
+        <OrgTokensCard org={org} tokens={tokens} />
         <DefaultsCard org={org} />
         <SecurityCard org={org} />
         <DangerZoneCard org={org} />
@@ -147,6 +185,280 @@ function InviteLinkCard({ org, siteOrigin }) {
         loading={regenerating}
         onConfirm={regenerate}
         onCancel={() => setConfirmingRegen(false)}
+      />
+    </Card>
+  );
+}
+
+function AnnouncementCard({ org, announcement: initialAnnouncement }) {
+  const toast = useToast();
+  const [announcement, setAnnouncement] = useState(initialAnnouncement || null);
+  const [message, setMessage] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save(e) {
+    e.preventDefault();
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("A message is required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    const res = await fetch("/api/organizations/announcement", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orgId: org.id,
+        message: trimmed,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      }),
+    });
+    setSaving(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error || "Couldn't post the announcement.");
+      return;
+    }
+    setAnnouncement(data.announcement);
+    setMessage("");
+    setExpiresAt("");
+    toast.success("Announcement posted — every member will see it.");
+  }
+
+  async function clear() {
+    setClearing(true);
+    const res = await fetch("/api/organizations/announcement", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, announcementId: announcement.id }),
+    });
+    setClearing(false);
+    setConfirmingClear(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || "Couldn't clear the announcement.");
+      return;
+    }
+    setAnnouncement(null);
+    toast.success("Announcement cleared.");
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <Megaphone size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Announcement</h2>
+        {announcement && <Badge tone="accent">Active</Badge>}
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Shown as a dismissible banner to every member across every project in {org.name}, until it
+        expires or you clear it.
+      </p>
+
+      {announcement ? (
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="rounded-md bg-subtle px-3.5 py-3 text-sm text-ink-secondary">
+            <p>{announcement.message}</p>
+            {announcement.expires_at && (
+              <p className="mt-1 text-xs text-ink-tertiary">
+                Expires {new Date(announcement.expires_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => setConfirmingClear(true)}
+            className="w-fit"
+          >
+            Clear announcement
+          </Button>
+        </div>
+      ) : (
+        <form onSubmit={save} className="mt-4 flex flex-col gap-3">
+          <FormField label="Message" error={error} hint="Keep it short — it shows as a single-line banner">
+            <Textarea rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
+          </FormField>
+          <FormField label="Expires" hint="Optional — leave blank to require clearing it manually">
+            <Input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="w-auto" />
+          </FormField>
+          <Button type="submit" loading={saving} className="w-fit">
+            Post announcement
+          </Button>
+        </form>
+      )}
+
+      <ConfirmDialog
+        open={confirmingClear}
+        title="Clear this announcement?"
+        description="It disappears from every member's banner immediately."
+        confirmLabel="Clear"
+        loading={clearing}
+        onConfirm={clear}
+        onCancel={() => setConfirmingClear(false)}
+      />
+    </Card>
+  );
+}
+
+function OrgTokensCard({ org, tokens: initial }) {
+  const toast = useToast();
+  const [tokens, setTokens] = useState(initial);
+  const [label, setLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newToken, setNewToken] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState(null);
+  const [revoking, setRevoking] = useState(false);
+  // Set only after mount to avoid a server/client hydration mismatch —
+  // window.location isn't available during SSR.
+  const [origin, setOrigin] = useState("");
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  async function createToken(e) {
+    e.preventDefault();
+    setCreating(true);
+    const res = await fetch("/api/organizations/tokens/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, label: label.trim() }),
+    });
+    setCreating(false);
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setNewToken(data.token);
+      setTokens((t) => [
+        { id: data.id, token_prefix: data.token_prefix, label: data.label, created_at: data.created_at, last_used_at: null, scope: data.scope },
+        ...t,
+      ]);
+      setLabel("");
+    } else {
+      toast.error(data.error || "Couldn't create a token.");
+    }
+  }
+
+  function copyToken() {
+    navigator.clipboard.writeText(newToken);
+    setCopied(true);
+    toast.success("Token copied.");
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function confirmRevoke() {
+    if (!revokeTarget) return;
+    setRevoking(true);
+    const res = await fetch("/api/organizations/tokens/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: org.id, tokenId: revokeTarget.id }),
+    });
+    setRevoking(false);
+    if (res.ok) {
+      setTokens((t) => t.filter((tok) => tok.id !== revokeTarget.id));
+      setRevokeTarget(null);
+      toast.success("Token revoked.");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't revoke that token.");
+      setRevokeTarget(null);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <KeyRound size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Organization API tokens</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        Organization tokens are read-only and can query any project in this org via the API's{" "}
+        <code className="rounded bg-subtle px-1 py-0.5 text-xs">?projectId=</code> parameter — they can't
+        publish releases. For CI publishing, generate a project token from that project's Collaborators
+        page instead.
+      </p>
+
+      {newToken && (
+        <div className="mt-4 flex flex-col gap-2 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
+          <p className="font-medium">Copy this token now — it won&apos;t be shown again.</p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded bg-surface px-2.5 py-1.5 font-mono text-xs text-ink-primary">
+              {newToken}
+            </code>
+            <Button size="sm" variant="secondary" onClick={copyToken}>
+              {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <form onSubmit={createToken} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <FormField label="Label" hint="e.g. Data warehouse sync, status dashboard">
+            <Input placeholder="release-dashboard" value={label} onChange={(e) => setLabel(e.target.value)} />
+          </FormField>
+        </div>
+        <Button type="submit" loading={creating}>
+          <KeyRound size={14} strokeWidth={2.25} />
+          Generate token
+        </Button>
+      </form>
+
+      {tokens.length > 0 && (
+        <div className="mt-4 divide-y divide-border border-t border-border">
+          {tokens.map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="truncate text-sm text-ink-primary">{t.label || "Untitled token"}</p>
+                  <Badge tone="neutral">read</Badge>
+                </div>
+                <p className="font-mono text-xs text-ink-tertiary">
+                  {t.token_prefix}… · {t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleDateString()}` : "never used"}
+                </p>
+              </div>
+              <button
+                onClick={() => setRevokeTarget(t)}
+                title="Revoke token"
+                className="shrink-0 rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+              >
+                <Trash2 size={14} strokeWidth={2.25} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-4 rounded-md bg-subtle px-3.5 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-ink-secondary">Example: read across the org</p>
+          <a href="/docs/api" target="_blank" rel="noreferrer" className="text-xs font-medium text-accent hover:text-accent-hover">
+            View API docs
+          </a>
+        </div>
+        <pre className="mt-1.5 overflow-x-auto text-xs text-ink-tertiary">
+{`curl "${origin}/api/v1/releases?projectId=<project-id>" \\
+  -H "Authorization: Bearer qap_..."`}
+        </pre>
+      </div>
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        title={`Revoke "${revokeTarget?.label || "this token"}"?`}
+        description="Any integration using this token will immediately lose read access to every project in this org. This can't be undone."
+        confirmLabel="Revoke"
+        loading={revoking}
+        onConfirm={confirmRevoke}
+        onCancel={() => setRevokeTarget(null)}
       />
     </Card>
   );
@@ -368,7 +680,10 @@ function DefaultsCard({ org }) {
       </p>
 
       <form onSubmit={save} className="mt-4 flex flex-col gap-3">
-        <FormField label="Default release webhook" hint="Slack-incoming-webhook-compatible URL">
+        <FormField
+          label="Default release webhook"
+          hint="Slack-incoming-webhook-compatible URL. Also fires live alongside every project's own webhook for every project in this org — not just a one-time default for new projects."
+        >
           <Input
             type="url"
             placeholder="https://hooks.slack.com/services/…"

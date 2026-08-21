@@ -3,7 +3,7 @@ import { analyzeIpa } from "./ipaAnalyzer";
 import { analyzeAppBinary } from "./appAnalyzer";
 import { findDuplicateRelease } from "./findDuplicateRelease";
 import { fetchWebAppInfo } from "./faviconFetcher";
-import { sendWebhookNotification, buildReleasePayload } from "./webhookNotify";
+import { notifyProjectWebhooks, buildReleasePayload } from "./webhookNotify";
 import { logActivity } from "./logActivity";
 import { sendEmail, escapeHtml, renderEmail, EMAIL_STYLES } from "./emailClient";
 import { sendPushToEmails } from "./pushSend";
@@ -173,7 +173,7 @@ export async function publishRelease({
 
   const { data: project } = await service
     .from("projects")
-    .select("webhook_url, require_approval, release_emails_enabled")
+    .select("webhook_url, org_id, require_approval, release_emails_enabled")
     .eq("id", projectId)
     .single();
 
@@ -231,11 +231,12 @@ export async function publishRelease({
   // Best-effort release notification — never lets a slow/broken webhook
   // fail or meaningfully delay the response.
   try {
-    if (project?.webhook_url) {
+    if (project?.webhook_url || project?.org_id) {
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host;
-      await sendWebhookNotification(
-        project.webhook_url,
+      await notifyProjectWebhooks(
+        service,
+        { id: projectId, webhook_url: project?.webhook_url, org_id: project?.org_id },
         buildReleasePayload({
           appName: release.app_name,
           version: release.version,
@@ -243,7 +244,7 @@ export async function publishRelease({
           platform: release.platform,
           installUrl: `${protocol}://${host}/distribute/${release.id}`,
         }),
-        { service, projectId, event: "release_published" }
+        "release_published"
       );
     }
   } catch (e) {

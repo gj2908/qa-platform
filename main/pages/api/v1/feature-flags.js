@@ -1,12 +1,14 @@
 import { createServiceClient } from "../../../lib/supabase/server";
-import { verifyApiToken } from "../../../lib/verifyApiToken";
+import { verifyApiToken, resolveTokenProjectId } from "../../../lib/verifyApiToken";
 import { bucketForDeviceId } from "../../../lib/deviceBucket";
 
 // GET /api/v1/feature-flags?deviceId=... — lets a running app ask "which
 // flags are on for me?". Bearer-token authenticated like the rest of
 // /api/v1/*. Percentage rollout reuses the exact device-bucket hashing
 // already used for staged release rollout (lib/deviceBucket.js) so the
-// same device consistently lands on the same side of a flag.
+// same device consistently lands on the same side of a flag. Accepts
+// either a project token or an org token (requires ?projectId=, see
+// resolveTokenProjectId).
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     res.status(405).end();
@@ -20,13 +22,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  const { projectId, error: scopeError } = await resolveTokenProjectId(service, token, req);
+  if (scopeError) {
+    res.status(scopeError.status).json(scopeError.body);
+    return;
+  }
+
   const deviceId = req.query.deviceId || null;
   const bucket = deviceId ? bucketForDeviceId(deviceId) : null;
 
   const { data: flagRows } = await service
     .from("feature_flags")
     .select("key, enabled, rollout_percent")
-    .eq("project_id", token.project_id);
+    .eq("project_id", projectId);
 
   const flags = {};
   for (const f of flagRows || []) {

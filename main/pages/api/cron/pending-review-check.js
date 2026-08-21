@@ -1,5 +1,5 @@
 import { createServiceClient } from "../../../lib/supabase/server";
-import { sendWebhookNotification, buildApprovalReminderPayload } from "../../../lib/webhookNotify";
+import { notifyProjectWebhooks, buildApprovalReminderPayload } from "../../../lib/webhookNotify";
 import { sendEmail, renderEmail, EMAIL_STYLES } from "../../../lib/emailClient";
 import { getSetting } from "../../../lib/platformSettings";
 
@@ -33,16 +33,17 @@ export default async function handler(req, res) {
   for (const release of releases || []) {
     const { data: project } = await service
       .from("projects")
-      .select("name, webhook_url")
+      .select("name, webhook_url, org_id")
       .eq("id", release.project_id)
       .single();
 
     const hoursWaiting = Math.floor((Date.now() - new Date(release.created_at).getTime()) / (60 * 60 * 1000));
     const changelogUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/projects/${release.project_id}/changelog`;
 
-    if (project?.webhook_url) {
-      await sendWebhookNotification(
-        project.webhook_url,
+    if (project?.webhook_url || project?.org_id) {
+      await notifyProjectWebhooks(
+        service,
+        { id: release.project_id, webhook_url: project.webhook_url, org_id: project.org_id },
         buildApprovalReminderPayload({
           appName: release.app_name,
           version: release.version,
@@ -50,7 +51,7 @@ export default async function handler(req, res) {
           hoursWaiting,
           changelogUrl,
         }),
-        { service, projectId: release.project_id, event: "release_pending_review_reminder" }
+        "release_pending_review_reminder"
       );
     }
 

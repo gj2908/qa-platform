@@ -71,6 +71,26 @@ create table task_comments (
 
 create index task_comments_task_id_idx on task_comments (task_id, created_at);
 
+-- ── Task dependencies ────────────────────────────────────────
+-- "blocked_task depends on blocking_task" — a lightweight blocker link
+-- between two tasks in the same project. No cross-table trigger enforcing
+-- both rows share a project_id (low-stakes invariant, left to app code).
+-- No server-side enforcement blocking a blocked task from moving to
+-- 'done' either — the UI warns, it doesn't hard-block, matching this
+-- app's general "RLS + UI hints, not workflow engine" posture.
+create table task_dependencies (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references projects(id) on delete cascade,
+  blocking_task_id uuid not null references tasks(id) on delete cascade,
+  blocked_task_id uuid not null references tasks(id) on delete cascade,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (blocking_task_id <> blocked_task_id),
+  unique (blocking_task_id, blocked_task_id)
+);
+create index task_dependencies_blocked_idx on task_dependencies (blocked_task_id);
+create index task_dependencies_blocking_idx on task_dependencies (blocking_task_id);
+
 -- ── Task templates ───────────────────────────────────────────
 create table task_templates (
   id uuid primary key default gen_random_uuid(),
@@ -334,6 +354,25 @@ create table api_tokens (
   last_used_at timestamptz
 );
 
+-- ── Org-level API tokens ─────────────────────────────────────
+-- Deliberately a separate table, not a nullable api_tokens.project_id —
+-- every /api/v1/*.js and /api/ci/releases/create.js caller assumes
+-- verifyApiToken() returns a row scoped to a single project; a separate
+-- table keeps that existing contract untouched. scope is hard-
+-- constrained to 'read' at the DB level — an org token that could
+-- publish would let one leaked token publish to any project in the org.
+create table org_api_tokens (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  token_hash text not null unique,
+  token_prefix text not null,
+  label text,
+  scope text not null default 'read' check (scope = 'read'),
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now(),
+  last_used_at timestamptz
+);
+
 -- ── Project favorites ───────────────────────────────────────
 -- Per-user starred projects, pinned to the top of the dashboard.
 create table project_favorites (
@@ -517,7 +556,7 @@ create table organizations (
   accent_color text,
   domain text, -- display-only unless connected; see handle_new_user() for the domain-verified auto-join it then enables
   domain_status text check (domain_status in ('pending', 'connected')), -- null = display-only; set when an admin requests real connection, see admin/'s fulfillment flow
-  default_webhook_url text, -- applied to a project on org attach only if it has no webhook_url of its own yet
+  default_webhook_url text, -- one-time copy onto a project's webhook_url at org attach (only if it has none yet) AND, ongoing, a live fan-out target: every webhook-notifying event also fires here independently (best-effort, see lib/webhookNotify.js's notifyProjectWebhooks) whenever the project belongs to this org, in addition to the project's own webhook_url
   default_require_approval boolean not null default false,
   -- Self-serve invite link (org_admin toggles on/off, can regenerate to
   -- invalidate previously shared links). Distinct from domain-verified
@@ -580,6 +619,37 @@ create index org_activity_org_id_idx on org_activity (org_id, created_at desc);
 -- projects, only ungroup them.
 alter table projects add column org_id uuid references organizations(id) on delete set null;
 create index projects_org_id_idx on projects (org_id);
+
+-- ── Public roadmap ───────────────────────────────────────────
+-- Owner-controlled, read-only, unguessable-token share of a project's
+-- board, mirroring organizations.invite_token's capability-token shape.
+-- A dedicated roadmap_token (not the project's own id) so disabling and
+-- regenerating a leaked link doesn't require rotating the project's id.
+alter table projects add column roadmap_enabled boolean not null default false;
+alter table projects add column roadmap_token uuid not null default gen_random_uuid();
+create unique index projects_roadmap_token_idx on projects (roadmap_token);
+
+-- ── Org announcements ────────────────────────────────────────
+-- org_admin-authored, dismissible-per-user banner shown across every
+-- project under the org. Org-scoped, not platform-wide (that's the
+-- existing admin/ platform_settings concern).
+create table org_announcements (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  message text not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz
+);
+create index org_announcements_org_id_idx on org_announcements (org_id, created_at desc);
+
+-- Per-user dismissal, same shape as notification_dismissals.
+create table org_announcement_dismissals (
+  email text not null,
+  announcement_id uuid not null references org_announcements(id) on delete cascade,
+  dismissed_at timestamptz not null default now(),
+  primary key (email, announcement_id)
+);
 
 -- ── Role lookup helpers ──────────────────────────────────────
 -- security definer + owned by the migration role (which owns the tables it
@@ -886,6 +956,18 @@ create policy "members read org activity" on org_activity
 create policy "members write org activity" on org_activity
   for insert with check (org_role(org_id) is not null);
 
+alter table org_announcements enable row level security;
+create policy "members read org announcements" on org_announcements
+  for select using (org_role(org_id) is not null);
+create policy "org_admin manages org announcements" on org_announcements
+  for all using (org_role(org_id) = 'org_admin')
+  with check (org_role(org_id) = 'org_admin');
+
+alter table org_announcement_dismissals enable row level security;
+create policy "self manage announcement dismissals" on org_announcement_dismissals
+  for all using (email = (auth.jwt() ->> 'email'))
+  with check (email = (auth.jwt() ->> 'email'));
+
 create policy "members read webhook deliveries" on webhook_deliveries
   for select using (project_role(project_id) is not null);
 -- admin_actions, rate_limit_events, platform_settings, and
@@ -896,6 +978,13 @@ create policy "members read task comments" on task_comments
   for select using (project_role(project_id) is not null);
 create policy "commenter+ write task comments" on task_comments
   for insert with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
+
+alter table task_dependencies enable row level security;
+create policy "members read task dependencies" on task_dependencies
+  for select using (project_role(project_id) is not null);
+create policy "commenter+ write task dependencies" on task_dependencies
+  for all using (project_role(project_id) in ('owner', 'editor', 'commenter'))
+  with check (project_role(project_id) in ('owner', 'editor', 'commenter'));
 
 create policy "members read task templates" on task_templates
   for select using (project_role(project_id) is not null);
@@ -989,6 +1078,11 @@ create policy "self manage push subscriptions" on push_subscriptions
 create policy "owner manages tokens" on api_tokens
   for all using (project_role(project_id) = 'owner')
   with check (project_role(project_id) = 'owner');
+
+alter table org_api_tokens enable row level security;
+create policy "org_admin manages org tokens" on org_api_tokens
+  for all using (org_role(org_id) = 'org_admin')
+  with check (org_role(org_id) = 'org_admin');
 
 create policy "self manage favorites" on project_favorites
   for all using (auth.jwt() ->> 'email' = email)

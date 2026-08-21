@@ -1,5 +1,5 @@
 import { logActivity } from "./logActivity";
-import { sendWebhookNotification, buildReleasePayload } from "./webhookNotify";
+import { notifyProjectWebhooks, buildReleasePayload } from "./webhookNotify";
 
 // Scheduled releases activate lazily: the first page load (distribute,
 // share, or changelog) after scheduled_for has passed flips the release
@@ -35,14 +35,15 @@ export async function activateScheduledReleaseIfDue(service, release, req) {
   try {
     const { data: project } = await service
       .from("projects")
-      .select("webhook_url")
+      .select("webhook_url, org_id")
       .eq("id", updated.project_id)
       .single();
-    if (project?.webhook_url && req) {
+    if ((project?.webhook_url || project?.org_id) && req) {
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const host = req.headers.host;
-      await sendWebhookNotification(
-        project.webhook_url,
+      await notifyProjectWebhooks(
+        service,
+        { id: updated.project_id, webhook_url: project.webhook_url, org_id: project.org_id },
         buildReleasePayload({
           appName: updated.app_name,
           version: updated.version,
@@ -50,7 +51,7 @@ export async function activateScheduledReleaseIfDue(service, release, req) {
           platform: updated.platform,
           installUrl: `${protocol}://${host}/distribute/${updated.id}`,
         }),
-        { service, projectId: updated.project_id, event: "release_published" }
+        "release_published"
       );
     }
   } catch (e) {
