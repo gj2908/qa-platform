@@ -9,6 +9,19 @@
 // so every request still goes straight to the network as normal.
 self.addEventListener("fetch", () => {});
 
+// Without this, an already-registered service worker keeps running its
+// old code until Chrome's own update cycle gets around to swapping it
+// in (can take up to a day) — so a fix to this file (e.g. the
+// icon/badge/actions added below) silently doesn't apply to anyone
+// already subscribed until then. skipWaiting + clients.claim make a
+// new deploy of this file take over immediately on the next push/open.
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+self.addEventListener("activate", (event) => {
+  event.waitUntil(clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {
