@@ -26,6 +26,9 @@ export async function sendPushToEmails(service, emails, { title, body, url }) {
 
   const payload = JSON.stringify({ title, body, url });
 
+  let sent = 0;
+  let failed = 0;
+
   await Promise.all(
     subs.map(async (sub) => {
       try {
@@ -33,16 +36,30 @@ export async function sendPushToEmails(service, emails, { title, body, url }) {
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           payload
         );
+        sent++;
       } catch (e) {
+        failed++;
         // 404/410 means the subscription is gone (browser unsubscribed,
         // uninstalled, etc.) — clean it up so future sends don't retry
         // a dead endpoint forever.
         if (e.statusCode === 404 || e.statusCode === 410) {
           await service.from("push_subscriptions").delete().eq("id", sub.id);
+        } else {
+          // Anything else (401/403 VAPID key mismatch, malformed
+          // subscription, push service outage) used to be swallowed
+          // silently here with zero trace — making a real send failure
+          // indistinguishable from a successful one. Logging it is the
+          // only way to tell "no one has push enabled" apart from
+          // "push is enabled but every send is failing."
+          console.error("push send failed", {
+            email: sub.email,
+            statusCode: e.statusCode,
+            body: e.body,
+          });
         }
       }
     })
   );
 
-  return { ok: true };
+  return { ok: true, sent, failed, total: subs.length };
 }
