@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { orgId, email, role } = req.body || {};
+  const { orgId, email, role, sendInvite } = req.body || {};
   const normalizedEmail = (email || "").trim().toLowerCase();
   if (!orgId || !EMAIL_RE.test(normalizedEmail) || !VALID_ROLES.includes(role)) {
     res.status(400).json({ error: "An organization, a valid email, and a role are required." });
@@ -65,12 +65,14 @@ export default async function handler(req, res) {
   }
 
   let invited = false;
-  if (isNewMember) {
+  if (isNewMember && sendInvite) {
     try {
       const service = createServiceClient();
       // profiles rows only ever exist via handle_new_user()'s trigger on
       // auth.users insert — a reliable, cheap proxy for "has an account"
-      // without needing the admin API.
+      // without needing the admin API. Re-checked here server-side
+      // rather than trusting the client's earlier check-emails call, in
+      // case the account was created in between.
       const { data: existingProfile } = await service
         .from("profiles")
         .select("id")
@@ -90,7 +92,9 @@ export default async function handler(req, res) {
             heading: `You've been added to ${orgName}`,
             bodyHtml: `<p ${EMAIL_STYLES.p}>${escapeHtml(inviterName)} added you to <strong>${escapeHtml(
               orgName
-            )}</strong>'s team on Vrsnify. Create an account with this email address to get started — you'll already have access once you sign in.</p>`,
+            )}</strong>'s team on Vrsnify. Create an account using exactly this email address — <strong>${escapeHtml(
+              normalizedEmail
+            )}</strong> — to get started; you'll already have access once you sign in.</p>`,
             ctaLabel: "Create your account",
             ctaUrl: signupUrl,
           }),

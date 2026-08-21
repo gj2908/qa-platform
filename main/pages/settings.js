@@ -6,9 +6,10 @@ import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import FormField from "../components/ui/FormField";
 import Input from "../components/ui/Input";
+import Select from "../components/ui/Select";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useToast } from "../components/ui/ToastProvider";
-import { CircleCheck, Bell, ShieldCheck, ShieldOff, Copy, BellOff, Mail, Download } from "lucide-react";
+import { CircleCheck, Bell, ShieldCheck, ShieldOff, Copy, BellOff, Mail, Download, MailPlus } from "lucide-react";
 import { isPushSupported, getPushSubscriptionState, subscribeToPush, unsubscribeFromPush } from "../lib/pushSubscribe";
 import { usePwaInstall } from "../lib/usePwaInstall";
 import PwaInstallInstructions from "../components/layout/PwaInstallInstructions";
@@ -344,6 +345,74 @@ function NotificationPreferencesCard() {
   );
 }
 
+const INVITE_PREFERENCE_OPTIONS = [
+  { value: "ask", label: "Ask each time" },
+  { value: "always", label: "Always send" },
+  { value: "never", label: "Never send" },
+];
+
+function InvitePreferenceCard() {
+  const toast = useToast();
+  const user = useCurrentUser();
+  const [preference, setPreference] = useState(null); // null = loading
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    const supabase = createClient();
+    supabase
+      .from("profiles")
+      .select("invite_unregistered_preference")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => setPreference(data?.invite_unregistered_preference || "ask"));
+  }, [user?.id]);
+
+  async function updatePreference(next) {
+    setSaving(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("profiles")
+      .update({ invite_unregistered_preference: next })
+      .eq("id", user.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPreference(next);
+    toast.success("Preference saved.");
+  }
+
+  if (preference === null) return null;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2">
+        <MailPlus size={15} strokeWidth={2.25} className="text-ink-secondary" />
+        <h2 className="text-sm font-semibold text-ink-primary">Collaborator invites</h2>
+      </div>
+      <p className="mt-1 text-sm text-ink-tertiary">
+        When you add someone who isn't registered yet as a project collaborator or org member, should Vrsnify ask you
+        each time whether to email them an invite to sign up?
+      </p>
+      <div className="mt-4 max-w-xs">
+        <Select
+          value={preference}
+          disabled={saving}
+          onChange={(e) => updatePreference(e.target.value)}
+        >
+          {INVITE_PREFERENCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+    </Card>
+  );
+}
+
 function AccountCard() {
   const toast = useToast();
   const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
@@ -416,6 +485,8 @@ export default function Settings() {
         <InstallAppCard />
 
         <NotificationPreferencesCard />
+
+        <InvitePreferenceCard />
 
         <AccountCard />
       </div>

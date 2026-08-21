@@ -1,6 +1,8 @@
 import { createServerSupabase, createServiceClient } from "../../../lib/supabase/server";
 import { logActivity } from "../../../lib/logActivity";
 import { notifyProjectWebhooks, buildCollaboratorPayload } from "../../../lib/webhookNotify";
+import { sendEmail, renderEmail, escapeHtml, EMAIL_STYLES } from "../../../lib/emailClient";
+import { getRequestOrigin } from "../../../lib/getRequestOrigin";
 
 const VALID_ROLES = ["viewer", "commenter", "editor"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,7 +27,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { projectId, email, emails, role } = req.body || {};
+  const { projectId, email, emails, role, sendInvite } = req.body || {};
   const isBulk = Array.isArray(emails);
   const rawList = isBulk ? emails : [email];
 
@@ -41,7 +43,7 @@ export default async function handler(req, res) {
   }
 
   const service = createServiceClient();
-  const { data: project } = await service.from("projects").select("webhook_url, org_id").eq("id", projectId).single();
+  const { data: project } = await service.from("projects").select("name, webhook_url, org_id").eq("id", projectId).single();
 
   const results = [];
   for (const raw of rawList) {
@@ -64,7 +66,47 @@ export default async function handler(req, res) {
       continue;
     }
 
-    results.push({ email: normalizedEmail, ok: true });
+    let invited = false;
+    if (sendInvite) {
+      try {
+        // profiles rows only ever exist via handle_new_user()'s trigger
+        // on auth.users insert — same "has an account" proxy used by
+        // pages/api/organizations/members/add.js. Re-checked here
+        // server-side rather than trusting the client's earlier
+        // check-emails call, in case the account was created in between.
+        const { data: existingProfile } = await service
+          .from("profiles")
+          .select("id")
+          .eq("email", normalizedEmail)
+          .maybeSingle();
+
+        if (!existingProfile) {
+          const inviterName = user.user_metadata?.full_name || user.email;
+          const projectName = project?.name || "the project";
+          const signupUrl = `${getRequestOrigin(req)}/login?mode=signup&email=${encodeURIComponent(normalizedEmail)}`;
+
+          const emailResult = await sendEmail({
+            to: normalizedEmail,
+            subject: `${inviterName} added you to ${projectName}`,
+            html: renderEmail({
+              heading: `You've been added to ${projectName}`,
+              bodyHtml: `<p ${EMAIL_STYLES.p}>${escapeHtml(inviterName)} added you to <strong>${escapeHtml(
+                projectName
+              )}</strong> on Vrsnify. Create an account using exactly this email address — <strong>${escapeHtml(
+                normalizedEmail
+              )}</strong> — to get started; you'll already have access once you sign in.</p>`,
+              ctaLabel: "Create your account",
+              ctaUrl: signupUrl,
+            }),
+          });
+          invited = emailResult.ok;
+        }
+      } catch (e) {
+        // ignored — never let the invite email affect the actual add
+      }
+    }
+
+    results.push({ email: normalizedEmail, ok: true, invited });
 
     await logActivity(service, {
       projectId,
@@ -93,7 +135,7 @@ export default async function handler(req, res) {
       res.status(400).json({ error: only.error });
       return;
     }
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true, invited: only.invited });
     return;
   }
 

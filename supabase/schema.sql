@@ -224,6 +224,12 @@ create table profiles (
   needs_reverification boolean not null default false,
   reverified_at timestamptz,
   avatar_url text, -- pasted image URL, same convention as organizations.logo_url — no upload flow/Storage bucket
+  -- What to do when this person adds a not-yet-registered email as a
+  -- project collaborator or org member: ask each time (default), always
+  -- send the invite-to-signup email silently, or never send it. A
+  -- property of the adder, not of what's being added to.
+  invite_unregistered_preference text not null default 'ask'
+    check (invite_unregistered_preference in ('ask', 'always', 'never')),
   created_at timestamptz default now()
 );
 

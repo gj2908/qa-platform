@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
+import { createClient } from "../../../lib/supabase/client";
 import AppShell from "../../../components/layout/AppShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
@@ -8,6 +9,7 @@ import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
 import { useToast } from "../../../components/ui/ToastProvider";
 import Avatar from "../../../components/ui/Avatar";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -149,6 +151,11 @@ export default function OrganizationDetail({
   const [csvRows, setCsvRows] = useState([]);
   const [csvError, setCsvError] = useState("");
   const [csvInviting, setCsvInviting] = useState(false);
+  // { emails, resolve } while InviteEmailPrompt is open, awaiting the
+  // admin's send/skip choice for the unregistered addresses in the
+  // current batch — `resolve` settles the Promise getSendInviteDecision
+  // handed back to addMember/inviteFromCsv.
+  const [invitePrompt, setInvitePrompt] = useState(null);
   const fileInputRef = useRef(null);
 
   const isAdmin = myRole === "org_admin";
@@ -156,6 +163,40 @@ export default function OrganizationDetail({
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const CSV_MAX_ROWS = 200;
+
+  async function savePreference(preference) {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ invite_unregistered_preference: preference }).eq("id", user.id);
+  }
+
+  // Checks which of `emailList` don't have an account yet and, if any
+  // don't and the admin hasn't already set an always/never preference,
+  // opens InviteEmailPrompt and waits for their choice. Returns the
+  // sendInvite boolean to attach to every /members/add call in this batch.
+  async function getSendInviteDecision(emailList) {
+    try {
+      const res = await fetch("/api/organizations/members/check-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: org.id, emails: emailList }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const unregistered = data.unregistered || [];
+      if (unregistered.length === 0) return false;
+      if (data.invitePreference === "always") return true;
+      if (data.invitePreference === "never") return false;
+      return new Promise((resolve) => {
+        setInvitePrompt({ emails: unregistered, resolve });
+      });
+    } catch (e) {
+      return false;
+    }
+  }
 
   async function addMember(e) {
     e.preventDefault();
@@ -171,6 +212,9 @@ export default function OrganizationDetail({
       return;
     }
 
+    const sendInvite = await getSendInviteDecision(emails);
+    setInvitePrompt(null);
+
     setAdding(true);
     setError("");
     let addedCount = 0;
@@ -180,7 +224,7 @@ export default function OrganizationDetail({
       const res = await fetch("/api/organizations/members/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: org.id, email: normalizedEmail, role }),
+        body: JSON.stringify({ orgId: org.id, email: normalizedEmail, role, sendInvite }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -267,6 +311,9 @@ export default function OrganizationDetail({
     const validRows = csvRows.filter((r) => r.valid);
     if (validRows.length === 0) return;
 
+    const sendInvite = await getSendInviteDecision(validRows.map((r) => r.email));
+    setInvitePrompt(null);
+
     setCsvInviting(true);
     setError("");
     let addedCount = 0;
@@ -276,7 +323,7 @@ export default function OrganizationDetail({
       const res = await fetch("/api/organizations/members/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: org.id, email: row.email, role: row.role }),
+        body: JSON.stringify({ orgId: org.id, email: row.email, role: row.role, sendInvite }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -709,6 +756,19 @@ export default function OrganizationDetail({
         loading={offboardBusy}
         onConfirm={confirmOffboard}
         onCancel={() => setOffboardTarget(null)}
+      />
+
+      <InviteEmailPrompt
+        open={!!invitePrompt}
+        emails={invitePrompt?.emails || []}
+        onSendInvite={async (remember) => {
+          if (remember) await savePreference("always");
+          invitePrompt.resolve(true);
+        }}
+        onSkip={async (remember) => {
+          if (remember) await savePreference("never");
+          invitePrompt.resolve(false);
+        }}
       />
     </AppShell>
   );

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
+import { createClient } from "../../../lib/supabase/client";
 import ProjectShell from "../../../components/layout/ProjectShell";
 import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
@@ -9,6 +10,7 @@ import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
 import { ROLE_META, ASSIGNABLE_ROLES, canManageReleases } from "../../../components/ui/role";
 import Avatar from "../../../components/ui/Avatar";
 import { useToast } from "../../../components/ui/ToastProvider";
@@ -83,28 +85,27 @@ export default function Collaborators({ project, role: myRole, collaborators: in
   const [removeTarget, setRemoveTarget] = useState(null);
   const [transferTarget, setTransferTarget] = useState(null);
   const [busy, setBusy] = useState(false);
+  // { emails } while InviteEmailPrompt is open, awaiting the adder's
+  // send/skip choice for the unregistered addresses in the current submit.
+  const [invitePrompt, setInvitePrompt] = useState(null);
 
   const isOwner = myRole === "owner";
 
-  async function addCollaborator(e) {
-    e.preventDefault();
-    setError("");
-    setBulkResults(null);
-
-    if (bulkMode) {
-      const list = bulkEmails
-        .split("\n")
-        .map((e) => e.trim())
-        .filter(Boolean);
-      if (list.length === 0) return;
-      setAdding(true);
-      const res = await fetch("/api/collaborators/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId: project.id, emails: list, role }),
-      });
-      setAdding(false);
-      const data = await res.json().catch(() => ({}));
+  async function submitAdd(targetList, isBulk, sendInvite) {
+    setAdding(true);
+    const res = await fetch("/api/collaborators/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(
+        isBulk
+          ? { projectId: project.id, emails: targetList, role, sendInvite }
+          : { projectId: project.id, email: targetList[0], role, sendInvite }
+      ),
+    });
+    setAdding(false);
+    setInvitePrompt(null);
+    const data = await res.json().catch(() => ({}));
+    if (isBulk) {
       if (res.ok) {
         setBulkResults(data.results || []);
         if ((data.results || []).some((r) => r.ok)) {
@@ -113,23 +114,70 @@ export default function Collaborators({ project, role: myRole, collaborators: in
       } else {
         setError(data.error || "Couldn't add those collaborators.");
       }
-      return;
-    }
-
-    if (!email.trim()) return;
-    setAdding(true);
-    const res = await fetch("/api/collaborators/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, email: email.trim(), role }),
-    });
-    setAdding(false);
-    if (res.ok) {
+    } else if (res.ok) {
       window.location.reload();
     } else {
-      const data = await res.json().catch(() => ({}));
       setError(data.error || "Couldn't add that collaborator.");
     }
+  }
+
+  async function savePreference(preference) {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("profiles").update({ invite_unregistered_preference: preference }).eq("id", user.id);
+  }
+
+  async function addCollaborator(e) {
+    e.preventDefault();
+    setError("");
+    setBulkResults(null);
+
+    const isBulk = bulkMode;
+    const list = isBulk
+      ? bulkEmails
+          .split("\n")
+          .map((e) => e.trim())
+          .filter(Boolean)
+      : email.trim()
+        ? [email.trim()]
+        : [];
+    if (list.length === 0) return;
+
+    // Best-effort: if the check itself fails, fall through to adding
+    // with no invite rather than blocking the whole add on it.
+    let unregistered = [];
+    let invitePreference = "never";
+    try {
+      const checkRes = await fetch("/api/collaborators/check-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, emails: list }),
+      });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        unregistered = checkData.unregistered || [];
+        invitePreference = checkData.invitePreference || "ask";
+      }
+    } catch (err) {
+      // ignored — proceed without an invite prompt
+    }
+
+    if (unregistered.length === 0) {
+      await submitAdd(list, isBulk, false);
+      return;
+    }
+    if (invitePreference === "always") {
+      await submitAdd(list, isBulk, true);
+      return;
+    }
+    if (invitePreference === "never") {
+      await submitAdd(list, isBulk, false);
+      return;
+    }
+    setInvitePrompt({ emails: unregistered, list, isBulk });
   }
 
   async function confirmRemove() {
@@ -340,6 +388,20 @@ export default function Collaborators({ project, role: myRole, collaborators: in
         loading={busy}
         onConfirm={confirmTransfer}
         onCancel={() => setTransferTarget(null)}
+      />
+
+      <InviteEmailPrompt
+        open={!!invitePrompt}
+        emails={invitePrompt?.emails || []}
+        loading={adding}
+        onSendInvite={async (remember) => {
+          if (remember) await savePreference("always");
+          await submitAdd(invitePrompt.list, invitePrompt.isBulk, true);
+        }}
+        onSkip={async (remember) => {
+          if (remember) await savePreference("never");
+          await submitAdd(invitePrompt.list, invitePrompt.isBulk, false);
+        }}
       />
     </ProjectShell>
   );
