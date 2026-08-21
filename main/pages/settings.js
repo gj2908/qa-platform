@@ -313,22 +313,19 @@ function PushNotificationsCard() {
 }
 
 function InstallAppCard() {
-  const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
   const { isStandalone, canPromptInstall, needsIOSInstructions, needsAndroidMenuFallback, promptInstall } =
     usePwaInstall();
-  const isSupported = canPromptInstall || needsIOSInstructions;
+  const showsInstructions = needsIOSInstructions || needsAndroidMenuFallback;
+  const isActionable = canPromptInstall || showsInstructions;
 
   async function handleInstall() {
     if (canPromptInstall) {
       await promptInstall();
-    } else if (needsIOSInstructions) {
-      setShowIOSInstructions(true);
+    } else if (showsInstructions) {
+      setShowInstructions(true);
     }
   }
-
-  let description = "Add Vrsnify to your home screen or dock for quicker access.";
-  if (isStandalone) description = "You're using the installed app on this device.";
-  else if (needsAndroidMenuFallback) description = 'Open your browser\'s ⋮ menu and tap "Install app" to add it.';
 
   return (
     <Card className="p-5">
@@ -337,7 +334,11 @@ function InstallAppCard() {
           <Download size={15} strokeWidth={2.25} className="text-ink-secondary" />
           <div>
             <p className="text-sm font-medium text-ink-primary">Install app</p>
-            <p className="mt-0.5 text-xs text-ink-tertiary">{description}</p>
+            <p className="mt-0.5 text-xs text-ink-tertiary">
+              {isStandalone
+                ? "You're using the installed app on this device."
+                : "Add Vrsnify to your home screen or dock for quicker access."}
+            </p>
           </div>
         </div>
         {isStandalone ? (
@@ -345,20 +346,22 @@ function InstallAppCard() {
             Installed
           </Badge>
         ) : (
-          !needsAndroidMenuFallback && (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!isSupported}
-              title={isSupported ? undefined : "Not available in this browser"}
-              onClick={handleInstall}
-            >
-              Install
-            </Button>
-          )
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!isActionable}
+            title={isActionable ? undefined : "Not available in this browser"}
+            onClick={handleInstall}
+          >
+            Install
+          </Button>
         )}
       </div>
-      <PwaInstallInstructions open={showIOSInstructions} onClose={() => setShowIOSInstructions(false)} />
+      <PwaInstallInstructions
+        open={showInstructions}
+        onClose={() => setShowInstructions(false)}
+        platform={needsIOSInstructions ? "ios" : "android"}
+      />
     </Card>
   );
 }
