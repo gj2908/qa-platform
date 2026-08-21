@@ -23,6 +23,7 @@ import {
   CircleAlert,
   Copy,
   Download,
+  Globe,
   Layers,
   Lock,
   QrCode,
@@ -46,11 +47,17 @@ export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res); // enforces login via middleware already
   const { data: release } = await supabase
     .from("releases")
-    .select("*, projects(id, name)")
+    .select("*, projects(id, name, org_id, organizations(id, name, domain, domain_status))")
     .eq("id", params.id)
     .single();
 
   if (!release) return { notFound: true };
+
+  // RLS-gated the same way the org row itself is (org_role() is not
+  // null) — a project collaborator who isn't an org member just gets
+  // null here, same as if the project had no org at all, so the share
+  // link card silently skips the domain callout for them.
+  const org = release.projects?.organizations || null;
 
   let role = null;
   let installs = [];
@@ -106,7 +113,7 @@ export async function getServerSideProps({ params, req, res }) {
   });
   const qrSvg = rawQrSvg.replace('fill="#000000"', 'fill="currentColor"');
 
-  return { props: { release, role, itmsLink, otherVersions: otherVersions || [], qrSvg, installs } };
+  return { props: { release, role, itmsLink, otherVersions: otherVersions || [], qrSvg, installs, org } };
 }
 
 function SigningNotice({ release }) {
@@ -196,7 +203,7 @@ function ExpiryNotice({ release }) {
 
 const CHANNEL_TONE = { internal: "neutral", beta: "warning", production: "success" };
 
-export default function Distribute({ release, role, itmsLink, otherVersions, qrSvg, installs }) {
+export default function Distribute({ release, role, itmsLink, otherVersions, qrSvg, installs, org }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -320,6 +327,25 @@ export default function Distribute({ release, role, itmsLink, otherVersions, qrS
               </Button>
             </div>
           </div>
+          {org?.domain_status === "connected" && org.domain ? (
+            <p className="mt-3 flex items-start gap-1.5 text-xs text-ink-tertiary">
+              <Globe size={12} strokeWidth={2.25} className="mt-0.5 shrink-0 text-success" />
+              <span>
+                Using your organization's connected domain,{" "}
+                <span className="font-medium text-ink-secondary">{org.domain}</span>.
+              </span>
+            </p>
+          ) : (
+            org &&
+            canEdit && (
+              <p className="mt-3 text-xs text-ink-tertiary">
+                <a href={`/organizations/${org.id}/settings`} className="text-accent hover:text-accent-hover">
+                  Connect a custom domain
+                </a>{" "}
+                to share this under your own domain instead of vercel.app.
+              </p>
+            )
+          )}
           {qrOpen && (
             <div className="mt-4 flex justify-center border-t border-border pt-4">
               <div
