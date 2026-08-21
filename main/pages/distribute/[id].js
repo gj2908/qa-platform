@@ -105,7 +105,13 @@ export async function getServerSideProps({ params, req, res }) {
     itmsLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(manifestUrl)}`;
   }
 
-  const shareUrl = `${protocol}://${host}/share/${release.id}`;
+  // Prefer the org's connected domain for the *shared* link (what gets
+  // copied/QR-coded) even when this admin page itself was loaded on
+  // vercel.app or another domain — otherwise the "using your org's
+  // domain" callout below is just wrong, which is exactly the bug this
+  // fixes (copy button was always copying window.location.origin).
+  const shareOrigin = org?.domain_status === "connected" && org.domain ? `https://${org.domain}` : `${protocol}://${host}`;
+  const shareUrl = `${shareOrigin}/share/${release.id}`;
   const rawQrSvg = await QRCode.toString(shareUrl, {
     type: "svg",
     margin: 1,
@@ -207,7 +213,17 @@ export default function Distribute({ release, role, itmsLink, otherVersions, qrS
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/share/${release.id}` : "";
+  // Same domain preference as getServerSideProps' shareUrl above — the
+  // copied/displayed link should be the org's connected domain when one
+  // exists, not whatever domain this admin page itself happens to be
+  // loaded on.
+  const shareOrigin =
+    org?.domain_status === "connected" && org.domain
+      ? `https://${org.domain}`
+      : typeof window !== "undefined"
+      ? window.location.origin
+      : "";
+  const shareUrl = shareOrigin ? `${shareOrigin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
   const canEdit = canManageReleases(role);
 
