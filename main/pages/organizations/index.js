@@ -74,7 +74,7 @@ export default function Organizations({ orgs: initial }) {
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-ink-primary">Organizations</h1>
             <p className="mt-1 text-sm text-ink-tertiary">
@@ -82,6 +82,7 @@ export default function Organizations({ orgs: initial }) {
             </p>
           </div>
           <Button
+            className="w-full sm:w-fit"
             onClick={() => {
               setCreating((c) => !c);
               setRequested(false);

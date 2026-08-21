@@ -240,8 +240,8 @@ export default function OrganizationDetail({
   return (
     <AppShell>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             {org.logo_url ? (
               <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-border bg-subtle p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -254,7 +254,7 @@ export default function OrganizationDetail({
             )}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-xl font-semibold text-ink-primary">{org.name}</h1>
+                <h1 className="break-words text-xl font-semibold text-ink-primary">{org.name}</h1>
                 {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
               </div>
               <p className="mt-0.5 text-sm text-ink-tertiary">
@@ -275,7 +275,7 @@ export default function OrganizationDetail({
           )}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
           <StatTile icon={FolderKanban} label="Projects" value={projects.length} />
           <StatTile icon={Users} label="Members" value={members.length} />
           <StatTile
