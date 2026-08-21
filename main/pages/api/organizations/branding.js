@@ -1,6 +1,7 @@
 import { createServerSupabase } from "../../../lib/supabase/server";
 import { logOrgActivity } from "../../../lib/logOrgActivity";
 import { isVercelConfigured, addProjectDomain, getDomainConfig, removeProjectDomain } from "../../../lib/vercelClient";
+import { normalizeDomain } from "../../../lib/normalizeDomain";
 
 const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -35,7 +36,11 @@ export default async function handler(req, res) {
     return;
   }
 
-  const normalizedDomain = domain || null;
+  // Bare hostname only — strips any "https://" prefix, path, or trailing
+  // slash someone pastes in (e.g. a full URL copied from a browser bar).
+  // Both the Vercel domain API below and every `https://${domain}` share
+  // link this org's connected domain feeds into assume this shape.
+  const normalizedDomain = normalizeDomain(domain);
 
   // domain_status tracks the connect-a-real-domain flow (see
   // admin/'s manual fallback, used when VERCEL_API_TOKEN/VERCEL_PROJECT_ID

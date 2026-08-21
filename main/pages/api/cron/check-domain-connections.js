@@ -1,6 +1,7 @@
 import { createServiceClient } from "../../../lib/supabase/server";
 import { isVercelConfigured, getProjectDomain, getDomainConfig } from "../../../lib/vercelClient";
 import { logOrgActivity } from "../../../lib/logOrgActivity";
+import { normalizeDomain } from "../../../lib/normalizeDomain";
 
 // Picks up where branding.js's immediate check left off — DNS
 // propagation can take anywhere from seconds to hours, so a domain
@@ -28,10 +29,16 @@ export default async function handler(req, res) {
 
   let connected = 0;
   for (const org of pending || []) {
-    const domainRes = await getProjectDomain(org.domain);
+    // Defensive: branding.js normalizes on save now, but a row saved
+    // before that fix could still hold a full URL rather than a bare
+    // hostname, which the Vercel domain API rejects outright.
+    const domain = normalizeDomain(org.domain);
+    if (!domain) continue;
+
+    const domainRes = await getProjectDomain(domain);
     if (!domainRes.ok || !domainRes.verified) continue;
 
-    const configRes = await getDomainConfig(org.domain);
+    const configRes = await getDomainConfig(domain);
     if (!configRes.ok || configRes.misconfigured) continue;
 
     await service.from("organizations").update({ domain_status: "connected" }).eq("id", org.id);

@@ -17,6 +17,7 @@ import { useToast } from "../../components/ui/ToastProvider";
 import { getExpiryStatus } from "../../lib/provisioning";
 import { getAvatarColor } from "../../lib/avatarColor";
 import { canManageReleases } from "../../components/ui/role";
+import { normalizeDomain } from "../../lib/normalizeDomain";
 import {
   CalendarClock,
   Check,
@@ -110,7 +111,8 @@ export async function getServerSideProps({ params, req, res }) {
   // vercel.app or another domain — otherwise the "using your org's
   // domain" callout below is just wrong, which is exactly the bug this
   // fixes (copy button was always copying window.location.origin).
-  const shareOrigin = org?.domain_status === "connected" && org.domain ? `https://${org.domain}` : `${protocol}://${host}`;
+  const connectedDomain = org?.domain_status === "connected" ? normalizeDomain(org.domain) : null;
+  const shareOrigin = connectedDomain ? `https://${connectedDomain}` : `${protocol}://${host}`;
   const shareUrl = `${shareOrigin}/share/${release.id}`;
   const rawQrSvg = await QRCode.toString(shareUrl, {
     type: "svg",
@@ -217,12 +219,8 @@ export default function Distribute({ release, role, itmsLink, otherVersions, qrS
   // copied/displayed link should be the org's connected domain when one
   // exists, not whatever domain this admin page itself happens to be
   // loaded on.
-  const shareOrigin =
-    org?.domain_status === "connected" && org.domain
-      ? `https://${org.domain}`
-      : typeof window !== "undefined"
-      ? window.location.origin
-      : "";
+  const connectedDomain = org?.domain_status === "connected" ? normalizeDomain(org.domain) : null;
+  const shareOrigin = connectedDomain ? `https://${connectedDomain}` : typeof window !== "undefined" ? window.location.origin : "";
   const shareUrl = shareOrigin ? `${shareOrigin}/share/${release.id}` : "";
   const appName = release.app_name || release.projects?.name || "Untitled build";
   const canEdit = canManageReleases(role);
@@ -343,12 +341,12 @@ export default function Distribute({ release, role, itmsLink, otherVersions, qrS
               </Button>
             </div>
           </div>
-          {org?.domain_status === "connected" && org.domain ? (
+          {connectedDomain ? (
             <p className="mt-3 flex items-start gap-1.5 text-xs text-ink-tertiary">
               <Globe size={12} strokeWidth={2.25} className="mt-0.5 shrink-0 text-success" />
               <span>
                 Using your organization's connected domain,{" "}
-                <span className="font-medium text-ink-secondary">{org.domain}</span>.
+                <span className="font-medium text-ink-secondary">{connectedDomain}</span>.
               </span>
             </p>
           ) : (
