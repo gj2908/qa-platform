@@ -41,11 +41,14 @@ export default function App({ Component, pageProps }) {
         <Head>
           <title>Vrsnify</title>
           <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" />
+          {/* theme-color itself is set by lib/theme.js's themeInitScript
+              (pages/_document.js) so it tracks the app's actual surface
+              color per light/dark theme, rather than being pinned to the
+              accent blue here regardless of theme. */}
           {isAppShell && (
             <>
               <link rel="manifest" href="/manifest.json" />
               <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-              <meta name="theme-color" content="#3358d4" />
             </>
           )}
         </Head>
