@@ -351,20 +351,26 @@ export default function ProjectOverview({
                 Manage
               </Link>
             </div>
-            <Card className="divide-y divide-border overflow-hidden">
-              {collaborators.map((c) => {
-                const meta = ROLE_META[c.role];
-                const displayName = c.full_name || c.email;
-                return (
-                  <div key={c.email} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="team" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-ink-primary">{displayName}</p>
-                      <p className="text-[11px] text-ink-tertiary">{meta.label}</p>
+            <Card className="overflow-hidden">
+              <ExpandableList
+                items={collaborators}
+                visibleCount={5}
+                className="divide-y divide-border"
+                toggleClassName="block w-full border-t border-border px-4 py-2 text-left text-xs font-medium text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+                renderItem={(c) => {
+                  const meta = ROLE_META[c.role];
+                  const displayName = c.full_name || c.email;
+                  return (
+                    <div key={c.email} className="flex items-center gap-2.5 px-4 py-2.5">
+                      <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="team" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-ink-primary">{displayName}</p>
+                        <p className="text-[11px] text-ink-tertiary">{meta.label}</p>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                }}
+              />
             </Card>
 
             <div className="flex flex-col gap-2 pt-2">
