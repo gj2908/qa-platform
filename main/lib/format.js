@@ -5,6 +5,16 @@ export function formatBytes(bytes) {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
+// For chart axis labels — takes a "YYYY-MM-DD" bucket label (day or week
+// start) and renders e.g. "Jul 24". Parses the date parts directly rather
+// than `new Date(dateStr)` (which reads "YYYY-MM-DD" as UTC midnight) so a
+// negative UTC-offset timezone can't roll the displayed day back by one.
+export function shortDate(dateStr) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export function relativeTime(dateStr) {
   if (!dateStr) return "—";
   const diffMs = Date.now() - new Date(dateStr).getTime();

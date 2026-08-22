@@ -11,7 +11,7 @@ import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
 import { ROLE_META, canManageReleases, isOwner } from "../../../components/ui/role";
 import { STATUS_META, STATUS_ORDER } from "../../../components/ui/status";
-import { relativeTime } from "../../../lib/format";
+import { relativeTime, shortDate } from "../../../lib/format";
 import {
   Kanban,
   ClipboardList,
@@ -314,7 +314,7 @@ export default function ProjectOverview({
               <div className="mt-4 border-t border-border pt-4">
                 <p className="text-xs font-medium text-ink-secondary">Velocity, last 6 weeks</p>
                 <div className="mt-2">
-                  <BarChart data={velocity} height={56} />
+                  <BarChart data={velocity} height={56} formatLabel={shortDate} />
                 </div>
                 <p className="mt-1 text-[11px] text-ink-tertiary">
                   Based on each task's last-updated time, not a dedicated completion date.
@@ -414,7 +414,7 @@ function AdoptionCard({ installTrend, versionAdoption }) {
             Installs <span className="text-ink-tertiary">· {totalInstalls} total</span>
           </p>
           <div className="mt-2">
-            <BarChart data={installTrend} height={80} />
+            <BarChart data={installTrend} height={80} formatLabel={shortDate} />
           </div>
         </div>
         <div>
