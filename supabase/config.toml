@@ -250,7 +250,7 @@ port = 465
 user = "resend"
 pass = "env(RESEND_API_KEY)"
 admin_email = "notifications@itsgj.email"
-sender_name = "QA Platform"
+sender_name = "Vrsnify"
 
 # Default templates only show a "click this link" button — no visible code
 # at all — which makes the OTP-code entry UI (main/'s OtpCodeInput) useless
