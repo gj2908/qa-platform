@@ -9,7 +9,7 @@ import Textarea from "../../components/ui/Textarea";
 import FormField from "../../components/ui/FormField";
 import EmptyState from "../../components/ui/EmptyState";
 import { useToast } from "../../components/ui/ToastProvider";
-import { Building2, Plus, Users } from "lucide-react";
+import { Building2, Plus, Users, Clock, CircleAlert, CheckCircle2 } from "lucide-react";
 
 export async function getServerSideProps({ req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -36,10 +36,25 @@ export async function getServerSideProps({ req, res }) {
     orgs = (data || []).map((o) => ({ ...o, myRole: roleByOrg[o.id] }));
   }
 
-  return { props: { orgs } };
+  // The caller's own most recent "create" request, if any — so a pending
+  // or rejected request stays visible across reloads/navigation instead
+  // of only existing as a transient client-side flag that disappears the
+  // moment you leave the page.
+  const { data: latestRequest } = user?.email
+    ? await supabase
+        .from("organization_requests")
+        .select("org_name, status, requested_at")
+        .eq("requester_email", user.email)
+        .eq("type", "create")
+        .order("requested_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+
+  return { props: { orgs, latestRequest: latestRequest || null } };
 }
 
-export default function Organizations({ orgs: initial }) {
+export default function Organizations({ orgs: initial, latestRequest }) {
   const toast = useToast();
   const [orgs] = useState(initial);
   const [creating, setCreating] = useState(false);
@@ -48,6 +63,8 @@ export default function Organizations({ orgs: initial }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [requested, setRequested] = useState(false);
+
+  const isPending = !requested && latestRequest?.status === "pending";
 
   async function requestOrg(e) {
     e.preventDefault();
@@ -78,34 +95,82 @@ export default function Organizations({ orgs: initial }) {
           <div>
             <h1 className="text-xl font-semibold text-ink-primary">Organizations</h1>
             <p className="mt-1 text-sm text-ink-tertiary">
-              Group projects under a company or team, with shared membership and seats.
+              Group projects under a company or team, with shared membership, seats, branding, and
+              security policy.
             </p>
           </div>
-          <Button
-            className="w-full sm:w-fit"
-            onClick={() => {
-              setCreating((c) => !c);
-              setRequested(false);
-            }}
-          >
-            <Plus size={15} strokeWidth={2.25} />
-            Request an organization
-          </Button>
+          {!isPending && (
+            <Button
+              className="w-full sm:w-fit"
+              onClick={() => {
+                setCreating((c) => !c);
+                setRequested(false);
+              }}
+            >
+              <Plus size={15} strokeWidth={2.25} />
+              Request an organization
+            </Button>
+          )}
         </div>
+
+        {isPending && (
+          <Card className="flex items-start gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-warning-subtle text-warning-subtle-fg">
+              <Clock size={16} strokeWidth={2.25} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink-primary">
+                Your request for "{latestRequest.org_name}" is awaiting review
+              </p>
+              <p className="mt-0.5 text-xs text-ink-tertiary">
+                A platform admin will review it — you'll be made the organization's admin once approved.
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {!isPending && !creating && latestRequest?.status === "rejected" && (
+          <Card className="flex items-start gap-3 p-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-danger-subtle text-danger-subtle-fg">
+              <CircleAlert size={16} strokeWidth={2.25} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink-primary">
+                Your request for "{latestRequest.org_name}" wasn't approved
+              </p>
+              <p className="mt-0.5 text-xs text-ink-tertiary">
+                You can submit a new request below if your needs have changed.
+              </p>
+            </div>
+          </Card>
+        )}
 
         {creating && (
           <Card className="p-5">
             {requested ? (
-              <p className="text-sm text-ink-secondary">
-                Request submitted. A platform admin will review it and set you up as the organization's
-                admin once approved.
-              </p>
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-success-subtle text-success-subtle-fg">
+                  <CheckCircle2 size={16} strokeWidth={2.25} />
+                </span>
+                <p className="text-sm text-ink-secondary">
+                  Request submitted. A platform admin will review it and set you up as the organization's
+                  admin once approved.
+                </p>
+              </div>
             ) : (
               <>
-                <p className="mb-3 text-xs text-ink-tertiary">
-                  Organizations are set up by a platform admin — submit a request and you'll be made the
-                  admin of it once approved.
-                </p>
+                <div className="mb-4 flex flex-col gap-1 text-xs text-ink-tertiary">
+                  <p>Once approved, you'll be the organization's admin and can:</p>
+                  <ul className="ml-4 list-disc">
+                    <li>Group any of your existing standalone projects under it, or move them back later</li>
+                    <li>Invite teammates as members and manage seats</li>
+                    <li>Set org-wide branding, a custom domain, and a two-factor-auth requirement</li>
+                  </ul>
+                  <p className="mt-1">
+                    Organizations are set up by a platform admin — submit a request and you'll be notified
+                    here once it's reviewed.
+                  </p>
+                </div>
                 <form onSubmit={requestOrg} className="flex flex-col gap-3">
                   <FormField label="Organization name" error={error}>
                     <Input

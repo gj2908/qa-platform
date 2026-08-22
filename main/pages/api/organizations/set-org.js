@@ -30,6 +30,14 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Read once up front — needed either way: to log a detach against the
+  // org it's leaving, and (for attach) to check org-default gaps below.
+  const { data: projectBefore } = await authSupabase
+    .from("projects")
+    .select("name, org_id, webhook_url, require_approval")
+    .eq("id", projectId)
+    .single();
+
   const update = { org_id: orgId || null };
 
   if (orgId) {
@@ -41,20 +49,15 @@ export default async function handler(req, res) {
 
     // Org-level defaults fill gaps only — never overwrite a value the
     // project already has of its own.
-    const { data: project } = await authSupabase
-      .from("projects")
-      .select("webhook_url, require_approval")
-      .eq("id", projectId)
-      .single();
     const { data: org } = await authSupabase
       .from("organizations")
       .select("default_webhook_url, default_require_approval, name")
       .eq("id", orgId)
       .single();
-    if (project && !project.webhook_url && org?.default_webhook_url) {
+    if (projectBefore && !projectBefore.webhook_url && org?.default_webhook_url) {
       update.webhook_url = org.default_webhook_url;
     }
-    if (project && !project.require_approval && org?.default_require_approval) {
+    if (projectBefore && !projectBefore.require_approval && org?.default_require_approval) {
       update.require_approval = true;
     }
   }
@@ -67,12 +70,21 @@ export default async function handler(req, res) {
   }
 
   if (orgId) {
-    const { data: project } = await authSupabase.from("projects").select("name").eq("id", projectId).single();
     await logOrgActivity(authSupabase, {
       orgId,
       actorEmail: user.email,
       action: "org_project_attached",
-      detail: project?.name || null,
+      detail: projectBefore?.name || null,
+    });
+  } else if (projectBefore?.org_id) {
+    // Symmetric with the attach path above — without this, every removal
+    // silently vanished from the org's activity feed while every addition
+    // showed up (only noticed once a "remove" UI existed to trigger it).
+    await logOrgActivity(authSupabase, {
+      orgId: projectBefore.org_id,
+      actorEmail: user.email,
+      action: "org_project_detached",
+      detail: projectBefore.name || null,
     });
   }
 

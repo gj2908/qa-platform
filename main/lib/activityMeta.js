@@ -1,4 +1,4 @@
-import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Users, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff, OctagonAlert, Megaphone } from "lucide-react";
+import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Users, Check, CalendarClock, AtSign, FolderPlus, FolderMinus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff, OctagonAlert, Megaphone } from "lucide-react";
 
 // Shared between the project Overview "Recent activity" card, the
 // top-bar notification bell, and the org dashboard's activity feed —
@@ -29,6 +29,7 @@ export const ACTIVITY_META = {
   org_domain_requested: { icon: Globe, label: "requested a domain connection" },
   org_domain_connected: { icon: Check, label: "connected the domain" },
   org_project_attached: { icon: FolderPlus, label: "added a project to the org" },
+  org_project_detached: { icon: FolderMinus, label: "removed a project from the org" },
   org_creation_requested: { icon: Building2, label: "requested this organization" },
   org_creation_approved: { icon: Check, label: "approved the organization" },
   org_closure_requested: { icon: X, label: "requested to close the organization" },

@@ -348,3 +348,15 @@ to the repo root for the session, using the service-role client to
 create/clean up its own test users/projects/data, run once, then
 deleted. `npm install --no-save playwright` (never a permanent
 dependency), always clean up even on failure.
+
+When seeding a test **organization** with the service-role client, insert
+`organizations` with `created_by` set and then insert **only the other
+members** into `org_members` — a DB trigger (`assign_org_admin()`,
+mirroring `assign_project_owner()` above) already auto-inserts
+`created_by` as `org_admin`. Explicitly inserting that same row too turns
+a batched `.insert([...])` into a duplicate-key error on the whole batch
+(not just that one row) — confirmed live: this silently dropped a
+same-batch member row too, making a seeded "member" session look like it
+had no role at all (a 404 on the org dashboard) until traced back to the
+rolled-back insert. Same pattern applies to project collaborators when
+seeding a project with `created_by` set — only add non-owner rows.

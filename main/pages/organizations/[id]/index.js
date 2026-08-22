@@ -2,33 +2,16 @@ import { useRef, useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import { createClient } from "../../../lib/supabase/client";
 import AppShell from "../../../components/layout/AppShell";
-import Card from "../../../components/ui/Card";
 import Button from "../../../components/ui/Button";
-import Textarea from "../../../components/ui/Textarea";
-import Select from "../../../components/ui/Select";
-import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
-import ExpandableList from "../../../components/ui/ExpandableList";
 import StatTile from "../../../components/ui/StatTile";
+import ActivityCard from "../../../components/organization/ActivityCard";
+import ProjectsCard from "../../../components/organization/ProjectsCard";
+import MembersCard from "../../../components/organization/MembersCard";
 import { useToast } from "../../../components/ui/ToastProvider";
-import Avatar from "../../../components/ui/Avatar";
-import { activityMetaFor } from "../../../lib/activityMeta";
-import { relativeTime } from "../../../lib/format";
-import {
-  UserPlus,
-  UserMinus,
-  Trash2,
-  CircleAlert,
-  Users,
-  FolderKanban,
-  Download,
-  FolderPlus,
-  Building2,
-  Clock,
-  Settings,
-} from "lucide-react";
+import { CircleAlert, Users, FolderKanban, Building2, UserPlus, Settings } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -121,11 +104,6 @@ export async function getServerSideProps({ params, req, res }) {
   };
 }
 
-const ROLE_META = {
-  org_admin: { label: "Admin", tone: "accent" },
-  member: { label: "Member", tone: "neutral" },
-};
-
 export default function OrganizationDetail({
   org,
   role: myRole,
@@ -148,6 +126,8 @@ export default function OrganizationDetail({
   const [offboardBusy, setOffboardBusy] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [addingProject, setAddingProject] = useState(false);
+  const [removeProjectTarget, setRemoveProjectTarget] = useState(null);
+  const [removeProjectBusy, setRemoveProjectBusy] = useState(false);
   const [csvFileName, setCsvFileName] = useState("");
   const [csvRows, setCsvRows] = useState([]);
   const [csvError, setCsvError] = useState("");
@@ -160,7 +140,6 @@ export default function OrganizationDetail({
   const fileInputRef = useRef(null);
 
   const isAdmin = myRole === "org_admin";
-  const seatsUsed = members.length;
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const CSV_MAX_ROWS = 200;
@@ -356,6 +335,10 @@ export default function OrganizationDetail({
     }
   }
 
+  function toggleProjectSelect(projectId, checked) {
+    setSelectedProjectIds((ids) => (checked ? [...ids, projectId] : ids.filter((id) => id !== projectId)));
+  }
+
   async function addProject(e) {
     e.preventDefault();
     if (selectedProjectIds.length === 0) return;
@@ -384,6 +367,30 @@ export default function OrganizationDetail({
       toast.success(addedTargets.length === 1 ? "Project added to the organization." : `${addedTargets.length} projects added to the organization.`);
     }
     setSelectedProjectIds([]);
+  }
+
+  async function confirmRemoveProject() {
+    if (!removeProjectTarget) return;
+    setRemoveProjectBusy(true);
+    const res = await fetch("/api/organizations/set-org", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: removeProjectTarget.id, orgId: null }),
+    });
+    setRemoveProjectBusy(false);
+    if (res.ok) {
+      // Not re-added to `unattached` here — whether the remover still owns
+      // it (the only condition that would make it eligible again) isn't
+      // known client-side without another round trip; a reload recomputes
+      // it correctly via getServerSideProps.
+      setProjects((p) => p.filter((x) => x.id !== removeProjectTarget.id));
+      toast.success(`Removed "${removeProjectTarget.name}" from the organization.`);
+      setRemoveProjectTarget(null);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast.error(data.error || "Couldn't remove that project.");
+      setRemoveProjectTarget(null);
+    }
   }
 
   async function confirmRemove() {
@@ -451,6 +458,7 @@ export default function OrganizationDetail({
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="break-words text-xl font-semibold text-ink-primary">{org.name}</h1>
                 {org.domain && <Badge tone="neutral">{org.domain}</Badge>}
+                <Badge tone={isAdmin ? "accent" : "neutral"}>{isAdmin ? "Admin" : "Member"}</Badge>
               </div>
               <p className="mt-0.5 text-sm text-ink-tertiary">
                 {isAdmin ? "You're an admin of this organization." : "You're a member of this organization."}{" "}
@@ -476,18 +484,9 @@ export default function OrganizationDetail({
           <StatTile
             icon={UserPlus}
             label="Seats"
-            value={org.seat_limit ? `${seatsUsed} / ${org.seat_limit}` : `${seatsUsed}`}
+            value={org.seat_limit ? `${members.length} / ${org.seat_limit}` : `${members.length}`}
           />
         </div>
-
-        {isAdmin && org.seat_limit && org.seat_limit - seatsUsed <= 1 && (
-          <p className="flex items-center gap-1.5 rounded-md bg-warning-subtle px-3.5 py-2.5 text-sm text-warning-subtle-fg">
-            <CircleAlert size={14} />
-            {org.seat_limit - seatsUsed <= 0
-              ? "No seats left — remove a member or ask your platform operator to raise the seat limit before adding another."
-              : "Only 1 seat left on this organization."}
-          </p>
-        )}
 
         {error && (
           <p className="flex items-center gap-1.5 rounded-md bg-danger-subtle px-3.5 py-2.5 text-sm text-danger-subtle-fg">
@@ -496,242 +495,40 @@ export default function OrganizationDetail({
           </p>
         )}
 
-        {activity.length > 0 && (
-          <Card className="p-5">
-            <div className="flex items-center gap-2">
-              <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
-              <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
-            </div>
-            <ExpandableList
-              items={activity}
-              visibleCount={5}
-              className="mt-4 flex flex-col gap-3.5"
-              renderItem={(a) => {
-                const meta = activityMetaFor(a.action);
-                const Icon = meta.icon;
-                return (
-                  <div key={a.id} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
-                      <Icon size={12} strokeWidth={2.25} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm text-ink-primary">
-                        <span className="font-medium">{a.actor_email}</span> {meta.label}
-                        {a.project_name ? <span className="text-ink-tertiary"> in {a.project_name}</span> : null}
-                        {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
-                      </p>
-                      <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
-                    </div>
-                  </div>
-                );
-              }}
-            />
-          </Card>
-        )}
+        <ActivityCard org={org} isAdmin={isAdmin} activity={activity} />
 
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FolderKanban size={15} strokeWidth={2.25} className="text-ink-secondary" />
-              <h2 className="text-sm font-semibold text-ink-primary">Projects</h2>
-            </div>
-            {isAdmin && (
-              <a href={`/api/organizations/${org.id}/activity-export`}>
-                <Button variant="secondary" size="sm">
-                  <Download size={13} strokeWidth={2.25} />
-                  Export activity
-                </Button>
-              </a>
-            )}
-          </div>
+        <ProjectsCard
+          org={org}
+          isAdmin={isAdmin}
+          projects={projects}
+          unattached={unattached}
+          selectedProjectIds={selectedProjectIds}
+          onToggleProjectSelect={toggleProjectSelect}
+          onAddProjects={addProject}
+          addingProject={addingProject}
+          onRequestRemove={setRemoveProjectTarget}
+        />
 
-          {isAdmin && unattached.length > 0 && (
-            <form onSubmit={addProject} className="mt-4 flex flex-col gap-3">
-              <FormField label={`Add your project${unattached.length === 1 ? "" : "s"} (select one or more)`}>
-                <div className="flex flex-col gap-1.5 rounded-md border border-border p-2">
-                  {unattached.map((p) => (
-                    <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm text-ink-primary hover:bg-subtle">
-                      <input
-                        type="checkbox"
-                        checked={selectedProjectIds.includes(p.id)}
-                        onChange={(e) =>
-                          setSelectedProjectIds((ids) =>
-                            e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id)
-                          )
-                        }
-                        className="h-3.5 w-3.5 rounded border-border accent-accent"
-                      />
-                      {p.name}
-                    </label>
-                  ))}
-                </div>
-              </FormField>
-              <Button type="submit" loading={addingProject} disabled={selectedProjectIds.length === 0} className="self-start">
-                <FolderPlus size={15} strokeWidth={2.25} />
-                {selectedProjectIds.length > 1 ? `Add ${selectedProjectIds.length} projects` : "Add"}
-              </Button>
-            </form>
-          )}
-
-          {projects.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-tertiary">
-              No projects assigned yet — add one above, or from a project's own settings.
-            </p>
-          ) : (
-            <div className="mt-3 divide-y divide-border border-t border-border">
-              {projects.map((p) => (
-                <a
-                  key={p.id}
-                  href={`/projects/${p.id}`}
-                  className="flex items-center justify-between py-2 text-sm text-ink-primary hover:text-accent"
-                >
-                  {p.name}
-                </a>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Users size={15} strokeWidth={2.25} className="text-ink-secondary" />
-              <h2 className="text-sm font-semibold text-ink-primary">Members</h2>
-            </div>
-            <span className="text-xs text-ink-tertiary">
-              {seatsUsed} seat{seatsUsed === 1 ? "" : "s"} used{org.seat_limit ? ` / ${org.seat_limit}` : ""}
-            </span>
-          </div>
-
-          {isAdmin && (
-            <form onSubmit={addMember} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <FormField label="Email (paste several to bulk-invite)">
-                  <Textarea
-                    rows={1}
-                    placeholder="teammate@company.com, another@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </FormField>
-              </div>
-              <div className="w-full sm:w-40">
-                <FormField label="Role">
-                  <Select value={role} onChange={(e) => setRole(e.target.value)}>
-                    <option value="member">Member</option>
-                    <option value="org_admin">Admin</option>
-                  </Select>
-                </FormField>
-              </div>
-              <Button type="submit" loading={adding} disabled={!email.trim()}>
-                <UserPlus size={15} strokeWidth={2.25} />
-                Add
-              </Button>
-            </form>
-          )}
-
-          {isAdmin && (
-            <div className="mt-3 flex flex-col gap-2">
-              <FormField
-                label="or upload a CSV (email,role per line)"
-                hint="role column is optional and defaults to member; a header row is detected automatically."
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={handleCsvFile}
-                  className="block w-full cursor-pointer text-sm text-ink-secondary file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-primary hover:file:bg-hover"
-                />
-              </FormField>
-
-              {csvError && (
-                <p className="flex items-center gap-1.5 text-xs text-danger">
-                  <CircleAlert size={12} strokeWidth={2.5} />
-                  {csvError}
-                </p>
-              )}
-
-              {csvRows.length > 0 && (
-                <div className="rounded-md border border-border p-3">
-                  <p className="text-xs font-medium text-ink-secondary">
-                    {csvFileName ? `${csvFileName} — ` : ""}
-                    {csvRows.length} row{csvRows.length === 1 ? "" : "s"} parsed
-                    {csvRows.some((r) => !r.valid)
-                      ? `, ${csvRows.filter((r) => !r.valid).length} invalid (will be skipped)`
-                      : ""}
-                  </p>
-                  <div className="mt-2 flex flex-col gap-1">
-                    {csvRows.slice(0, 10).map((r, i) => (
-                      <div key={i} className="flex items-center justify-between gap-2 text-xs">
-                        <span className={`truncate ${r.valid ? "text-ink-primary" : "text-danger"}`}>
-                          {r.email || "(empty)"}
-                        </span>
-                        <Badge tone={r.valid ? "neutral" : "danger"}>{r.role}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                  {csvRows.length > 10 && (
-                    <p className="mt-1.5 text-xs text-ink-tertiary">
-                      + {csvRows.length - 10} more row{csvRows.length - 10 === 1 ? "" : "s"}
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="mt-3"
-                    loading={csvInviting}
-                    disabled={csvRows.filter((r) => r.valid).length === 0}
-                    onClick={inviteFromCsv}
-                  >
-                    <UserPlus size={14} strokeWidth={2.25} />
-                    Invite {csvRows.filter((r) => r.valid).length} member
-                    {csvRows.filter((r) => r.valid).length === 1 ? "" : "s"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 divide-y divide-border border-t border-border">
-            {members.map((m) => {
-              const meta = ROLE_META[m.role];
-              const displayName = m.full_name || m.email;
-              return (
-                <div key={m.email} className="flex items-center justify-between gap-3 py-2.5">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Avatar avatarUrl={m.avatar_url} seed={m.email} displayName={displayName} size="team" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-ink-primary">{displayName}</p>
-                      {m.full_name && <p className="truncate text-xs text-ink-tertiary">{m.email}</p>}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge tone={meta.tone}>{meta.label}</Badge>
-                    {isAdmin && (
-                      <button
-                        onClick={() => setOffboardTarget(m)}
-                        title="Offboard — revoke access everywhere"
-                        className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-                      >
-                        <UserMinus size={14} strokeWidth={2.25} />
-                      </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => setRemoveTarget(m)}
-                        title="Remove member"
-                        className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-                      >
-                        <Trash2 size={14} strokeWidth={2.25} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+        <MembersCard
+          org={org}
+          isAdmin={isAdmin}
+          members={members}
+          email={email}
+          setEmail={setEmail}
+          role={role}
+          setRole={setRole}
+          adding={adding}
+          onAddMember={addMember}
+          fileInputRef={fileInputRef}
+          onCsvFile={handleCsvFile}
+          csvFileName={csvFileName}
+          csvRows={csvRows}
+          csvError={csvError}
+          csvInviting={csvInviting}
+          onInviteFromCsv={inviteFromCsv}
+          onRequestOffboard={setOffboardTarget}
+          onRequestRemove={setRemoveTarget}
+        />
       </div>
 
       <ConfirmDialog
@@ -754,6 +551,16 @@ export default function OrganizationDetail({
         onCancel={() => setOffboardTarget(null)}
       />
 
+      <ConfirmDialog
+        open={!!removeProjectTarget}
+        title={`Remove "${removeProjectTarget?.name}" from ${org.name}?`}
+        description="The project becomes standalone again — its board, releases, and collaborators are unaffected, but org-wide admin access to it is revoked."
+        confirmLabel="Remove"
+        loading={removeProjectBusy}
+        onConfirm={confirmRemoveProject}
+        onCancel={() => setRemoveProjectTarget(null)}
+      />
+
       <InviteEmailPrompt
         open={!!invitePrompt}
         emails={invitePrompt?.emails || []}
@@ -769,4 +576,3 @@ export default function OrganizationDetail({
     </AppShell>
   );
 }
-

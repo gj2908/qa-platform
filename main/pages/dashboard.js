@@ -23,6 +23,7 @@ import {
   UploadCloud,
   Star,
   Clock,
+  Building2,
 } from "lucide-react";
 import { relativeTime } from "../lib/format";
 import { ROLE_META, canManageReleases } from "../components/ui/role";
@@ -94,12 +95,21 @@ export async function getServerSideProps({ req, res }) {
     if (!(r.project_id in latestVersionByProject)) latestVersionByProject[r.project_id] = r.version;
   }
 
+  // Org name for the badge on each org-grouped project's card — a project
+  // and its org_id are already in `projectsRaw` (select("*")), this just
+  // resolves the handful of distinct org ids to display names.
+  const orgIds = [...new Set((projectsRaw || []).map((p) => p.org_id).filter(Boolean))];
+  const { data: orgsRaw } =
+    orgIds.length > 0 ? await supabase.from("organizations").select("id, name").in("id", orgIds) : { data: [] };
+  const orgNameById = Object.fromEntries((orgsRaw || []).map((o) => [o.id, o.name]));
+
   const projects = (projectsRaw || [])
     .map((p) => ({
       ...p,
       role: roleByProject[p.id] || null,
       isFavorite: favoriteIds.has(p.id),
       lastReleaseVersion: latestVersionByProject[p.id] || null,
+      orgName: p.org_id ? orgNameById[p.org_id] || null : null,
     }))
     .sort((a, b) => {
       if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
@@ -359,13 +369,22 @@ function ProjectCard({ project: p, onDelete }) {
               <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
               <VersionTag version={p.lastReleaseVersion} />
             </div>
-            <div className="mt-0.5 flex items-center gap-1.5">
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
               <p className="text-xs text-ink-tertiary">Created {new Date(p.created_at).toLocaleDateString()}</p>
               {roleMeta && (
                 <span className="flex items-center gap-1 text-xs text-ink-tertiary">
                   <span className="text-ink-disabled">·</span>
                   <RoleIcon size={11} strokeWidth={2.25} />
                   {roleMeta.label}
+                </span>
+              )}
+              {p.orgName && (
+                <span
+                  title={`Part of ${p.orgName}`}
+                  className="flex items-center gap-1 rounded-full bg-subtle px-1.5 py-0.5 text-xs text-ink-tertiary"
+                >
+                  <Building2 size={10} strokeWidth={2.25} />
+                  {p.orgName}
                 </span>
               )}
             </div>
