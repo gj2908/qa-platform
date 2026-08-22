@@ -6,21 +6,16 @@ import Logo from "./Logo";
 import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "../shadcn/sheet";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../shadcn/tooltip";
 
-// The single shared header for the whole app now that there's no sidebar
-// anywhere: a Home button back to the dashboard on the left, a centered
-// nav (project page tabs, desktop-only — sm: and up) in the middle, and
-// account controls on the right. A 3-column grid (side columns
-// `minmax(0,1fr)`, middle `auto`) keeps the center nav visually centered
-// and sized to its own content — unlike equal-thirds flexbox (three
-// `flex-1` children), which forces the center into a fixed third
-// regardless of how much room the tabs actually need, clipping them on
-// narrower laptop widths. Below `sm:`, the center nav disappears and its
-// tabs move into a slide-in Sheet instead — theme lives only in the
-// profile dropdown now (UserMenu.js), not in this bar at all.
+// The single shared header for the whole app: a Home button back to the
+// dashboard on the left, account controls on the right. Project pages'
+// tab navigation no longer lives here — it's `ProjectSidebar` (desktop) —
+// this bar only carries a `center` list on mobile, as the trigger content
+// for the slide-in Sheet drawer (`AppShell` never passes `center` at all,
+// since it has no tab set).
 export default function TopNav({ crumb, center, orgBranding }) {
   return (
-    <header className="sticky top-0 z-20 grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
-      <div className="col-start-1 flex items-center gap-2 min-w-0">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
+      <div className="flex items-center gap-2 min-w-0">
         <Tooltip>
           <TooltipTrigger asChild>
             <Link
@@ -58,13 +53,7 @@ export default function TopNav({ crumb, center, orgBranding }) {
         )}
       </div>
 
-      {center && (
-        <nav className="col-start-2 hidden min-w-0 items-stretch justify-center gap-1 overflow-x-auto sm:flex">
-          {center}
-        </nav>
-      )}
-
-      <div className="col-start-3 flex min-w-0 items-center justify-end gap-3">
+      <div className="flex min-w-0 items-center justify-end gap-3">
         <Tooltip>
           <TooltipTrigger asChild>
             <Link

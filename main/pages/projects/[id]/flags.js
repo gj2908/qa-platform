@@ -7,6 +7,7 @@ import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
 import FormField from "../../../components/ui/FormField";
 import EmptyState from "../../../components/ui/EmptyState";
+import Switch from "../../../components/ui/Switch";
 import { ToggleLeft, Plus, Trash2 } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -72,7 +73,7 @@ export default function Flags({ project, role, flags: initialFlags }) {
   }
 
   return (
-    <ProjectShell project={project} active="flags">
+    <ProjectShell project={project} active="flags" role={role}>
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -125,14 +126,11 @@ export default function Flags({ project, role, flags: initialFlags }) {
                     {f.description && <p className="mt-0.5 truncate text-xs text-ink-tertiary">{f.description}</p>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      variant={f.enabled ? "primary" : "secondary"}
-                      size="sm"
+                    <Switch
+                      checked={f.enabled}
                       disabled={!editable}
-                      onClick={() => updateFlag(f, { enabled: !f.enabled })}
-                    >
-                      {f.enabled ? "On" : "Off"}
-                    </Button>
+                      onChange={(next) => updateFlag(f, { enabled: next })}
+                    />
                     {editable && (
                       <button onClick={() => deleteFlag(f)} className="rounded p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger">
                         <Trash2 size={13} strokeWidth={2.25} />

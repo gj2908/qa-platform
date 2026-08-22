@@ -100,6 +100,51 @@ plain `transition-colors` for hover states, which is correct for those.
   alias exists only so these ported files' `@/lib/utils` import matches
   the registry source verbatim.
 
+- **`ProjectShell` now has a persistent, collapsible left sidebar
+  (`components/layout/ProjectSidebar.js`) instead of a horizontal tab
+  bar** — `AppShell` still has no sidebar at all (dashboard/account pages
+  have no tab set), so "no sidebar anywhere" is no longer an app-wide
+  claim, only an `AppShell` one. Tab visibility (including the owner-only
+  "Settings" entry) is decided exactly once, in `ProjectShell.js`, by
+  filtering its static `TABS` array with `isOwner(role)`
+  (`components/ui/role.js`) — the resulting list feeds both
+  `ProjectSidebar` (desktop, `sm:` and up) and `TopNav`'s mobile Sheet
+  drawer, so neither has its own role logic. Every page that renders
+  `<ProjectShell>` must pass `role` (it already fetches it via the same
+  `project_role` RPC every other page uses) or the Settings tab silently
+  never appears. `NavTab.js` is a single style used identically in both
+  contexts (no more responsive dual-mode branching) — collapsed-sidebar
+  icons wrap it in `components/shadcn/tooltip.jsx`'s `Tooltip` via
+  `asChild`, which is why `NavTab` is wrapped in `forwardRef` (a plain
+  function component would silently drop Radix's ref and break
+  positioning). Sidebar collapse state is one global `localStorage`
+  boolean (`qa-platform-sidebar-collapsed`), same lazy-init-from-
+  localStorage shape as `lib/theme.js`'s theme preference.
+
+- **Settings live on a dedicated page at each level, not wherever a
+  feature happened to be built.** Project-level owner-only settings
+  (approval requirement, roadmap, webhook, digest, release emails, org
+  assignment, legal hold, registered devices, API tokens) are on
+  `pages/projects/[id]/settings.js`, gated server-side the same way
+  `organizations/[id]/settings.js` already gated on `org_role`:
+  `getServerSideProps` returns `notFound` when `role !== "owner"`.
+  `pages/projects/[id]/index.js` (Overview) only renders actual overview
+  content now; `pages/projects/[id]/collaborators.js` only renders
+  people/roles/activity — devices and API tokens moved out of it onto
+  the new Settings page, since they're a distribution/developer concern,
+  not a people one. All three settings surfaces (project, org, account —
+  `pages/settings.js`) group their cards with the new
+  `components/ui/SettingsSection.js` (label + description + a grid of
+  children, `columns={2}` for cards that are just a toggle) instead of
+  one flat stack — reach for it for any new settings card rather than
+  appending another bare `<Card>` to a growing list.
+- **`components/ui/Switch.js`** (a real `role="switch"` toggle) replaces
+  the old pattern of relabeling a primary/secondary `Button` as "On"/
+  "Off" for a boolean setting — every settings toggle in the app now
+  uses it (project/org/account settings, feature flags). Its `onChange`
+  receives the next boolean directly (not the previous value negated),
+  so handlers don't need to compute `!current` themselves.
+
 - **Building a domain-correct absolute URL server-side: use
   `lib/getRequestOrigin.js`'s `getRequestOrigin(req)`** (proto +
   `req.headers.host`), not `process.env.NEXT_PUBLIC_SITE_URL`. It's

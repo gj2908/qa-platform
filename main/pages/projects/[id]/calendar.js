@@ -140,7 +140,7 @@ export default function Calendar({ project, role, tasks: initialTasks, collabora
   });
 
   return (
-    <ProjectShell project={project} active="calendar">
+    <ProjectShell project={project} active="calendar" role={role}>
       <div className="flex h-[calc(100vh-7rem)] flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

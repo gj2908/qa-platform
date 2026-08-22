@@ -6,10 +6,11 @@ import OrgAnnouncementBanner from "./OrgAnnouncementBanner";
 import CommandPalette from "../CommandPalette";
 import { UserProvider } from "../../lib/UserContext";
 
-// Layout for the dashboard/account-level pages. No sidebar — matches
-// ProjectShell's single top-bar pattern. No centered nav here: Home
-// already covers "back to dashboard", and Settings lives in the profile
-// menu (see UserMenu) rather than duplicated as a tab.
+// Layout for the dashboard/account-level pages: single top-bar, no sidebar
+// — unlike ProjectShell, which now has a persistent ProjectSidebar for its
+// larger tab set. This shell has no tab set of its own: Home already covers
+// "back to dashboard", and Settings lives in the profile menu (see
+// UserMenu) rather than duplicated as a tab.
 export default function AppShell({ children }) {
   return (
     <UserProvider>

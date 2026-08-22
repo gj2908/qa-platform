@@ -59,9 +59,9 @@ export async function getServerSideProps({ params, req, res }) {
   return { props: { project, role, crashGroups, truncated: reports.length >= MAX_REPORTS_SCANNED } };
 }
 
-export default function ProjectCrashes({ project, crashGroups, truncated }) {
+export default function ProjectCrashes({ project, role, crashGroups, truncated }) {
   return (
-    <ProjectShell project={project} active="crashes">
+    <ProjectShell project={project} active="crashes" role={role}>
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Crashes</h1>

@@ -513,7 +513,7 @@ export default function Changelog({ project, role, releases, scheduled, pending,
   }
 
   return (
-    <ProjectShell project={project} active="changelog">
+    <ProjectShell project={project} active="changelog" role={role}>
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

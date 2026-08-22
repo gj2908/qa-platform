@@ -7,6 +7,8 @@ import Badge from "../components/ui/Badge";
 import FormField from "../components/ui/FormField";
 import Input from "../components/ui/Input";
 import Select from "../components/ui/Select";
+import SettingsSection from "../components/ui/SettingsSection";
+import Switch from "../components/ui/Switch";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useToast } from "../components/ui/ToastProvider";
 import { CircleCheck, Bell, ShieldCheck, ShieldOff, Copy, BellOff, Mail, Download, MailPlus } from "lucide-react";
@@ -165,10 +167,10 @@ function PushNotificationsCard() {
     getPushSubscriptionState().then(setState);
   }, []);
 
-  async function toggle() {
+  async function toggle(next) {
     setWorking(true);
     try {
-      if (state === "on") {
+      if (!next) {
         await unsubscribeFromPush();
         setState("off");
         toast.success("Push notifications disabled on this browser.");
@@ -187,24 +189,17 @@ function PushNotificationsCard() {
 
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Bell size={15} strokeWidth={2.25} className="text-ink-secondary" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <Bell size={15} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ink-secondary" />
           <div>
-            <p className="text-sm font-medium text-ink-primary">Push notifications</p>
+            <h2 className="text-sm font-semibold text-ink-primary">Push notifications</h2>
             <p className="mt-0.5 text-xs text-ink-tertiary">
               Get a browser notification on this device for task mentions and release publishes.
             </p>
           </div>
         </div>
-        <Button
-          variant={state === "on" ? "primary" : "secondary"}
-          size="sm"
-          loading={working || state === "checking" || !user}
-          onClick={toggle}
-        >
-          {state === "on" ? "On" : "Off"}
-        </Button>
+        <Switch checked={state === "on"} onChange={toggle} loading={working || state === "checking" || !user} />
       </div>
     </Card>
   );
@@ -231,7 +226,7 @@ function InstallAppCard() {
         <div className="flex items-center gap-2">
           <Download size={15} strokeWidth={2.25} className="text-ink-secondary" />
           <div>
-            <p className="text-sm font-medium text-ink-primary">Install app</p>
+            <h2 className="text-sm font-semibold text-ink-primary">Install app</h2>
             <p className="mt-0.5 text-xs text-ink-tertiary">
               {isStandalone
                 ? "You're using the installed app on this device."
@@ -478,17 +473,26 @@ export default function Settings() {
           </p>
         </div>
 
-        <TwoFactorCard />
+        <SettingsSection title="Security">
+          <TwoFactorCard />
+        </SettingsSection>
 
-        <PushNotificationsCard />
+        <SettingsSection title="Notifications">
+          <PushNotificationsCard />
+          <NotificationPreferencesCard />
+        </SettingsSection>
 
-        <InstallAppCard />
+        <SettingsSection title="App">
+          <InstallAppCard />
+        </SettingsSection>
 
-        <NotificationPreferencesCard />
+        <SettingsSection title="Collaboration">
+          <InvitePreferenceCard />
+        </SettingsSection>
 
-        <InvitePreferenceCard />
-
-        <AccountCard />
+        <SettingsSection title="Account">
+          <AccountCard />
+        </SettingsSection>
       </div>
     </AppShell>
   );

@@ -11,6 +11,7 @@ import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
 import ExpandableList from "../../../components/ui/ExpandableList";
+import StatTile from "../../../components/ui/StatTile";
 import { useToast } from "../../../components/ui/ToastProvider";
 import Avatar from "../../../components/ui/Avatar";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -766,20 +767,6 @@ export default function OrganizationDetail({
         }}
       />
     </AppShell>
-  );
-}
-
-function StatTile({ icon: Icon, label, value }) {
-  return (
-    <Card className="flex items-center gap-3 p-4">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-subtle text-ink-secondary">
-        <Icon size={17} strokeWidth={2} />
-      </span>
-      <div className="min-w-0">
-        <p className="text-lg font-semibold leading-tight text-ink-primary">{value}</p>
-        <p className="truncate text-xs text-ink-tertiary">{label}</p>
-      </div>
-    </Card>
   );
 }
 

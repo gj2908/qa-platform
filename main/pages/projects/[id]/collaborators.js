@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createServerSupabase } from "../../../lib/supabase/server";
 import { createClient } from "../../../lib/supabase/client";
 import ProjectShell from "../../../components/layout/ProjectShell";
@@ -12,22 +12,12 @@ import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
 import ExpandableList from "../../../components/ui/ExpandableList";
-import { ROLE_META, ASSIGNABLE_ROLES, canManageReleases } from "../../../components/ui/role";
+import SettingsSection from "../../../components/ui/SettingsSection";
+import { ROLE_META, ASSIGNABLE_ROLES } from "../../../components/ui/role";
 import Avatar from "../../../components/ui/Avatar";
-import { useToast } from "../../../components/ui/ToastProvider";
 import { activityMetaFor } from "../../../lib/activityMeta";
 import { relativeTime } from "../../../lib/format";
-import {
-  UserPlus,
-  Trash2,
-  ArrowLeftRight,
-  CircleAlert,
-  KeyRound,
-  Copy,
-  Check,
-  Smartphone,
-  Clock,
-} from "lucide-react";
+import { UserPlus, Trash2, ArrowLeftRight, CircleAlert, Clock } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -67,26 +57,12 @@ export async function getServerSideProps({ params, req, res }) {
     activity = activity.map((a) => ({ ...a, actor_name: profileByEmail[a.actor_email]?.full_name || null }));
   }
 
-  // Empty for non-owners — RLS's "owner manages tokens" policy already
-  // restricts this to zero rows for anyone else, no extra check needed.
-  const { data: tokens } = await supabase
-    .from("api_tokens")
-    .select("id, token_prefix, label, created_at, last_used_at, scope")
-    .eq("project_id", params.id)
-    .order("created_at", { ascending: false });
-
-  const { data: devices } = await supabase
-    .from("registered_devices")
-    .select("id, udid, device_name, submitted_by_email, created_at")
-    .eq("project_id", params.id)
-    .order("created_at", { ascending: false });
-
-  return { props: { project, role, collaborators, activity, tokens: tokens || [], devices: devices || [] } };
+  return { props: { project, role, collaborators, activity } };
 }
 
 const ROLE_ORDER = { owner: 0, editor: 1, commenter: 2, viewer: 3 };
 
-export default function Collaborators({ project, role: myRole, collaborators: initial, activity, tokens, devices }) {
+export default function Collaborators({ project, role: myRole, collaborators: initial, activity }) {
   const [collaborators, setCollaborators] = useState(
     [...initial].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
   );
@@ -232,7 +208,7 @@ export default function Collaborators({ project, role: myRole, collaborators: in
   }
 
   return (
-    <ProjectShell project={project} active="collaborators">
+    <ProjectShell project={project} active="collaborators" role={myRole}>
       <div className="mx-auto flex max-w-3xl flex-col gap-6">
         <div>
           <h1 className="text-xl font-semibold text-ink-primary">Collaborators</h1>
@@ -253,177 +229,175 @@ export default function Collaborators({ project, role: myRole, collaborators: in
           </p>
         )}
 
-        {isOwner && (
-          <Card className="p-5">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-ink-primary">Add a collaborator</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setBulkMode((b) => !b);
-                  setBulkResults(null);
-                  setError("");
-                }}
-                className="text-xs font-medium text-accent hover:text-accent-hover"
-              >
-                {bulkMode ? "Add one at a time" : "Add several at once"}
-              </button>
-            </div>
-            <form onSubmit={addCollaborator} className="mt-4 flex flex-col gap-3">
-              {bulkMode ? (
-                <FormField label="Emails" hint="One per line">
-                  <Textarea
-                    rows={4}
-                    placeholder={"teammate1@company.com\nteammate2@company.com"}
-                    value={bulkEmails}
-                    onChange={(e) => setBulkEmails(e.target.value)}
-                  />
-                </FormField>
-              ) : (
-                <FormField label="Email">
-                  <Input
-                    type="email"
-                    placeholder="teammate@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </FormField>
-              )}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="w-full sm:w-40">
-                  <FormField label="Role">
-                    <Select value={role} onChange={(e) => setRole(e.target.value)}>
-                      {ASSIGNABLE_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_META[r].label}
-                        </option>
-                      ))}
-                    </Select>
-                  </FormField>
-                </div>
-                <Button
-                  type="submit"
-                  loading={adding}
-                  disabled={bulkMode ? !bulkEmails.trim() : !email.trim()}
+        <SettingsSection title="People" description="Everyone with access to this project, and recent membership changes.">
+          {isOwner && (
+            <Card className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-ink-primary">Add a collaborator</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkMode((b) => !b);
+                    setBulkResults(null);
+                    setError("");
+                  }}
+                  className="text-xs font-medium text-accent hover:text-accent-hover"
                 >
-                  <UserPlus size={15} strokeWidth={2.25} />
-                  {bulkMode ? "Add all" : "Add"}
-                </Button>
+                  {bulkMode ? "Add one at a time" : "Add several at once"}
+                </button>
               </div>
-            </form>
-            {bulkResults && (
-              <div className="mt-3 rounded-md bg-subtle px-3.5 py-2.5 text-xs text-ink-secondary">
-                {bulkResults.filter((r) => r.ok).length} added
-                {bulkResults.some((r) => !r.ok) &&
-                  `, ${bulkResults.filter((r) => !r.ok).length} failed: ${bulkResults
-                    .filter((r) => !r.ok)
-                    .map((r) => `${r.email} (${r.error})`)
-                    .join(", ")}`}
-              </div>
-            )}
-            <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-ink-tertiary sm:grid-cols-3">
-              <div>
-                <dt className="font-medium text-ink-secondary">Viewer</dt>
-                <dd>Install and view only</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-ink-secondary">Commenter</dt>
-                <dd>Install, view, and use the board</dd>
-              </div>
-              <div>
-                <dt className="font-medium text-ink-secondary">Editor</dt>
-                <dd>Board, plus publish and delete releases</dd>
-              </div>
-            </dl>
-          </Card>
-        )}
-
-        <Card className="overflow-hidden">
-          <ExpandableList
-            items={collaborators}
-            visibleCount={5}
-            className="divide-y divide-border"
-            toggleClassName="block w-full border-t border-border px-4 py-2.5 text-left text-xs font-medium text-accent transition-colors hover:bg-hover hover:text-accent-hover"
-            renderItem={(c) => {
-              const meta = ROLE_META[c.role];
-              const Icon = meta.icon;
-              const displayName = c.full_name || c.email;
-              return (
-                <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="md" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-ink-primary">{displayName}</p>
-                      {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}
-                    </div>
+              <form onSubmit={addCollaborator} className="mt-4 flex flex-col gap-3">
+                {bulkMode ? (
+                  <FormField label="Emails" hint="One per line">
+                    <Textarea
+                      rows={4}
+                      placeholder={"teammate1@company.com\nteammate2@company.com"}
+                      value={bulkEmails}
+                      onChange={(e) => setBulkEmails(e.target.value)}
+                    />
+                  </FormField>
+                ) : (
+                  <FormField label="Email">
+                    <Input
+                      type="email"
+                      placeholder="teammate@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                    />
+                  </FormField>
+                )}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="w-full sm:w-40">
+                    <FormField label="Role">
+                      <Select value={role} onChange={(e) => setRole(e.target.value)}>
+                        {ASSIGNABLE_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_META[r].label}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge tone={meta.tone} icon={Icon}>
-                      {meta.label}
-                    </Badge>
-                    {isOwner && c.role !== "owner" && (
-                      <>
-                        <button
-                          onClick={() => setTransferTarget(c)}
-                          title="Transfer ownership"
-                          className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary"
-                        >
-                          <ArrowLeftRight size={14} strokeWidth={2.25} />
-                        </button>
-                        <button
-                          onClick={() => setRemoveTarget(c)}
-                          title="Remove collaborator"
-                          className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-                        >
-                          <Trash2 size={14} strokeWidth={2.25} />
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  <Button
+                    type="submit"
+                    loading={adding}
+                    disabled={bulkMode ? !bulkEmails.trim() : !email.trim()}
+                  >
+                    <UserPlus size={15} strokeWidth={2.25} />
+                    {bulkMode ? "Add all" : "Add"}
+                  </Button>
                 </div>
-              );
-            }}
-          />
-        </Card>
+              </form>
+              {bulkResults && (
+                <div className="mt-3 rounded-md bg-subtle px-3.5 py-2.5 text-xs text-ink-secondary">
+                  {bulkResults.filter((r) => r.ok).length} added
+                  {bulkResults.some((r) => !r.ok) &&
+                    `, ${bulkResults.filter((r) => !r.ok).length} failed: ${bulkResults
+                      .filter((r) => !r.ok)
+                      .map((r) => `${r.email} (${r.error})`)
+                      .join(", ")}`}
+                </div>
+              )}
+              <dl className="mt-4 grid grid-cols-1 gap-2 text-xs text-ink-tertiary sm:grid-cols-3">
+                <div>
+                  <dt className="font-medium text-ink-secondary">Viewer</dt>
+                  <dd>Install and view only</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-ink-secondary">Commenter</dt>
+                  <dd>Install, view, and use the board</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-ink-secondary">Editor</dt>
+                  <dd>Board, plus publish and delete releases</dd>
+                </div>
+              </dl>
+            </Card>
+          )}
 
-        <Card className="p-5">
-          <div className="flex items-center gap-2">
-            <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
-            <h2 className="text-sm font-semibold text-ink-primary">Team activity</h2>
-          </div>
-          {activity.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-tertiary">No collaborator changes yet.</p>
-          ) : (
+          <Card className="overflow-hidden">
             <ExpandableList
-              items={activity}
+              items={collaborators}
               visibleCount={5}
-              className="mt-4 flex flex-col gap-3.5"
-              renderItem={(a) => {
-                const meta = activityMetaFor(a.action);
+              className="divide-y divide-border"
+              toggleClassName="block w-full border-t border-border px-4 py-2.5 text-left text-xs font-medium text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+              renderItem={(c) => {
+                const meta = ROLE_META[c.role];
                 const Icon = meta.icon;
-                const displayName = a.actor_name || a.actor_email;
+                const displayName = c.full_name || c.email;
                 return (
-                  <div key={a.id} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
-                      <Icon size={12} strokeWidth={2.25} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-ink-primary">
-                        <span className="font-medium">{displayName}</span> {meta.label}
-                        {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
-                      </p>
-                      <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
+                  <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="md" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-ink-primary">{displayName}</p>
+                        {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge tone={meta.tone} icon={Icon}>
+                        {meta.label}
+                      </Badge>
+                      {isOwner && c.role !== "owner" && (
+                        <>
+                          <button
+                            onClick={() => setTransferTarget(c)}
+                            title="Transfer ownership"
+                            className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary"
+                          >
+                            <ArrowLeftRight size={14} strokeWidth={2.25} />
+                          </button>
+                          <button
+                            onClick={() => setRemoveTarget(c)}
+                            title="Remove collaborator"
+                            className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+                          >
+                            <Trash2 size={14} strokeWidth={2.25} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
               }}
             />
-          )}
-        </Card>
+          </Card>
 
-        {canManageReleases(myRole) && <DevicesCard project={project} devices={devices} canEdit={isOwner} />}
-
-        {isOwner && <TokensCard project={project} tokens={tokens} />}
+          <Card className="p-5">
+            <div className="flex items-center gap-2">
+              <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
+              <h2 className="text-sm font-semibold text-ink-primary">Team activity</h2>
+            </div>
+            {activity.length === 0 ? (
+              <p className="mt-3 text-sm text-ink-tertiary">No collaborator changes yet.</p>
+            ) : (
+              <ExpandableList
+                items={activity}
+                visibleCount={5}
+                className="mt-4 flex flex-col gap-3.5"
+                renderItem={(a) => {
+                  const meta = activityMetaFor(a.action);
+                  const Icon = meta.icon;
+                  const displayName = a.actor_name || a.actor_email;
+                  return (
+                    <div key={a.id} className="flex items-start gap-2.5">
+                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
+                        <Icon size={12} strokeWidth={2.25} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-ink-primary">
+                          <span className="font-medium">{displayName}</span> {meta.label}
+                          {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
+                        </p>
+                        <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+            )}
+          </Card>
+        </SettingsSection>
       </div>
 
       <ConfirmDialog
@@ -460,244 +434,5 @@ export default function Collaborators({ project, role: myRole, collaborators: in
         }}
       />
     </ProjectShell>
-  );
-}
-
-function DevicesCard({ project, devices: initial, canEdit }) {
-  const toast = useToast();
-  const [devices, setDevices] = useState(initial);
-  const [copiedId, setCopiedId] = useState(null);
-
-  function copyUdid(device) {
-    navigator.clipboard.writeText(device.udid);
-    setCopiedId(device.id);
-    toast.success("UDID copied.");
-    setTimeout(() => setCopiedId(null), 1500);
-  }
-
-  async function removeDevice(device) {
-    const res = await fetch("/api/devices/remove", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, deviceId: device.id }),
-    });
-    if (res.ok) {
-      setDevices((d) => d.filter((x) => x.id !== device.id));
-    } else {
-      toast.error("Couldn't remove that device.");
-    }
-  }
-
-  return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2">
-        <Smartphone size={15} strokeWidth={2.25} className="text-ink-secondary" />
-        <h2 className="text-sm font-semibold text-ink-primary">Registered devices</h2>
-      </div>
-      <p className="mt-1 text-sm text-ink-tertiary">
-        Testers submit their UDID at{" "}
-        <code className="rounded bg-subtle px-1 py-0.5 text-xs">/register-device/{project.id}</code> — copy
-        them in here when regenerating an Ad Hoc provisioning profile.
-      </p>
-
-      {devices.length === 0 ? (
-        <p className="mt-3 text-sm text-ink-tertiary">No devices submitted yet.</p>
-      ) : (
-        <div className="mt-4 divide-y divide-border border-t border-border">
-          {devices.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <p className="truncate font-mono text-sm text-ink-primary">{d.udid}</p>
-                <p className="truncate text-xs text-ink-tertiary">
-                  {d.device_name || "Unnamed device"}
-                  {d.submitted_by_email ? ` · ${d.submitted_by_email}` : ""}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button size="sm" variant="secondary" onClick={() => copyUdid(d)}>
-                  {copiedId === d.id ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
-                  Copy
-                </Button>
-                {canEdit && (
-                  <button
-                    onClick={() => removeDevice(d)}
-                    title="Remove device"
-                    className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-                  >
-                    <Trash2 size={14} strokeWidth={2.25} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function TokensCard({ project, tokens: initial }) {
-  const toast = useToast();
-  const [tokens, setTokens] = useState(initial);
-  const [label, setLabel] = useState("");
-  const [scope, setScope] = useState("publish");
-  const [creating, setCreating] = useState(false);
-  const [newToken, setNewToken] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [revokeTarget, setRevokeTarget] = useState(null);
-  const [revoking, setRevoking] = useState(false);
-  // Set only after mount to avoid a server/client hydration mismatch —
-  // window.location isn't available during SSR.
-  const [origin, setOrigin] = useState("");
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
-
-  async function createToken(e) {
-    e.preventDefault();
-    setCreating(true);
-    const res = await fetch("/api/projects/tokens/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, label: label.trim(), scope }),
-    });
-    setCreating(false);
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      setNewToken(data.token);
-      setTokens((t) => [
-        { id: data.id, token_prefix: data.token_prefix, label: data.label, created_at: data.created_at, last_used_at: null, scope: data.scope },
-        ...t,
-      ]);
-      setLabel("");
-      setScope("publish");
-    } else {
-      toast.error(data.error || "Couldn't create a token.");
-    }
-  }
-
-  function copyToken() {
-    navigator.clipboard.writeText(newToken);
-    setCopied(true);
-    toast.success("Token copied.");
-    setTimeout(() => setCopied(false), 1500);
-  }
-
-  async function confirmRevoke() {
-    if (!revokeTarget) return;
-    setRevoking(true);
-    const res = await fetch("/api/projects/tokens/revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ projectId: project.id, tokenId: revokeTarget.id }),
-    });
-    setRevoking(false);
-    if (res.ok) {
-      setTokens((t) => t.filter((tok) => tok.id !== revokeTarget.id));
-      setRevokeTarget(null);
-      toast.success("Token revoked.");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      toast.error(data.error || "Couldn't revoke that token.");
-      setRevokeTarget(null);
-    }
-  }
-
-  return (
-    <Card className="p-5">
-      <div className="flex items-center gap-2">
-        <KeyRound size={15} strokeWidth={2.25} className="text-ink-secondary" />
-        <h2 className="text-sm font-semibold text-ink-primary">API tokens</h2>
-      </div>
-      <p className="mt-1 text-sm text-ink-tertiary">
-        Publish releases from a CI pipeline without signing in — see the snippet below.
-      </p>
-
-      {newToken && (
-        <div className="mt-4 flex flex-col gap-2 rounded-md bg-warning-subtle px-3.5 py-3 text-sm text-warning-subtle-fg">
-          <p className="font-medium">Copy this token now — it won&apos;t be shown again.</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 truncate rounded bg-surface px-2.5 py-1.5 font-mono text-xs text-ink-primary">
-              {newToken}
-            </code>
-            <Button size="sm" variant="secondary" onClick={copyToken}>
-              {copied ? <Check size={13} strokeWidth={2.25} /> : <Copy size={13} strokeWidth={2.25} />}
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={createToken} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <FormField label="Label" hint="e.g. GitHub Actions, Fastlane">
-            <Input placeholder="ios-release-pipeline" value={label} onChange={(e) => setLabel(e.target.value)} />
-          </FormField>
-        </div>
-        <div className="sm:w-44">
-          <FormField label="Permission">
-            <Select value={scope} onChange={(e) => setScope(e.target.value)}>
-              <option value="publish">Read &amp; publish</option>
-              <option value="read">Read-only</option>
-            </Select>
-          </FormField>
-        </div>
-        <Button type="submit" loading={creating}>
-          <KeyRound size={14} strokeWidth={2.25} />
-          Generate token
-        </Button>
-      </form>
-
-      {tokens.length > 0 && (
-        <div className="mt-4 divide-y divide-border border-t border-border">
-          {tokens.map((t) => (
-            <div key={t.id} className="flex items-center justify-between gap-3 py-2.5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="truncate text-sm text-ink-primary">{t.label || "Untitled token"}</p>
-                  <Badge tone={t.scope === "read" ? "neutral" : "accent"}>{t.scope === "read" ? "read" : "publish"}</Badge>
-                </div>
-                <p className="font-mono text-xs text-ink-tertiary">
-                  {t.token_prefix}… · {t.last_used_at ? `last used ${new Date(t.last_used_at).toLocaleDateString()}` : "never used"}
-                </p>
-              </div>
-              <button
-                onClick={() => setRevokeTarget(t)}
-                title="Revoke token"
-                className="shrink-0 rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-              >
-                <Trash2 size={14} strokeWidth={2.25} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 rounded-md bg-subtle px-3.5 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-medium text-ink-secondary">Example: publish from CI</p>
-          <a href="/docs/api" target="_blank" rel="noreferrer" className="text-xs font-medium text-accent hover:text-accent-hover">
-            View API docs
-          </a>
-        </div>
-        <pre className="mt-1.5 overflow-x-auto text-xs text-ink-tertiary">
-{`curl -X POST ${origin}/api/ci/releases/create \\
-  -H "Authorization: Bearer qap_..." \\
-  -F platform=ios -F version=1.2.0 -F bundleId=com.company.app \\
-  -F file=@app.ipa`}
-        </pre>
-      </div>
-
-      <ConfirmDialog
-        open={!!revokeTarget}
-        title={`Revoke "${revokeTarget?.label || "this token"}"?`}
-        description="Any CI pipeline using this token will immediately be unable to publish releases. This can't be undone."
-        confirmLabel="Revoke"
-        loading={revoking}
-        onConfirm={confirmRevoke}
-        onCancel={() => setRevokeTarget(null)}
-      />
-    </Card>
   );
 }

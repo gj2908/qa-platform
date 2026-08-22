@@ -10,6 +10,8 @@ import Textarea from "../../../components/ui/Textarea";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import SettingsSection from "../../../components/ui/SettingsSection";
+import Switch from "../../../components/ui/Switch";
 import { useToast } from "../../../components/ui/ToastProvider";
 import {
   ArrowLeft,
@@ -75,14 +77,28 @@ export default function OrganizationSettings({ org, siteOrigin, announcement, to
           <h1 className="mt-2 text-xl font-semibold text-ink-primary">Organization settings</h1>
         </div>
 
-        <BrandingCard org={org} />
-        <DomainCard org={org} />
-        <InviteLinkCard org={org} siteOrigin={siteOrigin} />
-        <AnnouncementCard org={org} announcement={announcement} />
-        <OrgTokensCard org={org} tokens={tokens} />
-        <DefaultsCard org={org} />
-        <SecurityCard org={org} />
-        <DangerZoneCard org={org} />
+        <SettingsSection title="Branding & domain" columns={2}>
+          <BrandingCard org={org} />
+          <DomainCard org={org} />
+        </SettingsSection>
+
+        <SettingsSection title="Access" columns={2}>
+          <InviteLinkCard org={org} siteOrigin={siteOrigin} />
+          <SecurityCard org={org} />
+        </SettingsSection>
+
+        <SettingsSection title="Defaults & announcements" columns={2}>
+          <DefaultsCard org={org} />
+          <AnnouncementCard org={org} announcement={announcement} />
+        </SettingsSection>
+
+        <SettingsSection title="Developer">
+          <OrgTokensCard org={org} tokens={tokens} />
+        </SettingsSection>
+
+        <SettingsSection title="Danger zone">
+          <DangerZoneCard org={org} />
+        </SettingsSection>
       </div>
     </AppShell>
   );
@@ -716,8 +732,7 @@ function SecurityCard({ org }) {
   const [mfaRequired, setMfaRequired] = useState(org.mfa_required);
   const [saving, setSaving] = useState(false);
 
-  async function toggle() {
-    const next = !mfaRequired;
+  async function toggle(next) {
     setSaving(true);
     const res = await fetch("/api/organizations/set-mfa-policy", {
       method: "POST",
@@ -736,9 +751,9 @@ function SecurityCard({ org }) {
 
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck size={15} strokeWidth={2.25} className="text-ink-secondary" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2">
+          <ShieldCheck size={15} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ink-secondary" />
           <div>
             <p className="text-sm font-medium text-ink-primary">Require two-factor authentication</p>
             <p className="mt-0.5 text-xs text-ink-tertiary">
@@ -746,9 +761,7 @@ function SecurityCard({ org }) {
             </p>
           </div>
         </div>
-        <Button variant={mfaRequired ? "primary" : "secondary"} size="sm" loading={saving} onClick={toggle}>
-          {mfaRequired ? "On" : "Off"}
-        </Button>
+        <Switch checked={mfaRequired} onChange={toggle} loading={saving} />
       </div>
     </Card>
   );
