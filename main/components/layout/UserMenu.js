@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { LogOut, Settings, User, Building2, ListChecks, Download } from "lucide-react";
 import { createClient } from "../../lib/supabase/client";
@@ -7,25 +7,23 @@ import { usePwaInstall } from "../../lib/usePwaInstall";
 import ThemeToggle from "../ThemeToggle";
 import PwaInstallInstructions from "./PwaInstallInstructions";
 import Avatar from "../ui/Avatar";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "../shadcn/dropdown-menu";
 
 export default function UserMenu() {
-  const [open, setOpen] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
   const user = useCurrentUser();
   const avatarUrl = useAvatarUrl();
   const email = user?.email || "";
   const fullName = user?.user_metadata?.full_name?.trim() || "";
   const displayName = fullName || email;
-  const ref = useRef(null);
   const { canShowInstall, canPromptInstall, needsIOSInstructions, promptInstall } = usePwaInstall();
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   async function signOut() {
     const supabase = createClient();
@@ -34,7 +32,6 @@ export default function UserMenu() {
   }
 
   async function handleInstallClick() {
-    setOpen(false);
     if (canPromptInstall) {
       await promptInstall();
     } else if (needsIOSInstructions) {
@@ -43,86 +40,71 @@ export default function UserMenu() {
   }
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="rounded-full transition-opacity hover:opacity-80"
-        title={displayName}
-      >
-        <Avatar avatarUrl={avatarUrl} seed={email} displayName={displayName} size="md" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1.5 w-56 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
-          <div className="flex items-center gap-2.5 truncate border-b border-border px-2.5 py-2">
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="rounded-full transition-opacity hover:opacity-80" title={displayName}>
+            <Avatar avatarUrl={avatarUrl} seed={email} displayName={displayName} size="md" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="flex items-center gap-2.5 px-1 py-1 font-normal">
             <Avatar avatarUrl={avatarUrl} seed={email} displayName={displayName} size="md" />
             <div className="min-w-0">
               {fullName ? (
                 <>
                   <p className="truncate text-sm font-medium text-ink-primary">{fullName}</p>
-                  <p className="truncate text-xs text-ink-tertiary">{email}</p>
+                  <p className="truncate text-xs font-normal text-ink-tertiary">{email}</p>
                 </>
               ) : (
-                <p className="truncate text-xs text-ink-tertiary">{email || "Loading…"}</p>
+                <p className="truncate text-xs font-normal text-ink-tertiary">{email || "Loading…"}</p>
               )}
             </div>
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-2 px-2.5 py-1.5">
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="flex items-center justify-between gap-2 px-2.5 py-1.5">
             <span className="text-sm text-ink-secondary">Theme</span>
             <ThemeToggle />
           </div>
-          <Link
-            href="/my-tasks"
-            onClick={() => setOpen(false)}
-            className="mt-1 flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary sm:hidden"
-          >
-            <ListChecks size={14} strokeWidth={2} />
-            My tasks
-          </Link>
-          <Link
-            href="/profile"
-            onClick={() => setOpen(false)}
-            className="mt-1 flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
-          >
-            <User size={14} strokeWidth={2} />
-            Profile
-          </Link>
-          <Link
-            href="/settings"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
-          >
-            <Settings size={14} strokeWidth={2} />
-            Settings
-          </Link>
-          <Link
-            href="/organizations"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded px-2.5 py-1.5 text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
-          >
-            <Building2 size={14} strokeWidth={2} />
-            Organizations
-          </Link>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild className="sm:hidden">
+            <Link href="/my-tasks">
+              <ListChecks size={14} strokeWidth={2} />
+              My tasks
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/profile">
+              <User size={14} strokeWidth={2} />
+              Profile
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <Settings size={14} strokeWidth={2} />
+              Settings
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/organizations">
+              <Building2 size={14} strokeWidth={2} />
+              Organizations
+            </Link>
+          </DropdownMenuItem>
           {canShowInstall && (
-            <button
-              onClick={handleInstallClick}
-              className="mt-1 flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-ink-secondary hover:bg-hover hover:text-ink-primary"
-            >
+            <DropdownMenuItem onSelect={handleInstallClick}>
               <Download size={14} strokeWidth={2} />
               Install app
-            </button>
+            </DropdownMenuItem>
           )}
-          <button
-            onClick={signOut}
-            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
-          >
+          <DropdownMenuSeparator />
+          <DropdownMenuItem destructive onSelect={signOut}>
             <LogOut size={14} strokeWidth={2} />
             Sign out
-          </button>
-        </div>
-      )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <PwaInstallInstructions open={showIOSInstructions} onClose={() => setShowIOSInstructions(false)} />
-    </div>
+    </>
   );
 }

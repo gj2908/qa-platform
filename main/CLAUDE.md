@@ -5,7 +5,11 @@ distribution. Next.js 14 Pages Router, plain JavaScript, Tailwind with
 CSS-custom-property design tokens (see `styles/globals.css` /
 `tailwind.config.js` — not stock Tailwind colors, this app has its own
 `accent`/`success`/`warning`/`danger`/`ink-*`/`surface`/`border` token
-set with light+dark values).
+set with light+dark values). `accent` is an indigo-violet brand color
+(`#4f46e5` light / `#8b85f5` dark) — three font roles exist:
+`font-sans` (Inter, everywhere), `font-display` (Space Grotesk, landing-
+page headlines only), and `font-mono` (JetBrains Mono, version/build
+numbers and stat numerals — see `components/ui/VersionTag.js`).
 
 See the repo-root `CLAUDE.md` for the two-app/shared-database shape, and
 `README.md` for setup.
@@ -62,6 +66,39 @@ plain `transition-colors` for hover states, which is correct for those.
   that fires off that same insert.
 
 ## Patterns that repeat everywhere
+
+- **Radix primitives live in `components/shadcn/*.jsx`, hand-ported —
+  the `shadcn` CLI does not work in this repo.** `npx shadcn@latest
+  init`'s framework detection looks for a Next.js **App Router**
+  directory literally named `app/` (Next 13+'s `app/layout.js` +
+  `app/page.js` convention) — unrelated to this repo's own `main/`
+  vs `admin/` split. This project has neither an `app/` router dir nor
+  a root-level `app/` anything; `main/` is 100% Pages Router
+  (`main/pages/*.js`), so the CLI exits with "could not detect a
+  supported framework" every time. So `dialog.jsx`, `dropdown-menu.jsx`,
+  `sheet.jsx`, `tooltip.jsx`, `popover.jsx`, `separator.jsx`, and
+  `table.jsx` were hand-copied from the public registry
+  (`https://ui.shadcn.com/r/styles/new-york/<name>.json`), stripped of
+  TypeScript, and rewired to use this app's **real** token classes
+  (`bg-surface`, `text-ink-primary`, `border-border`, etc.) directly —
+  not shadcn's own `bg-background`/`bg-primary`/`bg-muted` alias
+  convention. This matters because shadcn's generic "accent" role means
+  a neutral hover/highlight surface, while this app's `accent` Tailwind
+  key already means the brand indigo — reusing shadcn's alias names
+  would silently collide the two meanings. If you add another primitive
+  from the registry, follow the same recipe (fetch the JSON, convert to
+  `.jsx`, swap every generic shadcn class for the equivalent real token
+  class) rather than trying to get the CLI to run. `components/ui/*.js`
+  (the original hand-rolled primitives — `Button`, `Card`, `Badge`,
+  `EmptyState`, etc.) are untouched and still the first choice for
+  anything that doesn't need Radix's focus-trap/portal/keyboard-nav
+  behavior; reach for `components/shadcn/*` only for dialogs, dropdown
+  menus, the mobile nav sheet, and tooltips, where that behavior is the
+  actual point. `lib/utils.js`'s `cn()` (clsx + tailwind-merge) exists
+  only to support these files — everything else in the app composes
+  Tailwind classes with plain template strings. `jsconfig.json`'s `@/*`
+  alias exists only so these ported files' `@/lib/utils` import matches
+  the registry source verbatim.
 
 - **Building a domain-correct absolute URL server-side: use
   `lib/getRequestOrigin.js`'s `getRequestOrigin(req)`** (proto +

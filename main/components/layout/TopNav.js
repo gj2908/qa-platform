@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { House, ListChecks, Menu } from "lucide-react";
+import Link from "next/link";
 import UserMenu from "./UserMenu";
 import NotificationBell from "./NotificationBell";
 import Logo from "./Logo";
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "../shadcn/sheet";
+import { Tooltip, TooltipTrigger, TooltipContent } from "../shadcn/tooltip";
 
 // The single shared header for the whole app now that there's no sidebar
 // anywhere: a Home button back to the dashboard on the left, a centered
@@ -14,31 +15,24 @@ import Logo from "./Logo";
 // `flex-1` children), which forces the center into a fixed third
 // regardless of how much room the tabs actually need, clipping them on
 // narrower laptop widths. Below `sm:`, the center nav disappears and its
-// tabs move into the hamburger menu instead (see below) — theme lives
-// only in the profile dropdown now (UserMenu.js), not in this bar at all.
+// tabs move into a slide-in Sheet instead — theme lives only in the
+// profile dropdown now (UserMenu.js), not in this bar at all.
 export default function TopNav({ crumb, center, orgBranding }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
   return (
-    <header className="sticky top-0 z-20 grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-20 grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur sm:px-6">
       <div className="col-start-1 flex items-center gap-2 min-w-0">
-        <Link
-          href="/dashboard"
-          title="Home"
-          aria-label="Home"
-          className="flex shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
-        >
-          <House size={17} strokeWidth={2} />
-        </Link>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              href="/dashboard"
+              aria-label="Home"
+              className="flex shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
+            >
+              <House size={17} strokeWidth={2} />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>Home</TooltipContent>
+        </Tooltip>
         {orgBranding && (
           <>
             <span className="text-ink-disabled">/</span>
@@ -65,37 +59,42 @@ export default function TopNav({ crumb, center, orgBranding }) {
       </div>
 
       {center && (
-        <nav className="col-start-2 hidden min-w-0 items-center justify-center gap-1 overflow-x-auto sm:flex">
+        <nav className="col-start-2 hidden min-w-0 items-stretch justify-center gap-1 overflow-x-auto sm:flex">
           {center}
         </nav>
       )}
 
       <div className="col-start-3 flex min-w-0 items-center justify-end gap-3">
-        <Link
-          href="/my-tasks"
-          title="My tasks"
-          aria-label="My tasks"
-          className="hidden shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary sm:flex"
-        >
-          <ListChecks size={17} strokeWidth={2} />
-        </Link>
-        {center && (
-          <div ref={menuRef} className="relative shrink-0 sm:hidden">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((o) => !o)}
-              title="Menu"
-              aria-label="Menu"
-              className="flex items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary"
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link
+              href="/my-tasks"
+              aria-label="My tasks"
+              className="hidden shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary sm:flex"
             >
-              <Menu size={17} strokeWidth={2} />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1.5 flex w-44 flex-col gap-0.5 rounded-md border border-border bg-surface-raised p-1.5 shadow-lg">
-                {center}
-              </div>
-            )}
-          </div>
+              <ListChecks size={17} strokeWidth={2} />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>My tasks</TooltipContent>
+        </Tooltip>
+        {center && (
+          <Sheet>
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                aria-label="Menu"
+                className="flex shrink-0 items-center gap-1.5 rounded-md p-1.5 text-ink-secondary transition-colors hover:bg-hover hover:text-ink-primary sm:hidden"
+              >
+                <Menu size={17} strokeWidth={2} />
+              </button>
+            </SheetTrigger>
+            <SheetContent side="right" className="flex flex-col gap-1 overflow-y-auto">
+              <SheetHeader>
+                <SheetTitle>Navigate</SheetTitle>
+              </SheetHeader>
+              <div className="mt-2 flex flex-col gap-0.5">{center}</div>
+            </SheetContent>
+          </Sheet>
         )}
         <NotificationBell />
         <div className="h-5 w-px bg-border" />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createServerSupabase } from "../lib/supabase/server";
 import AppShell from "../components/layout/AppShell";
@@ -28,6 +28,9 @@ import { relativeTime } from "../lib/format";
 import { ROLE_META, canManageReleases } from "../components/ui/role";
 import { createClient } from "../lib/supabase/client";
 import { getRecentlyViewed } from "../lib/recentlyViewed";
+import StatTile from "../components/ui/StatTile";
+import VersionTag from "../components/ui/VersionTag";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../components/shadcn/dropdown-menu";
 
 export async function getServerSideProps({ req, res }) {
   const supabase = createServerSupabase(req, res);
@@ -35,9 +38,9 @@ export async function getServerSideProps({ req, res }) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // None of these six queries depend on each other's results (only on
+  // None of these seven queries depend on each other's results (only on
   // `user`, already resolved above), so they run concurrently instead of
-  // as seven sequential round trips.
+  // as sequential round trips.
   const [
     { data: projectsRaw },
     { data: myRoles },
@@ -45,6 +48,7 @@ export async function getServerSideProps({ req, res }) {
     { count: openTasksCount },
     { data: lastRelease },
     { data: myUploadsRaw },
+    { data: recentReleases },
   ] = await Promise.all([
     supabase.from("projects").select("*").order("created_at", { ascending: false }),
     user?.email
@@ -72,13 +76,31 @@ export async function getServerSideProps({ req, res }) {
           .eq("status", "published")
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] }),
+    // Latest published release per project, for the VersionTag shown on
+    // each project card — reduced client-side below (first-seen per
+    // project_id wins, since this is ordered newest first).
+    supabase
+      .from("releases")
+      .select("project_id, version")
+      .not("project_id", "is", null)
+      .eq("status", "published")
+      .order("created_at", { ascending: false }),
   ]);
 
   const roleByProject = Object.fromEntries((myRoles || []).map((r) => [r.project_id, r.role]));
   const favoriteIds = new Set((favoritesRaw || []).map((f) => f.project_id));
+  const latestVersionByProject = {};
+  for (const r of recentReleases || []) {
+    if (!(r.project_id in latestVersionByProject)) latestVersionByProject[r.project_id] = r.version;
+  }
 
   const projects = (projectsRaw || [])
-    .map((p) => ({ ...p, role: roleByProject[p.id] || null, isFavorite: favoriteIds.has(p.id) }))
+    .map((p) => ({
+      ...p,
+      role: roleByProject[p.id] || null,
+      isFavorite: favoriteIds.has(p.id),
+      lastReleaseVersion: latestVersionByProject[p.id] || null,
+    }))
     .sort((a, b) => {
       if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1;
       return new Date(b.created_at) - new Date(a.created_at);
@@ -243,9 +265,8 @@ export default function Dashboard({ projects, myUploads, stats }) {
                   <div className="flex min-w-0 items-center gap-2.5">
                     <AppIcon src={r.app_icon} fallbackLabel={r.app_name} size={28} />
                     <PlatformBadge platform={r.platform} />
-                    <span className="truncate text-sm font-medium text-ink-primary">
-                      {r.app_name || `v${r.version}`}
-                    </span>
+                    <span className="truncate text-sm font-medium text-ink-primary">{r.app_name || "Untitled build"}</span>
+                    <VersionTag version={r.version} />
                     <span className="shrink-0 text-xs text-ink-tertiary">{relativeTime(r.created_at)}</span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
@@ -300,21 +321,11 @@ export default function Dashboard({ projects, myUploads, stats }) {
 }
 
 function ProjectCard({ project: p, onDelete }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [favorite, setFavorite] = useState(p.isFavorite);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
-  const menuRef = useRef(null);
   const isOwner = p.role === "owner";
   const roleMeta = ROLE_META[p.role];
   const RoleIcon = roleMeta?.icon;
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
 
   async function toggleFavorite(e) {
     e.preventDefault();
@@ -344,7 +355,10 @@ function ProjectCard({ project: p, onDelete }) {
             <FolderKanban size={17} strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="truncate text-sm font-semibold text-ink-primary">{p.name}</h3>
+              <VersionTag version={p.lastReleaseVersion} />
+            </div>
             <div className="mt-0.5 flex items-center gap-1.5">
               <p className="text-xs text-ink-tertiary">Created {new Date(p.created_at).toLocaleDateString()}</p>
               {roleMeta && (
@@ -367,28 +381,19 @@ function ProjectCard({ project: p, onDelete }) {
           <Star size={16} strokeWidth={2} fill={favorite ? "currentColor" : "none"} />
         </button>
         {isOwner && (
-          <div ref={menuRef} className="relative shrink-0">
-            <button
-              onClick={() => setMenuOpen((o) => !o)}
-              className="rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary"
-            >
-              <Ellipsis size={16} strokeWidth={2} />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-md border border-border bg-surface-raised p-1 shadow-lg">
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDelete();
-                  }}
-                  className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-danger hover:bg-danger-subtle"
-                >
-                  <Trash2 size={13} strokeWidth={2.25} />
-                  Delete project
-                </button>
-              </div>
-            )}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="shrink-0 rounded-md p-1 text-ink-tertiary hover:bg-hover hover:text-ink-primary">
+                <Ellipsis size={16} strokeWidth={2} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem destructive onSelect={onDelete}>
+                <Trash2 size={13} strokeWidth={2.25} />
+                Delete project
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <div className="flex items-center gap-1 border-t border-border pt-3">
@@ -397,20 +402,6 @@ function ProjectCard({ project: p, onDelete }) {
         {canManageReleases(p.role) && (
           <ProjectLink href={`/projects/${p.id}/changelog?new=1`} icon={Rocket} label="Release" />
         )}
-      </div>
-    </Card>
-  );
-}
-
-function StatTile({ icon: Icon, label, value }) {
-  return (
-    <Card className="flex items-center gap-3 p-4">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-subtle text-ink-secondary">
-        <Icon size={17} strokeWidth={2} />
-      </span>
-      <div className="min-w-0">
-        <p className="text-lg font-semibold leading-tight text-ink-primary">{value}</p>
-        <p className="truncate text-xs text-ink-tertiary">{label}</p>
       </div>
     </Card>
   );

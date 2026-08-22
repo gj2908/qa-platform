@@ -23,7 +23,7 @@
   --neutral-950: #09090b;
 
   /* surfaces */
-  --bg-canvas: var(--neutral-50);
+  --bg-canvas: #fafaf8;
   --bg-surface: var(--neutral-0);
   --bg-surface-raised: var(--neutral-0);
   --bg-subtle: var(--neutral-100);
@@ -39,13 +39,13 @@
   --text-tertiary: var(--neutral-500);
   --text-disabled: var(--neutral-400);
 
-  /* accent (blue — primary actions, active nav, links) */
-  --accent: #3358d4;
-  --accent-hover: #2b49b3;
-  --accent-active: #233c93;
+  /* accent (indigo-violet — primary actions, active nav, links) */
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-active: #3730a3;
   --accent-fg: #ffffff;
-  --accent-subtle: #eaefff;
-  --accent-subtle-fg: #2b49b3;
+  --accent-subtle: #eeecfd;
+  --accent-subtle-fg: #4338ca;
 
   /* status colors */
   --success: #17824e;
@@ -98,8 +98,13 @@
 
   /* elevation */
   --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.05);
-  --shadow-md: 0 4px 12px rgba(24, 24, 27, 0.08), 0 1px 2px rgba(24, 24, 27, 0.06);
-  --shadow-lg: 0 12px 32px rgba(24, 24, 27, 0.12), 0 2px 6px rgba(24, 24, 27, 0.06);
+  --shadow-md: 0 2px 6px rgba(30, 27, 60, 0.06), 0 8px 20px rgba(30, 27, 60, 0.08);
+  --shadow-lg: 0 4px 10px rgba(30, 27, 60, 0.06), 0 20px 48px rgba(30, 27, 60, 0.14);
+
+  /* shadcn/Radix alias layer — same values as above, exposed under the
+     names shadcn-generated primitives expect, so there is one token
+     system, not two. See main/CLAUDE.md and the redesign plan. */
+  --radius: 10px;
 }
 
 /* Device mode: follow OS preference when no explicit choice is stored. */
@@ -139,12 +144,12 @@
   --text-tertiary: var(--neutral-600);
   --text-disabled: var(--neutral-400);
 
-  --accent: #7191ff;
-  --accent-hover: #90a8ff;
-  --accent-active: #5b7eff;
-  --accent-fg: #0a1230;
-  --accent-subtle: rgba(113, 145, 255, 0.14);
-  --accent-subtle-fg: #b0c1ff;
+  --accent: #8b85f5;
+  --accent-hover: #a79efa;
+  --accent-active: #756ef0;
+  --accent-fg: #14103a;
+  --accent-subtle: rgba(139, 133, 245, 0.16);
+  --accent-subtle-fg: #c2bdfa;
 
   --success: #3ecf8e;
   --success-bg: rgba(62, 207, 142, 0.12);
@@ -193,8 +198,10 @@
   --platform-web-fg: #a9c1ff;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
+
+  --radius: 10px;
 }
 
 * {
