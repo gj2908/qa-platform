@@ -3,7 +3,7 @@
 // environment yet — every caller must keep working (no digest sent,
 // no error surfaced to the user) until it is.
 const FETCH_TIMEOUT_MS = 15_000;
-const DEFAULT_FROM = "Vrsnify <notifications@resend.dev>";
+const DEFAULT_FROM = "Vrsnify <notifications@itsgj.email>";
 
 export async function sendEmail({ to, subject, html }) {
   const apiKey = process.env.RESEND_API_KEY;
