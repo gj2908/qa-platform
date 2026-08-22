@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { Bell, X } from "lucide-react";
 import AppShell from "../components/layout/AppShell";
@@ -7,72 +7,20 @@ import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import { activityMetaFor } from "../lib/activityMeta";
 import { relativeTime } from "../lib/format";
+import { useNotifications } from "../lib/hooks/useNotifications";
 
 // Full paginated notification center — the bell dropdown's "View all
-// notifications" link lands here. Reuses the same GET/POST/DELETE
-// endpoints as NotificationBell.js: GET's `before` param (added
-// alongside this page) keyset-paginates on created_at, at a bigger
-// page size than the bell's own capped default call.
+// notifications" link lands here. Shares its data layer with
+// NotificationBell.js via useNotifications(); this page additionally
+// marks everything read once loaded (the bell only does so on open).
 export default function Notifications() {
-  const [items, setItems] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [error, setError] = useState("");
+  const { items, unreadCount, loaded, loadingMore, hasMore, error, loadMore, dismiss, clearAll, markRead } =
+    useNotifications();
 
   useEffect(() => {
-    fetch("/api/notifications")
-      .then((r) => (r.ok ? r.json() : { items: [], unreadCount: 0, hasMore: false }))
-      .then((data) => {
-        setItems(data.items || []);
-        setHasMore(!!data.hasMore);
-        setLoaded(true);
-        if (data.unreadCount > 0) {
-          fetch("/api/notifications", { method: "POST" }).catch(() => {});
-        }
-      })
-      .catch(() => {
-        setError("Couldn't load notifications.");
-        setLoaded(true);
-      });
-  }, []);
-
-  async function loadMore() {
-    if (loadingMore || items.length === 0) return;
-    setLoadingMore(true);
-    const before = items[items.length - 1].createdAt;
-    try {
-      const res = await fetch(`/api/notifications?before=${encodeURIComponent(before)}`);
-      const data = res.ok ? await res.json() : { items: [], hasMore: false };
-      setItems((prev) => [...prev, ...(data.items || [])]);
-      setHasMore(!!data.hasMore);
-    } catch {
-      setError("Couldn't load more notifications.");
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  function dismiss(activityId) {
-    setItems((prev) => prev.filter((a) => a.id !== activityId));
-    fetch("/api/notifications", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId }),
-    }).catch(() => {});
-  }
-
-  function clearAll() {
-    const ids = items.map((a) => a.id);
-    setItems([]);
-    setHasMore(false);
-    if (ids.length === 0) return;
-    fetch("/api/notifications", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityIds: ids }),
-    }).catch(() => {});
-  }
+    if (loaded && unreadCount > 0) markRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   return (
     <AppShell>
@@ -116,6 +64,12 @@ export default function Notifications() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink-primary">
+                        {a.isUnread && (
+                          <span
+                            aria-hidden="true"
+                            className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle"
+                          />
+                        )}
                         <span className="font-medium">{displayName}</span> {meta.label}
                       </p>
                       <p className="truncate text-xs text-ink-tertiary">

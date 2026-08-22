@@ -248,11 +248,29 @@ export default function Board({
     exitSelectMode();
   }
 
-  async function bulkSetAssignee(email) {
+  async function notifyTeamAssign(task) {
+    if (!task) return;
+    fetch("/api/tasks/notify-team-assign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, taskId: task.id }),
+    }).catch(() => {});
+  }
+
+  async function bulkSetAssignee(value) {
     const supabase = createClient();
     const ids = [...selectedIds];
-    setTasks(tasks.map((t) => (ids.includes(t.id) ? { ...t, assignee_email: email || null } : t)));
-    await supabase.from("tasks").update({ assignee_email: email || null }).in("id", ids);
+    const isTeam = value === "__team__";
+    const patch = isTeam
+      ? { assignee_email: null, assigned_to_team: true }
+      : { assignee_email: value || null, assigned_to_team: false };
+    const assignedTasks = tasks.filter((t) => ids.includes(t.id));
+    setTasks(tasks.map((t) => (ids.includes(t.id) ? { ...t, ...patch } : t)));
+    await supabase.from("tasks").update(patch).in("id", ids);
+    if (isTeam) {
+      assignedTasks.forEach((t) => notifyTeamAssign(t));
+      logTaskActivity("task_assigned_team", `${ids.length} task${ids.length === 1 ? "" : "s"}`);
+    }
     exitSelectMode();
   }
 
@@ -381,7 +399,10 @@ export default function Board({
     const supabase = createClient();
     setTasks(tasks.map((t) => (t.id === task.id ? { ...t, ...fields } : t)));
     await supabase.from("tasks").update(fields).eq("id", task.id);
-    if (fields.assignee_email && fields.assignee_email !== task.assignee_email) {
+    if (fields.assigned_to_team && !task.assigned_to_team) {
+      logTaskActivity("task_assigned_team", task.title);
+      notifyTeamAssign(task);
+    } else if (fields.assignee_email && fields.assignee_email !== task.assignee_email) {
       logTaskActivity("task_assigned", `${task.title} → ${fields.assignee_email}`);
     }
   }
@@ -561,6 +582,7 @@ export default function Board({
             >
               <option value="">Set assignee…</option>
               <option value="__none__">Unassigned</option>
+              <option value="__team__">Whole team</option>
               {collaborators.map((c) => (
                 <option key={c.email} value={c.email}>
                   {c.full_name || c.email}

@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
   const { data: tasks } = await service
     .from("tasks")
-    .select("id, project_id, title, assignee_email, due_date")
+    .select("id, project_id, title, assignee_email, assigned_to_team, due_date")
     .lt("due_date", today)
     .neq("status", "done")
     .is("due_reminder_sent_at", null);
@@ -45,7 +45,9 @@ export default async function handler(req, res) {
       project_id: task.project_id,
       actor_email: task.assignee_email || "system",
       action: "task_overdue",
-      detail: `${task.title}${task.assignee_email ? ` (${task.assignee_email})` : ""}`,
+      detail: `${task.title}${
+        task.assigned_to_team ? " (whole team)" : task.assignee_email ? ` (${task.assignee_email})` : ""
+      }`,
     });
 
     if (project?.webhook_url || project?.org_id) {
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
           appName: project.name,
           taskTitle: task.title,
           assigneeEmail: task.assignee_email,
+          assignedToTeam: task.assigned_to_team,
           boardUrl,
         }),
         "task_overdue"

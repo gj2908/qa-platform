@@ -32,9 +32,10 @@ export function buildApprovalReminderPayload({ appName, version, platform, hours
   };
 }
 
-export function buildTaskOverduePayload({ appName, taskTitle, assigneeEmail, boardUrl }) {
+export function buildTaskOverduePayload({ appName, taskTitle, assigneeEmail, assignedToTeam, boardUrl }) {
+  const who = assignedToTeam ? " (assigned to the whole team)" : assigneeEmail ? ` (assigned to ${assigneeEmail})` : "";
   return {
-    text: `📅 *${appName || "A project"}* — "${taskTitle}" is overdue${assigneeEmail ? ` (assigned to ${assigneeEmail})` : ""}.\nBoard: ${boardUrl}`,
+    text: `📅 *${appName || "A project"}* — "${taskTitle}" is overdue${who}.\nBoard: ${boardUrl}`,
   };
 }
 

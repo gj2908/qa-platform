@@ -8,7 +8,7 @@ export async function getServerSideProps() {
 
   const { data: tasks } = await service
     .from("tasks")
-    .select("id, project_id, title, assignee_email, due_date, status")
+    .select("id, project_id, title, assignee_email, assigned_to_team, due_date, status")
     .lt("due_date", today)
     .neq("status", "done")
     .order("due_date", { ascending: true });
@@ -53,7 +53,9 @@ export default function AdminTasks({ tasks }) {
               <TableRow key={t.id}>
                 <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">{t.projectName}</td>
                 <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{t.title}</td>
-                <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">{t.assignee_email || "Unassigned"}</td>
+                <td className="px-4 py-2.5 text-slate-600 dark:text-slate-400">
+                  {t.assigned_to_team ? "Whole team" : t.assignee_email || "Unassigned"}
+                </td>
                 <td className="px-4 py-2.5 capitalize text-slate-500 dark:text-slate-400">
                   {t.status.replace("_", " ")}
                 </td>

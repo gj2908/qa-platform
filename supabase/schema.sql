@@ -45,6 +45,7 @@ create table tasks (
     check (status in ('backlog', 'todo', 'in_progress', 'review', 'done')),
   position int default 0,
   assignee_email text,
+  assigned_to_team boolean not null default false, -- mutually exclusive with assignee_email, enforced in app code
   due_date date,
   source text not null default 'manual' check (source in ('manual', 'tester_feedback')),
   ai_category text check (ai_category is null or ai_category in ('bug', 'feature', 'question')),

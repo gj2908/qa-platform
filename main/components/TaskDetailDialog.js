@@ -34,6 +34,7 @@ export default function TaskDetailDialog({
 }) {
   const [description, setDescription] = useState(task?.description || "");
   const [assigneeEmail, setAssigneeEmail] = useState(task?.assignee_email || "");
+  const [assignedToTeam, setAssignedToTeam] = useState(!!task?.assigned_to_team);
   const [dueDate, setDueDate] = useState(task?.due_date || "");
   const [priority, setPriority] = useState(task?.priority || "");
   const [labels, setLabels] = useState((task?.labels || []).join(", "));
@@ -266,7 +267,8 @@ export default function TaskDetailDialog({
     setSaving(true);
     await onSave(task, {
       description: description.trim() || null,
-      assignee_email: assigneeEmail || null,
+      assignee_email: assignedToTeam ? null : assigneeEmail || null,
+      assigned_to_team: assignedToTeam,
       due_date: dueDate || null,
       priority: priority || null,
       labels: labels
@@ -325,11 +327,21 @@ export default function TaskDetailDialog({
             <FormField label="Assignee" htmlFor="taskAssignee">
               <Select
                 id="taskAssignee"
-                value={assigneeEmail}
-                onChange={(e) => setAssigneeEmail(e.target.value)}
+                value={assignedToTeam ? "__team__" : assigneeEmail}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "__team__") {
+                    setAssignedToTeam(true);
+                    setAssigneeEmail("");
+                  } else {
+                    setAssignedToTeam(false);
+                    setAssigneeEmail(v);
+                  }
+                }}
                 disabled={!editable}
               >
                 <option value="">Unassigned</option>
+                <option value="__team__">Whole team</option>
                 {collaborators.map((c) => (
                   <option key={c.email} value={c.email}>
                     {c.full_name || c.email}

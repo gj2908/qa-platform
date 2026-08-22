@@ -37,7 +37,10 @@ export default async function handler(req, res) {
     supabase.from("profiles").select("email, full_name, created_at").eq("id", user.id).maybeSingle(),
     supabase.from("project_collaborators").select("project_id, role, created_at").eq("email", user.email),
     supabase.from("org_members").select("org_id, role, created_at").eq("email", user.email),
-    supabase.from("tasks").select("id, project_id, title, status, due_date").eq("assignee_email", user.email),
+    supabase
+      .from("tasks")
+      .select("id, project_id, title, status, due_date, assigned_to_team")
+      .or(`assignee_email.eq.${user.email},assigned_to_team.eq.true`),
     supabase.from("tasks").select("id, project_id, title, status, created_at").eq("created_by", user.id),
     supabase.from("task_comments").select("task_id, project_id, body, created_at").eq("author_email", user.email),
     supabase.from("task_time_entries").select("task_id, project_id, minutes, note, logged_on").eq("user_email", user.email),

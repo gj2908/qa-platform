@@ -3,24 +3,12 @@ import Link from "next/link";
 import { Bell, X } from "lucide-react";
 import { activityMetaFor } from "../../lib/activityMeta";
 import { relativeTime } from "../../lib/format";
+import { useNotifications } from "../../lib/hooks/useNotifications";
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loaded, setLoaded] = useState(false);
   const ref = useRef(null);
-
-  useEffect(() => {
-    fetch("/api/notifications")
-      .then((r) => (r.ok ? r.json() : { items: [], unreadCount: 0 }))
-      .then((data) => {
-        setItems(data.items || []);
-        setUnreadCount(data.unreadCount || 0);
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
-  }, []);
+  const { items, unreadCount, loaded, dismiss, clearAll, markRead } = useNotifications();
 
   useEffect(() => {
     function onClickOutside(e) {
@@ -30,33 +18,10 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  async function toggleOpen() {
+  function toggleOpen() {
     const next = !open;
     setOpen(next);
-    if (next && unreadCount > 0) {
-      setUnreadCount(0);
-      fetch("/api/notifications", { method: "POST" }).catch(() => {});
-    }
-  }
-
-  function dismiss(activityId) {
-    setItems((prev) => prev.filter((a) => a.id !== activityId));
-    fetch("/api/notifications", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityId }),
-    }).catch(() => {});
-  }
-
-  function clearAll() {
-    const ids = items.map((a) => a.id);
-    setItems([]);
-    if (ids.length === 0) return;
-    fetch("/api/notifications", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ activityIds: ids }),
-    }).catch(() => {});
+    if (next && unreadCount > 0) markRead();
   }
 
   return (
@@ -91,9 +56,14 @@ export default function NotificationBell() {
             )}
           </div>
           {!loaded ? (
-            <p className="px-2 py-4 text-center text-sm text-ink-tertiary">Loading…</p>
+            <p className="px-2 py-8 text-center text-sm text-ink-tertiary">Loading…</p>
           ) : items.length === 0 ? (
-            <p className="px-2 py-4 text-center text-sm text-ink-tertiary">Nothing yet.</p>
+            <div className="flex flex-col items-center gap-2 px-2 py-8 text-center">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-subtle text-ink-tertiary">
+                <Bell size={14} strokeWidth={1.75} />
+              </div>
+              <p className="text-sm text-ink-tertiary">Nothing yet.</p>
+            </div>
           ) : (
             <div className="flex max-h-80 flex-col gap-0.5 overflow-y-auto thin-scrollbar">
               {items.map((a) => {
@@ -112,6 +82,12 @@ export default function NotificationBell() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-ink-primary">
+                          {a.isUnread && (
+                            <span
+                              aria-hidden="true"
+                              className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle"
+                            />
+                          )}
                           <span className="font-medium">{displayName}</span> {meta.label}
                         </p>
                         <p className="truncate text-xs text-ink-tertiary">

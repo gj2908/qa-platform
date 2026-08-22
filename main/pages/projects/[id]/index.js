@@ -9,6 +9,7 @@ import Select from "../../../components/ui/Select";
 import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import ExpandableList from "../../../components/ui/ExpandableList";
 import PlatformBadge from "../../../components/ui/PlatformBadge";
 import AppIcon from "../../../components/release/AppIcon";
 import NewReleaseDialog from "../../../components/release/NewReleaseDialog";
@@ -547,8 +548,11 @@ function ActivityCard({ activity, projectId, isOwner: canExport }) {
           </a>
         )}
       </div>
-      <div className="mt-4 flex flex-col gap-3.5">
-        {activity.map((a) => {
+      <ExpandableList
+        items={activity}
+        visibleCount={5}
+        className="mt-4 flex flex-col gap-3.5"
+        renderItem={(a) => {
           const meta = activityMetaFor(a.action);
           const Icon = meta.icon;
           const displayName = a.actor_name || a.actor_email;
@@ -566,8 +570,8 @@ function ActivityCard({ activity, projectId, isOwner: canExport }) {
               </div>
             </div>
           );
-        })}
-      </div>
+        }}
+      />
     </Card>
   );
 }

@@ -10,6 +10,7 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
+import ExpandableList from "../../../components/ui/ExpandableList";
 import { useToast } from "../../../components/ui/ToastProvider";
 import Avatar from "../../../components/ui/Avatar";
 import { activityMetaFor } from "../../../lib/activityMeta";
@@ -146,7 +147,6 @@ export default function OrganizationDetail({
   const [offboardBusy, setOffboardBusy] = useState(false);
   const [selectedProjectIds, setSelectedProjectIds] = useState([]);
   const [addingProject, setAddingProject] = useState(false);
-  const [showAllActivity, setShowAllActivity] = useState(false);
   const [csvFileName, setCsvFileName] = useState("");
   const [csvRows, setCsvRows] = useState([]);
   const [csvError, setCsvError] = useState("");
@@ -501,8 +501,11 @@ export default function OrganizationDetail({
               <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
               <h2 className="text-sm font-semibold text-ink-primary">Recent activity</h2>
             </div>
-            <div className="mt-4 flex flex-col gap-3.5">
-              {(showAllActivity ? activity : activity.slice(0, 5)).map((a) => {
+            <ExpandableList
+              items={activity}
+              visibleCount={5}
+              className="mt-4 flex flex-col gap-3.5"
+              renderItem={(a) => {
                 const meta = activityMetaFor(a.action);
                 const Icon = meta.icon;
                 return (
@@ -520,16 +523,8 @@ export default function OrganizationDetail({
                     </div>
                   </div>
                 );
-              })}
-            </div>
-            {activity.length > 5 && (
-              <button
-                onClick={() => setShowAllActivity((s) => !s)}
-                className="mt-3 text-xs font-medium text-accent hover:text-accent-hover"
-              >
-                {showAllActivity ? "Show less" : `View ${activity.length - 5} more`}
-              </button>
-            )}
+              }}
+            />
           </Card>
         )}
 

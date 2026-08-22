@@ -128,11 +128,10 @@ export default async function handler(req, res) {
     action: a.action,
     detail: a.detail,
     createdAt: a.created_at,
+    isUnread: lastReadAt ? new Date(a.created_at) > new Date(lastReadAt) : true,
   }));
 
-  const unreadCount = lastReadAt
-    ? enriched.filter((a) => new Date(a.createdAt) > new Date(lastReadAt)).length
-    : enriched.length;
+  const unreadCount = enriched.filter((a) => a.isUnread).length;
 
   // Raw (pre-dismissal-filter) page length hitting the page size is the
   // signal there may be another page — filtering can make `items` shorter

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2, OctagonAlert } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarClock, GripVertical, Sparkles, Trash2, OctagonAlert, Users } from "lucide-react";
 import { STATUS_META, STATUS_ORDER } from "./ui/status";
 import Avatar from "./ui/Avatar";
 
@@ -123,14 +123,21 @@ export default function TaskCard({
         </div>
       )}
 
-      {(task.assignee_email || dueStatus) && (
+      {(task.assignee_email || task.assigned_to_team || dueStatus) && (
         <div className="flex flex-wrap items-center gap-2">
-          {task.assignee_email && (
+          {task.assigned_to_team ? (
+            <div className="flex items-center gap-1.5" title="Assigned to the whole team">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-accent-subtle-fg">
+                <Users size={10} strokeWidth={2.5} />
+              </span>
+              <span className="truncate text-xs text-ink-tertiary">Whole team</span>
+            </div>
+          ) : task.assignee_email ? (
             <div className="flex items-center gap-1.5">
               <Avatar avatarUrl={assigneeAvatarUrl} seed={task.assignee_email} displayName={assigneeDisplay} size="xs" />
               <span className="truncate text-xs text-ink-tertiary">{assigneeDisplay}</span>
             </div>
-          )}
+          ) : null}
           {dueStatus && (
             <span
               className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${

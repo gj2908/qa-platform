@@ -1,4 +1,4 @@
-import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff, OctagonAlert, Megaphone } from "lucide-react";
+import { Rocket, Trash2, UserPlus, UserMinus, ArrowLeftRight, Webhook, Clock, Plus, UserCheck, Users, Check, CalendarClock, AtSign, FolderPlus, Settings, KeyRound, KeySquare, Download, Palette, Globe, Building2, X, Link2, RefreshCw, ShieldCheck, ShieldOff, OctagonAlert, Megaphone } from "lucide-react";
 
 // Shared between the project Overview "Recent activity" card, the
 // top-bar notification bell, and the org dashboard's activity feed —
@@ -13,6 +13,7 @@ export const ACTIVITY_META = {
   webhook_updated: { icon: Webhook, label: "updated release notifications" },
   task_created: { icon: Plus, label: "created a task" },
   task_assigned: { icon: UserCheck, label: "assigned a task" },
+  task_assigned_team: { icon: Users, label: "assigned a task to the whole team" },
   task_completed: { icon: Check, label: "completed a task" },
   task_overdue: { icon: CalendarClock, label: "has an overdue task" },
   task_mentioned: { icon: AtSign, label: "mentioned someone in a task" },

@@ -6,7 +6,7 @@ import EmptyState from "../components/ui/EmptyState";
 import Button from "../components/ui/Button";
 import { STATUS_META } from "../components/ui/status";
 import { csvRow } from "../lib/csv";
-import { ListChecks, CalendarClock, Download } from "lucide-react";
+import { ListChecks, CalendarClock, Download, Users } from "lucide-react";
 import { useState } from "react";
 
 // Cross-project view of everything assigned to the signed-in user. A
@@ -26,8 +26,8 @@ export async function getServerSideProps({ req, res }) {
 
   const { data: tasksRaw } = await supabase
     .from("tasks")
-    .select("id, title, status, priority, labels, due_date, project_id")
-    .eq("assignee_email", user.email)
+    .select("id, title, status, priority, labels, due_date, project_id, assigned_to_team")
+    .or(`assignee_email.eq.${user.email},assigned_to_team.eq.true`)
     .order("due_date", { ascending: true, nullsFirst: false });
 
   const projectIds = [...new Set((tasksRaw || []).map((t) => t.project_id))];
@@ -99,6 +99,12 @@ function TaskRow({ t, meta, dueStatus, onDone }) {
           </Link>
           <span>·</span>
           <span>{meta.label}</span>
+          {t.assigned_to_team && (
+            <span className="flex items-center gap-1 rounded bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium text-accent-subtle-fg">
+              <Users size={10} strokeWidth={2.5} />
+              Whole team
+            </span>
+          )}
           {dueStatus && (
             <span
               className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${

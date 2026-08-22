@@ -11,9 +11,12 @@ import FormField from "../../../components/ui/FormField";
 import Badge from "../../../components/ui/Badge";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import InviteEmailPrompt from "../../../components/ui/InviteEmailPrompt";
+import ExpandableList from "../../../components/ui/ExpandableList";
 import { ROLE_META, ASSIGNABLE_ROLES, canManageReleases } from "../../../components/ui/role";
 import Avatar from "../../../components/ui/Avatar";
 import { useToast } from "../../../components/ui/ToastProvider";
+import { activityMetaFor } from "../../../lib/activityMeta";
+import { relativeTime } from "../../../lib/format";
 import {
   UserPlus,
   Trash2,
@@ -23,6 +26,7 @@ import {
   Copy,
   Check,
   Smartphone,
+  Clock,
 } from "lucide-react";
 
 export async function getServerSideProps({ params, req, res }) {
@@ -38,18 +42,29 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("project_id", params.id)
     .order("role");
 
+  const { data: activityRaw } = await supabase
+    .from("project_activity")
+    .select("id, actor_email, action, detail, created_at")
+    .eq("project_id", params.id)
+    .in("action", ["collaborator_added", "collaborator_removed", "ownership_transferred"])
+    .order("created_at", { ascending: false })
+    .limit(20);
+
   let collaborators = collaboratorsRaw || [];
-  if (collaborators.length > 0) {
+  let activity = activityRaw || [];
+  const emails = [...new Set([...collaborators.map((c) => c.email), ...activity.map((a) => a.actor_email)])];
+  if (emails.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
       .select("email, full_name, avatar_url")
-      .in("email", collaborators.map((c) => c.email));
+      .in("email", emails);
     const profileByEmail = Object.fromEntries((profiles || []).map((p) => [p.email, p]));
     collaborators = collaborators.map((c) => ({
       ...c,
       full_name: profileByEmail[c.email]?.full_name || null,
       avatar_url: profileByEmail[c.email]?.avatar_url || null,
     }));
+    activity = activity.map((a) => ({ ...a, actor_name: profileByEmail[a.actor_email]?.full_name || null }));
   }
 
   // Empty for non-owners — RLS's "owner manages tokens" policy already
@@ -66,12 +81,12 @@ export async function getServerSideProps({ params, req, res }) {
     .eq("project_id", params.id)
     .order("created_at", { ascending: false });
 
-  return { props: { project, role, collaborators, tokens: tokens || [], devices: devices || [] } };
+  return { props: { project, role, collaborators, activity, tokens: tokens || [], devices: devices || [] } };
 }
 
 const ROLE_ORDER = { owner: 0, editor: 1, commenter: 2, viewer: 3 };
 
-export default function Collaborators({ project, role: myRole, collaborators: initial, tokens, devices }) {
+export default function Collaborators({ project, role: myRole, collaborators: initial, activity, tokens, devices }) {
   const [collaborators, setCollaborators] = useState(
     [...initial].sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
   );
@@ -323,46 +338,87 @@ export default function Collaborators({ project, role: myRole, collaborators: in
           </Card>
         )}
 
-        <Card className="divide-y divide-border overflow-hidden">
-          {collaborators.map((c) => {
-            const meta = ROLE_META[c.role];
-            const Icon = meta.icon;
-            const displayName = c.full_name || c.email;
-            return (
-              <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="md" />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-ink-primary">{displayName}</p>
-                    {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}
+        <Card className="overflow-hidden">
+          <ExpandableList
+            items={collaborators}
+            visibleCount={5}
+            className="divide-y divide-border"
+            toggleClassName="block w-full border-t border-border px-4 py-2.5 text-left text-xs font-medium text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+            renderItem={(c) => {
+              const meta = ROLE_META[c.role];
+              const Icon = meta.icon;
+              const displayName = c.full_name || c.email;
+              return (
+                <div key={c.email} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar avatarUrl={c.avatar_url} seed={c.email} displayName={displayName} size="md" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-ink-primary">{displayName}</p>
+                      {c.full_name && <p className="truncate text-xs text-ink-tertiary">{c.email}</p>}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={meta.tone} icon={Icon}>
+                      {meta.label}
+                    </Badge>
+                    {isOwner && c.role !== "owner" && (
+                      <>
+                        <button
+                          onClick={() => setTransferTarget(c)}
+                          title="Transfer ownership"
+                          className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary"
+                        >
+                          <ArrowLeftRight size={14} strokeWidth={2.25} />
+                        </button>
+                        <button
+                          onClick={() => setRemoveTarget(c)}
+                          title="Remove collaborator"
+                          className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
+                        >
+                          <Trash2 size={14} strokeWidth={2.25} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Badge tone={meta.tone} icon={Icon}>
-                    {meta.label}
-                  </Badge>
-                  {isOwner && c.role !== "owner" && (
-                    <>
-                      <button
-                        onClick={() => setTransferTarget(c)}
-                        title="Transfer ownership"
-                        className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-hover hover:text-ink-primary"
-                      >
-                        <ArrowLeftRight size={14} strokeWidth={2.25} />
-                      </button>
-                      <button
-                        onClick={() => setRemoveTarget(c)}
-                        title="Remove collaborator"
-                        className="rounded-md p-1.5 text-ink-tertiary transition-colors hover:bg-danger-subtle hover:text-danger"
-                      >
-                        <Trash2 size={14} strokeWidth={2.25} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              );
+            }}
+          />
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Clock size={15} strokeWidth={2.25} className="text-ink-secondary" />
+            <h2 className="text-sm font-semibold text-ink-primary">Team activity</h2>
+          </div>
+          {activity.length === 0 ? (
+            <p className="mt-3 text-sm text-ink-tertiary">No collaborator changes yet.</p>
+          ) : (
+            <ExpandableList
+              items={activity}
+              visibleCount={5}
+              className="mt-4 flex flex-col gap-3.5"
+              renderItem={(a) => {
+                const meta = activityMetaFor(a.action);
+                const Icon = meta.icon;
+                const displayName = a.actor_name || a.actor_email;
+                return (
+                  <div key={a.id} className="flex items-start gap-2.5">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-secondary">
+                      <Icon size={12} strokeWidth={2.25} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-ink-primary">
+                        <span className="font-medium">{displayName}</span> {meta.label}
+                        {a.detail ? <span className="text-ink-tertiary"> — {a.detail}</span> : null}
+                      </p>
+                      <p className="text-xs text-ink-tertiary">{relativeTime(a.created_at)}</p>
+                    </div>
+                  </div>
+                );
+              }}
+            />
+          )}
         </Card>
 
         {canManageReleases(myRole) && <DevicesCard project={project} devices={devices} canEdit={isOwner} />}

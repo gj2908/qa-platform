@@ -127,6 +127,41 @@ plain `transition-colors` for hover states, which is correct for those.
   feed, the notification bell, and the CSV export — all three read it
   generically, so a new event type only needs an `ACTIVITY_META` entry
   in `lib/activityMeta.js`, not changes to all three consumers.
+- **A task can be assigned to one person or the whole project team, never
+  both.** `tasks.assigned_to_team` (boolean) sits alongside the older
+  `assignee_email` column — the two are mutually exclusive by
+  application convention, not a DB constraint (`TaskDetailDialog.js`'s
+  `save()` and `board.js`'s `saveTaskDetails`/`bulkSetAssignee` clear one
+  whenever they set the other). Every place that used to treat
+  `assignee_email` as "is this task mine" now also has to check
+  `assigned_to_team` — `pages/my-tasks.js` and
+  `pages/api/account/export-data.js` do this with a single `.or()`
+  filter (safe because RLS already scopes `tasks` to the caller's own
+  projects, so "team-assigned" collapses to "any project I'm on");
+  `pages/api/cron/task-due-check.js` runs via the service client
+  (RLS-bypassing), so it resolves `project_collaborators` explicitly
+  instead. `admin/pages/tasks.js` and `TaskCard.js` just render "Whole
+  team" in place of a single assignee. Assigning to the team fans out
+  one email+push batch via `pages/api/tasks/notify-team-assign.js`
+  (re-validates project membership server-side, same posture as
+  `notify-mention.js`) but logs a single `task_assigned_team`
+  `project_activity` row, not one per collaborator — the activity feed
+  is already shared/visible to the whole project from one row.
+- **`components/ui/ExpandableList.js`** is the shared "show 5, then see
+  more" list pattern — extracted from the org dashboard's original
+  inline `useState`+`.slice()` toggle. Reused by the org dashboard, the
+  project Overview activity card, and the Collaborators page's member
+  list and activity log. Takes `items` + a `renderItem` render-prop (no
+  assumed item shape) so call sites with different row markup can all
+  share the same toggle behavior — reach for this instead of
+  reimplementing a local `showAll` state for any new capped list.
+- **`lib/hooks/useNotifications.js`** is the shared data layer behind
+  both `NotificationBell.js` (dropdown) and `pages/notifications.js`
+  (full history) — they used to duplicate the fetch/dismiss/clear-all
+  logic byte-for-byte. The one thing the hook deliberately does *not*
+  own is *when* to mark notifications read, since that differs by
+  surface (bell: on open, full page: on load) — it only exposes
+  `markRead()`, and each caller decides the trigger.
 - **Cron routes** (`pages/api/cron/*.js`) are gated by a `CRON_SECRET`
   bearer header (soft-gated — if the env var isn't set, the check is
   skipped, matching this app's "degrade gracefully" pattern elsewhere)
